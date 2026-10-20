@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "created": 1792485981,
+  "tool": "D:\\Users\\KLEI\\.agents\\skills\\spec-driven\\spec.py",
+  "source": "docs/OPP_SPEC.md",
+  "doc_sha": "ce63f85084e0f2dc",
+  "redlines": [],
+  "scope": {
+    "allow": [
+      "radar/**",
+      "web/**",
+      "docs/**",
+      "README.md",
+      "version.txt"
+    ],
+    "deny": [
+      "radar_data/**"
+    ]
+  },
+  "items": [
+    {
+      "id": "R01",
+      "title": "0. 目标与范围",
+      "excerpt": "## 0. 目标与范围\n- **目标**：电脑游戏在 B站等平台开始火的早期，比如头部视频才几万播放时，就给出\"这款游戏值得移植到手机\"的**概率**，之后持续更新。概率上升提醒\"准备\"\"开工\"，回落时提醒\"回落\"。\n- **范围**：只做中国大陆。平台包括 B站（视频、评论、弹幕、热搜）、百度指数、微博/抖音热榜、Steam（中文评论、在线人数）、App Store 中国区、TapTap、好游快爆，以及雷达已经在抓的虎牙、斗鱼、B站直播。\n- **不做**：海外平台；抖音、快手的视频明细（第三期再说）。\n- **原则**：\n  - \"成功\"只由用户给的案例标签决定，程序和开发者都**不许自己定成功门槛**。\n  - 没校准之前只显示原始指标和百分位，**不显示概率**，界面上标\"未校准\"。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 6,
+        "end": 12
+      },
+      "sha": "93de1de901640b85",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R02",
+      "title": "1. 代码约束（沿用现有仓库）",
+      "excerpt": "## 1. 代码约束（沿用现有仓库）\n- 只用 Python 标准库，兼容 Python 3.8 以上。联网统一用 `radar/net.py` 的 `get_json / get_json_strict / get_text`，它会走 `config.PROXY`。\n- 数据库用 `radar/db.py` 的 `db.session()`、`db.kv_get/kv_set`。新表放在各自模块的 `SCHEMA` 里，启动时执行 `executescript`。\n- 个人设置放 `radar_data/settings.json`。新的大写配置项要加进 `config.py` 和 `_EDITABLE`。\n- 每次发版：\n  - 在 README 的上一个 `- **vNN**：` 前面插入新版本段落；\n  - `version.txt` 第一行写版本号，后面写中文说明。\n- 采集状态写进现有的\"运行情况\"表，用 `collect._status(...)`；日志用 `activity.say`；弹窗用 `notify.popup`，遵守 `NOTIFY_MAX_PER_DAY`。\n- **不改** `video.py` 的原则（BV 号不按标题并进游戏）。视频和游戏的对应关系另外建表，记录对应方式和可信度。\n- 历史 Steam 评论曲线可以参考 `history.py` 的做法（评论直方图、断点续抓）。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 14,
+        "end": 23
+      },
+      "sha": "72dcdd08d33a2724",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R03",
+      "title": "2. 新增模块",
+      "excerpt": "## 2. 新增模块\n| 模块 | 职责 |\n|---|---|\n| `radar/opp/bili_track.py` | B站分区新视频发现、视频明细跟踪、UP 主平时水平、评论和弹幕抽样 |\n| `radar/opp/wbi.py` | B站 wbi 签名（nav 接口取 img_key/sub_key，混合表，md5） |\n| `radar/opp/gamemap.py` | 视频对应到游戏：游戏名词典、别名、自动发现未识别的游戏名 |\n| `radar/opp/search_idx.py` | 百度指数（实时和历史）、B站热搜、微博热搜、抖音热榜 |\n| `radar/opp/supply_cn.py` | 手机端缺口：App Store 中国区、TapTap、好游快爆搜同名应用 |\n| `radar/opp/steam_cn.py` | Steam 中文评论（当前总数和历史逐日）、同时在线 |\n| `radar/opp/features.py` | 按视频、按游戏算指标（第 5 节） |\n| `radar/opp/cases.py` | 案例库导入、历史回溯抓取、负样本候选 |\n| `radar/opp/calibrate.py` | 校准：单指标区分度、逻辑回归、留一交叉验证、门槛对照表 |\n| `radar/opp/monitor.py` | 实时打分、状态机、提醒 |\n| `radar/opp/__init__.py` | `start(stop_event)`：启动各后台线程，接进 `main.py` |\n| 看板 `web/index.html` | 新增「机会」页、「案例库」页 |\n| `server.py` | 新接口 `/api/opp/*`（第 9 节） |",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 25,
+        "end": 40
+      },
+      "sha": "23703f462bcb4c70",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R04",
+      "title": "3. 数据源明细",
+      "excerpt": "## 3. 数据源明细\n> 接口地址是现在已知的版本，开发时**每一个都要先实测**。失败了写进运行情况，不要静默跳过。B站接口统一先访问一次首页拿 buvid3（参考 `bili._warmup`）。遇到 -412 或 -352 就整体暂停 30 分钟，连续 3 次就停 2 小时。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 42,
+        "end": 43
+      },
+      "sha": "d460aaeafc8bb49a",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R05",
+      "title": "3.1 B站：发现新视频",
+      "excerpt": "### 3.1 B站：发现新视频\n- **分区最新投稿**：`api.bilibili.com/x/web-interface/dynamic/region?rid={tid}&ps=50&pn=1..3`；备用 `x/web-interface/newlist?rid={tid}&ps=50`。\n  - 游戏分区 tid：17 单机、171 电竞、172 手游、65 网游、173 桌游棋牌、121 GMV、136 音游、19 Mugen。\n  - 频率：每 20 分钟一轮，每个分区取前 150 条，按 BV 号去重入库。\n- **分区排行和热门**：沿用 `bili.game_videos()`。\n- **按游戏名搜**：`x/web-interface/search/type?search_type=video&keyword=&order=pubdate&page=1..N`，需要 wbi 签名时走 `x/web-interface/wbi/search/type`。用途：\n  - 监测中的游戏每 6 小时搜一次，找新的跟风视频；\n  - 历史回溯（第 6 节）。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 45,
+        "end": 52
+      },
+      "sha": "5ee756414f8dce2c",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R06",
+      "title": "3.2 B站：视频明细跟踪",
+      "excerpt": "### 3.2 B站：视频明细跟踪\n- 接口：`x/web-interface/view?bvid=`。取 `aid, cid, tid, pubdate, duration, owner.mid`，以及 `stat` 里的 `view, like, coin, favorite, share, reply, danmaku`。\n- 标签：`x/web-interface/view/detail?bvid=` 返回的 Tags；备用 `x/tag/archive/tags?bvid=`。\n- **哪些视频值得跟**（工程参数，控制请求量）：满足下面任一条就进跟踪池：\n  - 发布 6 小时内播放 ≥ `OPP_TRACK_MIN_VIEWS`，默认 3000；\n  - 爆款倍数 ≥ `OPP_TRACK_MIN_MULT`，默认 3；\n  - 已对应到监测中的游戏。\n- **跟踪频率**：发布 0–72 小时每 2 小时一次，3–21 天每天一次，之后停止。\n- **请求预算**：每小时最多 `OPP_BILI_BUDGET` 次请求，默认 600。超了按\"离发布时间近、播放增速高\"优先。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 54,
+        "end": 62
+      },
+      "sha": "12513e71f1c41408",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R07",
+      "title": "3.3 B站：UP 主平时水平",
+      "excerpt": "### 3.3 B站：UP 主平时水平\n- 粉丝数：`x/relation/stat?vmid={mid}`。\n- 最近投稿：`x/space/wbi/arc/search?mid=&ps=30&pn=1&order=pubdate`（要 wbi）。取最近 10 条**发布超过 7 天**的视频，算播放中位数，作为\"平时水平\"。\n- 每个 UP 主 7 天更新一次。拿不到时，用库里这个 UP 主已有视频的中位数顶上，并标记\"估计\"。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 64,
+        "end": 67
+      },
+      "sha": "c78a39384b440343",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R08",
+      "title": "3.4 B站：评论和弹幕",
+      "excerpt": "### 3.4 B站：评论和弹幕\n- 评论：`x/v2/reply/wbi/main?oid={aid}&type=1&mode=3&next=0..`，取前 5 页（热度排序）加 `cursor.all_count`。\n- 弹幕：`x/v1/dm/list.so?oid={cid}` 返回 XML，内容是 deflate 压缩的，用 `zlib.decompress(data, -15)` 解开，取全部。\n- 什么时候抓：视频进跟踪池后，在发布约 12 小时、24 小时、72 小时各抓一次。\n- **关键词表**放在 `OPP_DEMAND_WORDS`，可配置：\n  - 手机：`手机|手游|安卓|苹果|ios|移动端|手机版|手机上|能在手机`\n  - 问名字：`叫什么|什么游戏|游戏名|哪里下|在哪下|怎么下|多少钱|steam上`\n  - 想玩：`想玩|求链接|好想玩|买了|已购|入了`",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 69,
+        "end": 76
+      },
+      "sha": "b49fd175cbf3213d",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R09",
+      "title": "3.5 搜索热度",
+      "excerpt": "### 3.5 搜索热度\n- **百度指数**（要 `BAIDU_COOKIE`）：\n  - 数据接口：`index.baidu.com/api/SearchApi/index?area=0&word=[[{\"name\":\"词\",\"wordType\":1}]]&startDate=&endDate=`。\n  - 返回的数据是加密的。用返回的 `uniqid` 去调 `index.baidu.com/Interface/ptbk?uniqid=` 拿到密钥串，前一半字符逐个映射到后一半字符，解密后就是逗号分隔的逐日数值。\n  - 百度后来可能要求 `Cipher-Text` 请求头。实测失败的话，在运行情况里写明，这一项先空着，不要编数据。\n  - 一次查询不超过 300 天，保证按天给数。\n  - 每个监测中的游戏每天查一次，词包括\"游戏名\"和\"游戏名 手机版\"。\n- **B站热搜**：`s.search.bilibili.com/main/hotword`，每 30 分钟一次，记录词、名次、时间。\n- **微博热搜**：`weibo.com/ajax/side/hotSearch`。**抖音热榜**：`www.douyin.com/aweme/v1/web/hot/search/list/`。每 30 分钟一次，失败只记录、不影响别的。\n- 热搜词用游戏词典去匹配（第 4 节），匹配上就记一条\"上榜\"。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 78,
+        "end": 87
+      },
+      "sha": "d81c588af1899641",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R10",
+      "title": "3.6 Steam 中文玩家",
+      "excerpt": "### 3.6 Steam 中文玩家\n- 中文评论总数：`store.steampowered.com/appreviews/{appid}?json=1&language=schinese&purchase_type=all&num_per_page=0`，取 `query_summary.total_reviews`，每天一次。\n- 同时在线：`ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=`，每 2 小时一次。\n- **历史逐日中文评论**（回溯用）：`appreviews/{appid}?json=1&language=schinese&filter=recent&num_per_page=100&cursor=*`，一直翻页，按 `timestamp_created` 统计每天多少条。\n- 价格、标签、多人：沿用 `steam.detail()`、`store_tags()`。\n- 中文名：`appdetails?appids=&l=schinese` 返回的 name。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 89,
+        "end": 94
+      },
+      "sha": "5a604f84b8beac0a",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R11",
+      "title": "3.7 手机端缺口",
+      "excerpt": "### 3.7 手机端缺口\n- App Store 中国区：`itunes.apple.com/search?term={名}&country=cn&entity=software&limit=25`。按名字相似度判断是不是同一个游戏，记录 trackId、名称、开发者、`userRatingCount`、上线日期。\n- TapTap、好游快爆：沿用现有数据源的搜索能力。没有搜索接口的，先只对已有的榜单数据做名字匹配。\n- 每个监测中的游戏每天一次。\n- **结论分三档**：\n  - 无同名应用；\n  - 只有山寨：开发者和 Steam 发行商不一样；\n  - 已有官方版。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 96,
+        "end": 103
+      },
+      "sha": "b3fd31a951edca51",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R12",
+      "title": "3.8 直播（已经在抓）",
+      "excerpt": "### 3.8 直播（已经在抓）\n从 `metrics` 表读虎牙、斗鱼、B站直播在这个游戏分区（或标题含游戏名）的主播数和热度。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 105,
+        "end": 106
+      },
+      "sha": "626e0cd11c99a89d",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R13",
+      "title": "4. 视频对应到游戏（gamemap）",
+      "excerpt": "## 4. 视频对应到游戏（gamemap）\n- **词典来源**：\n  - Steam 中文名和英文名（现有 Steam 池，加上 `history.py` 的 `hist_steam`）；\n  - TapTap 名称；\n  - 用户手动添加的别名。\n- 名字统一处理：转小写、全角转半角、去掉标点、去掉\"中文版\"\"试玩\"这类词。\n- **对应规则**，按优先级，记录 `method` 和 `conf`：\n  1. 简介里有 Steam 商店链接（`steam_link`，可信度 1.0）；\n  2. 标签完全等于词典里的名字或别名（`tag`，0.9）；\n  3. 标题里《》括起来的名字命中词典（`title_bracket`，0.8）；\n  4. 标题里直接包含词典名字，并且名字至少 3 个字（`title_contains`，0.6）。\n- **自动发现没识别出来的游戏名**：48 小时内，同一个《》里的名字或同一个标签，出现在 ≥ 3 个不同 UP 主的跟踪视频里，又不在词典里，就进「待确认」列表。\n  - 用户在页面上确认或忽略；\n  - 确认时可以关联 Steam appid。\n- 对应可信度 < 0.8 的，参与计算但在界面上标\"对应待核对\"。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 108,
+        "end": 122
+      },
+      "sha": "a614eb9e3a62dbb7",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R14",
+      "title": "5. 指标（features.py）",
+      "excerpt": "## 5. 指标（features.py）\n**时间点的定义**：每个游戏的 t0 = 第一条进跟踪池的相关视频的发布时间。所有\"第 d 天\"的指标，**只能用 t0 + d 天以前的数据**。回溯和实时都必须遵守，防止用到未来数据。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 124,
+        "end": 125
+      },
+      "sha": "3e77944c90a222e8",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R15",
+      "title": "5.1 单条视频",
+      "excerpt": "### 5.1 单条视频\n- `views_at(h)`：发布后 h 小时的播放，h = 2, 6, 12, 24, 48, 72。用相邻两次采样线性插值，插不出来就留空。\n- `rate_h`：最近一次采样间隔里每小时增加的播放；`accel` = 本段增速 ÷ 上一段增速。\n- `mult`（爆款倍数）= 当前播放 ÷ UP 主平时中位数，要配合 `followers` 一起看。\n- `fan_ratio` = 播放 ÷ 粉丝数。\n- 互动率：`coin/view`、`fav/view`、`share/view`、`reply/view`、`dm/view`。\n- `age_pct`：同分区、同样发布时长的视频里，这条视频的播放排在百分之几。参照集合是近 30 天进跟踪池的全部视频；样本不够 200 条时留空。\n- `demand_mobile`、`demand_name`、`demand_want`：评论加弹幕里命中各类关键词的条数 ÷ 抽到的总条数，同时记录分子和分母。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 127,
+        "end": 134
+      },
+      "sha": "6410e6c714641d75",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R16",
+      "title": "5.2 单个游戏（第 d 天，d = 1, 2, 3, 5, 7, 10, 14，加上实时）",
+      "excerpt": "### 5.2 单个游戏（第 d 天，d = 1, 2, 3, 5, 7, 10, 14，加上实时）\n- `n_up`：到这时为止，做过这个游戏的不同 UP 主数；`n_up_new_24h`、`n_up_new_48h`：最近新增的 UP 主数。\n- `n_up_small`：粉丝少于这些 UP 主粉丝数中位数的人里，爆款倍数 ≥ 3 的人数（衡量\"游戏本身带流量\"）。\n- `views_sum`、`views_top1_share`：头部那一条视频占总播放的比例，比例越低说明扩散越开。\n- `best_age_pct`：所有相关视频里最高的 `age_pct`。\n- `demand_*`：按播放加权的平均值。\n- `baidu`：当天百度指数，以及 7 天平均；`baidu_mobile`：搜\"游戏名 手机版\"的指数。\n- `search_conv` = 百度指数 d 天累计 ÷ (B站播放累计 ÷ 1 万)。\n- `steam_cn_rev_day`：Steam 每天新增的中文评论；`steam_conv` = 中文评论累计 ÷ (B站播放累计 ÷ 1 万)。\n- `hot_hits`：B站、微博、抖音热搜累计上榜次数，以及最好的名次。\n- `live_streamers`：直播平台上播这个游戏的主播数（取当天最高）。\n- `gap`：0 = 已有官方版，1 = 只有山寨，2 = 无同名；另记山寨里最大的 `userRatingCount`。\n- **静态属性**：价格、是否免费、是否支持多人、Steam 标签、是否在大厂发行商名单 `OPP_BIG_PUBLISHERS`（名单可配置）。\n\n所有数值类指标在建模时统一取 `log1p`。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 136,
+        "end": 150
+      },
+      "sha": "9646fdab999352c6",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R17",
+      "title": "6. 案例库与回溯（cases.py）",
+      "excerpt": "## 6. 案例库与回溯（cases.py）\n- **用户输入**：`radar_data/opp_cases.csv`，也可以在页面上编辑。列如下：\n  `name_cn, name_en, steam_appid(可空), month(YYYY-MM), label(成功/一般/不成功), note`\n- **回溯抓取**（后台慢慢跑，每次请求间隔 3–6 秒，断点存在 kv `opp_backfill`）：\n  1. 补全 Steam appid 和中文名。\n  2. B站按中文名、英文名分别搜视频，按发布时间排序，最多翻 50 页。记录每条视频的发布时间、当前播放、mid，标题和标签要能对上这个游戏。\n     - 用 month 前 1 个月到后 3 个月的视频，还原逐日的 `n_up`、`n_up_new`。\n     - `views_sum` 只能用**现在的**总播放按发布日期累加，标记\"终值近似\"。\n     - 小时级的指标（`views_at`、`age_pct`）历史上拿不到，留空。\n  3. 百度指数查 month 前 1 个月到后 3 个月的逐日数值，词是\"中文名\"和\"中文名 手机版\"。\n  4. Steam 中文评论逐日历史（3.6）。\n  5. App Store 中国区搜同名应用，记录上线日期，用来判断\"多少天后出现山寨或官方版\"。\n  6. 定 t0：还原出的第一天，满足\"当天新增视频里有一条的终值播放 ≥ 这个游戏全部视频终值播放的第 90 百分位\"。具体规则在校准报告里写清楚。\n- **负样本候选**（只能由用户确认，不能自动当成\"不成功\"）：\n  - 来源 A：`hist_steam` 里上线两年内、中文评论有增长、B站能搜到 ≥ 3 个 UP 主视频，但不在用户名单里的游戏；\n  - 来源 B：以后实时监测中进入过\"观察\"、21",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 152,
+        "end": 170
+      },
+      "sha": "96fb5c43e9223dc6",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R18",
+      "title": "7. 校准（calibrate.py）",
+      "excerpt": "## 7. 校准（calibrate.py）\n用户点\"重新校准\"，或案例有变化后的第二天凌晨自动跑一次。\n1. **单指标区分度**：对每个第 d 天、每个指标，算成功和不成功之间的 AUC，还有两组的中位数和四分位数，做成表格。\n2. **模型**：每个 d 一个 L2 正则的逻辑回归，纯 Python 写，用梯度下降或牛顿法。\n   - 特征：从 AUC 最高、彼此相关性 < 0.7 的指标里挑，**最多挑 (成功案例数 ÷ 8) 个**，比如 30 个成功案例最多挑 3–4 个。\n   - 特征先标准化。\n3. **验证**：留一交叉验证。报告 AUC、Brier 分数，以及校准分箱（预测概率和实际成功比例对比）。\n4. **门槛对照表**：对概率门槛 p = 0.1, 0.2, … 0.9，列出历史上\"在第几天就能抓住几成成功游戏\"和\"误报几个\"。**由用户在页面上选**\"准备\"和\"开工\"用哪个门槛，存进 `OPP_STAGE_READY_P`、`OPP_STAGE_GO_P`。\n5. **样本太少时**：成功 < 15 或不成功 < 15，不输出概率，只输出单指标表格，界面写\"样本不足\"。\n6. **小时级指标**（`views_at`、`age_pct`、`demand_*` 里依赖实时采样的部分）：等实时攒满 `OPP_MIN_LIVE_CASES`（默认 20 个有结果的游戏）以后，再加进 d = 0.25、0.5、1 天的模型。在那之前，早期（第 1 天以内）只显示百分位，不给概率。\n7. 每次校准的结果都存进 `opp_models` 表，带版本号，页面可以查看历史版本。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 172,
+        "end": 182
+      },
+      "sha": "0198f2d845f65ad1",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R19",
+      "title": "8. 实时监测与状态机（monitor.py）",
+      "excerpt": "## 8. 实时监测与状态机（monitor.py）\n- 每 2 小时，对所有\"活着\"的游戏（t0 在 21 天以内）重算指标和概率。概率用离当前 d 最近、且不晚于当前 d 的那个模型。\n- **状态**：\n  - 观察：自动发现的游戏都从这里开始；\n  - 准备：概率 ≥ `OPP_STAGE_READY_P`；\n  - 开工：概率 ≥ `OPP_STAGE_GO_P`，并且 `gap` ≥ 1；\n  - 回落：最近 24 小时新增播放 < 前 24 小时的 `OPP_DECLINE_RATIO`，并且 48 小时内 `n_up_new` = 0。这两个默认值是 0.5 和 0，**属于待校准默认值**，校准报告要给出回落后的历史成功率，用来修正；\n  - 结束：t0 + 21 天。\n- **提醒**：进入\"准备\"、\"开工\"、\"回落\"各弹一次。同一游戏同一状态 24 小时内只弹一次，遵守每天上限。弹窗内容：游戏名、当前概率、最主要的 3 个理由（贡献最大的特征和它的值）、头部视频链接。\n- **自动归档**：结束时按用户的成功定义规则**不能自动打标签**，只把游戏放进\"待标注\"列表，等用户标。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 184,
+        "end": 193
+      },
+      "sha": "2c79b7921500dbcf",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R20",
+      "title": "9. 页面和接口",
+      "excerpt": "## 9. 页面和接口\n- `GET /api/opp/list`：活着的游戏，带状态、概率（或\"未校准\"）、t0、关键指标、迷你曲线数据。\n- `GET /api/opp/game?id=`：单个游戏：概率随时间的曲线、各指标随时间的曲线、相关视频（带对应方式和可信度）、评论需求率、百度曲线、Steam 中文评论、缺口明细、直播。\n- `GET/POST /api/opp/cases`：案例增删改；`POST /api/opp/cases/import`：导入 CSV。\n- `GET /api/opp/backfill`：回溯进度和每个案例的抓取状态。\n- `GET /api/opp/calibration`、`POST /api/opp/calibrate`：查看校准报告、触发校准。\n- `GET/POST /api/opp/unknown`：待确认的游戏名列表，确认或忽略。\n- **「机会」页**：\n  - 按状态分组，组内按概率排序；\n  - 每行显示游戏名、状态、概率（未校准时显示百分位）、t0 已过几小时、跟风 UP 主数、头部视频播放、求手机版率、缺口；\n  - 点开进详情。\n- **「案例库」页**：名单表格、导入、回溯进度、负样本候选（逐个打标签）、校准报告（单指标表、模型效果、门槛对照表、选门槛）。\n- \"运行情况\"表里新增几行：B站跟踪、B站评论弹幕、百度指数、热搜、Steam 中文、手机缺口、回溯。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 195,
+        "end": 207
+      },
+      "sha": "6b290dd2f833fc26",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R21",
+      "title": "10. 新增配置（settings.json 可覆盖）",
+      "excerpt": "## 10. 新增配置（settings.json 可覆盖）\n`OPP_ENABLED`、`BILI_COOKIE`（可选，填 SESSDATA，能降低风控）、`BAIDU_COOKIE`、`OPP_BILI_BUDGET`、`OPP_TRACK_MIN_VIEWS`、`OPP_TRACK_MIN_MULT`、`OPP_DEMAND_WORDS`、`OPP_BIG_PUBLISHERS`、`OPP_STAGE_READY_P`、`OPP_STAGE_GO_P`、`OPP_DECLINE_RATIO`、`OPP_MIN_LIVE_CASES`。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 209,
+        "end": 210
+      },
+      "sha": "2971213f04d251b0",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R22",
+      "title": "11. 数据表（SQLite）",
+      "excerpt": "## 11. 数据表（SQLite）\n```sql\nCREATE TABLE IF NOT EXISTS opp_videos(bvid TEXT PRIMARY KEY, aid INTEGER, cid INTEGER, tid INTEGER, mid TEXT,\n  title TEXT, tags TEXT, pubdate INTEGER, duration INTEGER, first_seen INTEGER, track_until INTEGER);\nCREATE TABLE IF NOT EXISTS opp_vsamples(bvid TEXT, ts INTEGER, view INTEGER, lk INTEGER, coin INTEGER, fav INTEGER,\n  share INTEGER, reply INTEGER, dm INTEGER, PRIMARY KEY(bvid, ts));\nCREATE TABLE IF NOT EXISTS opp_uploaders(mid TEXT PRIMARY KEY, name TEXT, followers INTEGER, base_median INTEGER,\n  base_n INTEGER, base_est INTEGER, ts INTEGER);\nCREATE TABLE IF NOT EXISTS opp_demand(bvid TEXT, ts INTEGER, kind TEXT, n_total INTEGER, n_mobile INTEGER,\n  n_name INTEGER, n_want INTEGER, PRIMARY KEY(bvid, ts, kind));          -- kind: reply / dm\nCREATE TABLE IF",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 212,
+        "end": 239
+      },
+      "sha": "aa100fd37ed91be2",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R23",
+      "title": "12. 后台线程和频率（都是工程参数）",
+      "excerpt": "## 12. 后台线程和频率（都是工程参数）\n| 任务 | 频率 |\n|---|---|\n| 分区新视频发现 | 20 分钟 |\n| 视频明细跟踪 | 按 3.2，每 10 分钟调度一次，受预算限制 |\n| 评论和弹幕 | 跟踪视频发布后约 12、24、72 小时各一次 |\n| UP 主平时水平 | 每个 UP 主 7 天一次 |\n| 游戏名搜跟风视频 | 活着的游戏每 6 小时 |\n| 热搜 | 30 分钟 |\n| 百度指数、Steam 中文、手机缺口 | 每天 |\n| 打分和状态机 | 2 小时 |\n| 回溯 | 空闲时持续跑，主采集忙的时候让开（参考 `history._main_on_steam`） |",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 241,
+        "end": 252
+      },
+      "sha": "b5481c7bd7042c60",
+      "check": "",
+      "manual": false
+    },
+    {
+      "id": "R24",
+      "title": "13. 开发分期和验收",
+      "excerpt": "## 13. 开发分期和验收\n1. **第一期：B站部分**。包括 3.1–3.3、第 4 节、5.1，以及 5.2 里只靠 B站的指标；「机会」页只显示指标和百分位。\n   - 验收：连续跑 24 小时，运行情况里 B站各项正常，跟踪池 ≥ 500 条视频，每条有 ≥ 3 次采样，自动识别出 ≥ 1 个待确认游戏名。\n2. **第二期**：3.4–3.8，5.2 补全，弹窗提醒（未校准时只按状态\"观察\"列出，不弹\"准备\"和\"开工\"）。\n   - 验收：百度指数能解密出数值；B站热搜有记录；对任意一款游戏能给出缺口结论。\n3. **第三期**：第 6 节回溯和第 7 节校准，「案例库」页。\n   - 验收：导入 10 个案例，回溯全部完成或写明失败原因；生成校准报告，样本不足时正确显示\"样本不足\"。\n4. **第四期**：实时模型加入小时级指标；接巨量算数（抖音搜索指数）。\n\n**每一期都要**：README 加版本段落，`version.txt` 更新，接口失败要有明确的中文报错显示在运行情况里，不能编造或补零。",
+      "src": {
+        "file": "docs/OPP_SPEC.md",
+        "start": 254,
+        "end": 263
+      },
+      "sha": "00b2cc6bfe9c1a51",
+      "check": "",
+      "manual": false
+    }
+  ],
+  "questions": [],
+  "changes": []
+}

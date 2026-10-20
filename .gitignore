@@ -1,0 +1,7 @@
+﻿radar_data/
+__pycache__/
+*.pyc
+_backup/
+_quarantine/
+_tools/
+docs/*.png
