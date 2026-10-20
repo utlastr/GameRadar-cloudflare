@@ -275,6 +275,7 @@ const SRC = {steam:"Steam", roblox:"Roblox", taptap:"TapTap", tapmaker:"TapTap�
 const MET = {players:"在线人数", heat:"直播热度", rooms:"主播数", downloads:"累计热度", reserves:"预约数", fans:"关注数", reviews:"评论数", visits:"累计访问", viewers:"观看人数", videos:"视频数", views:"播放量", rank:"名次"};
 const PAGES = [
   {k:"must", t:"必看"},
+  {k:"opp", t:"机会"},
   {k:"plat", t:"各平台"},
   {k:"status", t:"运行情况"},
 ];
@@ -459,6 +460,7 @@ function renderContent(){
   if(S.analyze_error) h += `<div class="notice" style="border-color:#dc2626;color:#b42318"><b>分析出错（${ago(S.analyze_error.ts)}），下面显示的是上一次成功的结果${S.updated?"（"+ago(S.updated)+"）":""}，不是最新的。</b><br>${esc(S.analyze_error.error)}<details><summary>详细错误（发给开发者）</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(S.analyze_error.trace||"")}</pre></details></div>`;
   for(const x of S.holidays||[]) h += `<div class="notice">今天是${esc(x.name)}，大盘可能整体偏高。系统已按大盘扣除，但请留意节后回落。</div>`;
   if(page==="must") h += mustView();
+  else if(page==="opp") h += oppView();
   else if(page==="plat") h += platView();
   else if(page==="status") h += statusView();
   root.innerHTML = h;
@@ -472,6 +474,7 @@ function afterRender(){
   if(sc && bstate(sc).data) withCharts(()=>mountBoard(sc));
   if(page==="status" && STATS) withCharts(mountStatus);
   if(page==="plat" && PLAT.tab==="movers" && IDX) withCharts(mountIndex);
+  if(page==="opp" && !OPP.list) loadOpp();
 }
 function pickPlat(id){
   PLAT.src = id; RAW.source = id; RAW.data = null; RAW.sort = null; RAW.limit = 300; RAW.q = "";
@@ -1368,6 +1371,75 @@ async function loadCharts(c){
 }
 
 /* ---------- 实时运行情况 ---------- */
+/* ---------- 机会（第一期：B站早期信号） ---------- */
+const OPP = {list:null, game:null, err:"", open:null};
+async function loadOpp(){
+  try{ OPP.list = await getJSON("/api/opp/list"); OPP.err=""; }
+  catch(e){ OPP.err = "读不到机会列表：" + e; }
+  if(page==="opp") renderContent();
+}
+async function loadOppGame(gid){
+  OPP.open = gid;
+  try{ OPP.game = await getJSON("/api/opp/game?id="+encodeURIComponent(gid)); }
+  catch(e){ OPP.game = {error:String(e)}; }
+  if(page==="opp") renderContent();
+}
+function oppView(){
+  if(!OPP.list) { loadOpp(); return empty("加载中",""); }
+  if(OPP.err) return `<div class="notice" style="border-color:#dc2626;color:#b42318">${esc(OPP.err)}</div>`;
+  const items = OPP.list.items || [];
+  const cal = OPP.list.calibrated;
+  let h = `<div class="notice">未校准：下面只有原始指标和百分位，没有概率。概率要等案例库导入后用历史案例算出来。</div>`;
+  if(!items.length){
+    h += panel("机会","", `<div class="t2">还没有发现正在起势的电脑游戏。B站分区新视频每 20 分钟扫一轮，跟踪池里的视频每 2 小时采样一次。</div>`);
+    return h;
+  }
+  const groups = {};
+  for(const it of items){ (groups[it.state||"观察"] = groups[it.state||"观察"] || []).push(it); }
+  for(const st of Object.keys(groups)){
+    const g = groups[st];
+    const rows = g.map(it=>`<tr data-opp="${esc(it.id)}">
+      <td><a class="lnk" data-opp="${esc(it.id)}">${esc(it.name)}</a></td>
+      <td><span class="tag">${esc(it.state)}</span></td>
+      <td>${it.age_h==null?"-":it.age_h.toFixed(1)+" 小时"}</td>
+      <td class="r num">${it.n_up??"-"}</td>
+      <td class="r num">${fmt(it.views_sum)}</td>
+      <td class="r num">${it.views_top1_share==null?"-":(it.views_top1_share*100).toFixed(0)+"%"}</td>
+      <td class="r num">${it.demand_mobile==null?"-":(it.demand_mobile*100).toFixed(1)+"%"}</td>
+      <td class="r num">${it.best_age_pct==null?"-":(it.best_age_pct*100).toFixed(0)+"%"}</td>
+      <td class="r num">${it.n_live??"-"}</td>
+      <td>${it.low_conf_n?`<span class="up" title="对应可信度低">${it.low_conf_n} 条待核对</span>`:"-"}</td>
+    </tr>`).join("");
+    h += panel(`${st}（${g.length}）`,"",
+      `<table class="tbl"><thead><tr><th>游戏</th><th>状态</th><th>起势了多久</th><th>跟风 UP</th>
+        <th>总播放</th><th>头部占比</th><th>求手机版</th><th>同期百分位</th><th>在播主播</th><th>对应</th></tr></thead>
+        <tbody>${rows}</tbody></table>`);
+  }
+  if(OPP.open && OPP.game) h += oppGameView(OPP.game);
+  return h;
+}
+function oppGameView(g){
+  if(g.error) return panel("详情","", `<div class="up">${esc(g.error)}</div>`);
+  const f = g.features || {};
+  const rows = (g.videos||[]).slice().reverse().map(v=>`<tr>
+    <td><a class="lnk" href="${esc(v.url)}" target="_blank">${esc(v.title||v.bvid)}</a></td>
+    <td>${esc(v.owner||"")}</td>
+    <td>${esc(v.method||"")}</td>
+    <td class="r num">${v.conf!=null?(v.conf*100).toFixed(0)+"%":"-"}</td>
+    <td>${v.low_conf?`<span class="up">待核对</span>`:"-"}</td>
+  </tr>`).join("");
+  const kv = [["起势起点", f.t0?ago(f.t0):"-"],["跟风 UP", f.n_up],["24 小时新增 UP", f.n_up_new_24h],
+              ["总播放", fmt(f.views_sum)],["头部占比", f.views_top1_share==null?"-":(f.views_top1_share*100).toFixed(0)+"%"],
+              ["最好百分位", f.best_age_pct==null?"-":(f.best_age_pct*100).toFixed(0)+"%"],
+              ["求手机版率", f.demand_mobile==null?"-":(f.demand_mobile*100).toFixed(1)+"%"],
+              ["问游戏名率", f.demand_name==null?"-":(f.demand_name*100).toFixed(1)+"%"],
+              ["想玩率", f.demand_want==null?"-":(f.demand_want*100).toFixed(1)+"%"],
+              ["在播主播", f.n_live??"-"],["相关视频", f.videos]]
+    .map(([k,v])=>`<div class="kv"><span class="k">${k}</span><span class="num">${v??"-"}</span></div>`).join("");
+  return panel(`${esc(g.name)} · 明细`,"", `${kv}
+    ${rows?`<table class="tbl" style="margin-top:12px"><thead><tr><th>视频</th><th>UP 主</th><th>对应方式</th><th>可信度</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="t2">还没有对应到视频。</div>`}`);
+}
+
 function renderLive(){
   const n = nowText(), s = ACT.state||{};
   $("pulse").className = "pulse" + (n.busy?" on":"");
@@ -1406,7 +1478,7 @@ function goPage(p){
   contentPage = null; render(); document.querySelector("main").scrollTo(0,0); window.scrollTo(0,0);
 }
 document.addEventListener("click", async e=>{
-  const t = e.target.closest("[data-page],[data-dismiss],[data-undismiss],[data-unblock2],[data-mustab],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-link],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
+  const t = e.target.closest("[data-page],[data-dismiss],[data-undismiss],[data-unblock2],[data-mustab],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-link],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],[data-opp],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
   if(!t) return;
   // v51：整行都能点开详情；行里的“打开原网页”链接、勾选框照常用
   if(t.tagName==="TR" && e.target.closest("a[href],input,select,textarea,label,button")) return;
@@ -1414,6 +1486,7 @@ document.addEventListener("click", async e=>{
   if(t.dataset.page){ goPage(t.dataset.page); return; }
   if(t.dataset.mustab){ MUST.tab=t.dataset.mustab; renderContent(); return; }
   if(t.dataset.plat){ pickPlat(t.dataset.plat); return; }
+if(t.dataset.opp){ loadOppGame(t.dataset.opp); return; }
   if(t.dataset.ptab){ PLAT.tab=t.dataset.ptab; if(PLAT.tab==="fresh") FRESH.data=null; else if(PLAT.tab==="movers") IDX=null; else if(PLAT.tab==="raw") RAW.data=null; contentPage=null; renderContent(); return; }
   if(t.dataset.mkscope){ MKSCOPE=t.dataset.mkscope; contentPage=null; renderContent(); return; }
   if(t.dataset.dismiss || t.dataset.undismiss || t.dataset.unblock2){

@@ -80,7 +80,7 @@
         "end": 52
       },
       "sha": "5ee756414f8dce2c",
-      "check": "",
+      "check": "python tests/test_opp.py",
       "manual": false
     },
     {
@@ -93,7 +93,7 @@
         "end": 62
       },
       "sha": "12513e71f1c41408",
-      "check": "",
+      "check": "python tests/test_opp.py",
       "manual": false
     },
     {
@@ -106,7 +106,7 @@
         "end": 67
       },
       "sha": "c78a39384b440343",
-      "check": "",
+      "check": "python tests/test_opp.py",
       "manual": false
     },
     {
@@ -184,7 +184,7 @@
         "end": 122
       },
       "sha": "a614eb9e3a62dbb7",
-      "check": "",
+      "check": "python tests/test_opp.py",
       "manual": false
     },
     {
@@ -210,7 +210,7 @@
         "end": 134
       },
       "sha": "6410e6c714641d75",
-      "check": "",
+      "check": "python tests/test_opp.py",
       "manual": false
     },
     {
@@ -275,7 +275,7 @@
         "end": 207
       },
       "sha": "6b290dd2f833fc26",
-      "check": "",
+      "check": "python tests/test_opp.py",
       "manual": false
     },
     {
@@ -288,7 +288,7 @@
         "end": 210
       },
       "sha": "2971213f04d251b0",
-      "check": "",
+      "check": "python tests/test_opp.py",
       "manual": false
     },
     {
@@ -301,7 +301,7 @@
         "end": 239
       },
       "sha": "aa100fd37ed91be2",
-      "check": "",
+      "check": "python tests/check_schema.py",
       "manual": false
     },
     {

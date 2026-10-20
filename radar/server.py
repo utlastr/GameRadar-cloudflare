@@ -263,6 +263,15 @@ class Handler(BaseHTTPRequestHandler):
             with db.session() as c:
                 rows = [dict(r) for r in c.execute("SELECT * FROM runs ORDER BY ts DESC LIMIT 50")]
             self._json(rows)
+        elif u.path == "/api/opp/list":
+            from . import opp
+            self._json(opp.api_list(q.get("state", [""])[0]))
+        elif u.path == "/api/opp/game":
+            from . import opp
+            self._json(opp.api_game(q.get("id", [""])[0]))
+        elif u.path == "/api/opp/unknown":
+            from .opp import gamemap
+            self._json(gamemap.unknown_list())
         else:
             self._send("not found", "text/plain", 404)
 

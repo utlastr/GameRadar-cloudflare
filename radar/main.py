@@ -99,6 +99,10 @@ def loop(stop_event=None):
     # 地图（v54）：后台单独一个线程，每天抓一次各国 App Store 游戏榜，算各地口味相似度
     from . import worldmap
     _safe(worldmap.start)
+    # 机会雷达：B站早期信号（OPP_ENABLED 关掉就不启动）
+    if getattr(config, "OPP_ENABLED", False):
+        from . import opp
+        _safe(opp.start, stop_event)
     # v48：引力引擎签名探测已经完成使命（微信 / 抖音小游戏已接上），不再每次启动都跑。
     # 以后对方改了算法，可以临时把下面两行加回来：from . import gravity_probe; _safe(gravity_probe.start)
     while not (stop_event and stop_event.is_set()):

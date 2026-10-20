@@ -387,11 +387,35 @@ GITHUB_TOKEN = ""
 # 自动更新会覆盖这个文件。要改设置，请改 radar_data/settings.json（第一次运行自动生成），
 # 那个文件更新时不会被覆盖，里面的值会替换上面的默认值。
 # 路径请用正斜杠，例如 "D:/radar_backup"。
+# ================= 机会雷达（第一期：B站）=================
+# 数字分两类：
+#   工程参数（抓取频率、请求预算）——为了不被封，不是判断标准；
+#   待校准默认值——没有历史案例之前的临时值，校准后由案例算出来替换。
+OPP_ENABLED = True
+BILI_COOKIE = ""                 # 可选，填 SESSDATA，能降低风控概率
+BAIDU_COOKIE = ""                # 可选，百度指数要登录
+OPP_BILI_BUDGET = 600            # 工程参数：每小时最多多少次 B站请求
+OPP_TRACK_MIN_VIEWS = 3000       # 工程参数：发布 6 小时内播放到这个数就进跟踪池
+OPP_TRACK_MIN_MULT = 3           # 工程参数：爆款倍数到这个数就进跟踪池
+OPP_DEMAND_WORDS = {             # 评论/弹幕里的需求词，可改
+    "mobile": "手机|手游|安卓|苹果|ios|移动端|手机版|手机上|能在手机",
+    "name": "叫什么|什么游戏|游戏名|哪里下|在哪下|怎么下|多少钱|steam上",
+    "want": "想玩|求链接|好想玩|买了|已购|入了",
+}
+OPP_BIG_PUBLISHERS = []          # 大厂名单，用它判断"大厂发行的"要不要降权
+OPP_STAGE_READY_P = 0.6          # 待校准默认值：概率到这个数提醒"准备"
+OPP_STAGE_GO_P = 0.8             # 待校准默认值：概率到这个数提醒"开工"
+OPP_DECLINE_RATIO = 0.5          # 待校准默认值：新增播放跌到这个比例算"回落"
+OPP_MIN_LIVE_CASES = 20          # 实时攒满这么多个有结果的游戏，才把小时级指标加进模型
+
 USER_SETTINGS = os.path.join(DATA_DIR, "settings.json")
 SETTINGS_ERROR = ""      # settings.json 读取失败的原因（格式错误时整个文件不生效）
 _EDITABLE = ["PROXY", "BACKUP_DIR", "SERVER_PORT", "GITHUB_TOKEN", "AUTO_UPDATE", "UPDATE_CHECK_HOURS",
              "NOTIFY_ENABLED", "NOTIFY_MAX_PER_DAY", "NOTIFY_MIN_SCORE", "FAST_MINUTES", "SLOW_MINUTES",
-             "AI_KEY", "AI_URL", "AI_DAILY_LIMIT_YUAN", "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"]
+             "AI_KEY", "AI_URL", "AI_DAILY_LIMIT_YUAN", "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET",
+             "OPP_ENABLED", "BILI_COOKIE", "BAIDU_COOKIE", "OPP_BILI_BUDGET", "OPP_TRACK_MIN_VIEWS",
+             "OPP_TRACK_MIN_MULT", "OPP_DEMAND_WORDS", "OPP_BIG_PUBLISHERS", "OPP_STAGE_READY_P",
+             "OPP_STAGE_GO_P", "OPP_DECLINE_RATIO", "OPP_MIN_LIVE_CASES"]
 
 
 def _load_user_settings():
