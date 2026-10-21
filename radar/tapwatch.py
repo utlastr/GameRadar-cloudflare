@@ -15,8 +15,10 @@ def record(app, provenance="official_page"):
     if not entity.isdecimal():
         raise ValueError("TapTap ID 必须是数字")
     parsed = taptap.parse_app(app)
-    if any(parsed["metrics"].get(key) is None for key in ("downloads", "fans")):
-        raise RuntimeError(f"TapTap {entity} 未拿到热度和关注数，本次不更新旧值")
+    missing = [name for key, name in (("downloads", "热度"), ("fans", "关注"))
+               if parsed["metrics"].get(key) is None]
+    if missing:
+        raise RuntimeError(f"TapTap {entity} 页面上没读到{'和'.join(missing)}，本次不更新旧值")
     now = int(time.time())
     previous = db.load_entities().get(("tapmaker", entity), {}).get("extra") or {}
     parsed["extra"] = {**previous, **parsed["extra"], "track": True, "gone": False,
@@ -24,6 +26,26 @@ def record(app, provenance="official_page"):
                        "metric_provenance": provenance}
     collect._save("tapmaker", now, [parsed])
     return parsed
+
+
+_TRANSIENT = ("timeout", "timed out", "连接", "连不上", "没读到", "验证", "空的", "SSLEOF")
+
+
+def _sample(entity, tries=2):
+    """采一个 ID。超时、页面没读到这类偶发失败，隔几秒再采一次（TapTap 有时候就是一回慢一回快）。"""
+    last = None
+    for attempt in range(tries):
+        try:
+            app = taptap.detail(entity, strict=True)
+            if app == taptap.GONE:
+                raise RuntimeError("官方页面返回404，保留旧采样，不当成热度归零")
+            return record(app)
+        except Exception as e:
+            last = e
+            if attempt + 1 >= tries or not any(t in str(e).lower() for t in _TRANSIENT):
+                raise
+            time.sleep(3)
+    raise last
 
 
 def targets():
@@ -43,10 +65,7 @@ def run_once():
     db.kv_set("tap_priority", {"ts": started, "running": True, "ids": ids, "results": [], "errors": []})
     for entity in ids:
         try:
-            app = taptap.detail(entity, strict=True)
-            if app == taptap.GONE:
-                raise RuntimeError("官方页面返回404，保留旧采样，不当成热度归零")
-            parsed = record(app)
+            parsed = _sample(entity)
             results.append({"id": entity, "name": parsed["name"], "metrics": parsed["metrics"],
                             "ts": parsed["extra"]["detail_at"]})
             activity.say(f"TapTap ID {entity}：热度 {parsed['metrics']['downloads']:,}，"

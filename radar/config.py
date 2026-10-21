@@ -299,11 +299,12 @@ STRONG_STRENGTH = {"taptap": 100000, "appstore_cn": 1000, "appstore_us": 1000}  
 UNCHECKED_WINDOW = 0.5     # 还没检查供给时的窗口分（不知道 ≠ 没人做）
 TAPTAP_UNKNOWN_WINDOW = 0.3   # 最近没抓到 TapTap 数据时，TapTap 的窗口分
 
-# 能"发现"游戏的数据源。v21 起虎牙、斗鱼的分区也算（竞拍之王就是虎牙单独开了分区）；
-# 开播时就很大的老分区在 analyze 里直接不显示。标题括号词（huya_kw、douyu_kw）不再用。
-DISCOVERY_SOURCES = {"tapmaker", "taptap", "steam", "roblox", "huya", "douyu",
+# 能"发现"游戏的数据源：只有"平台自己的游戏编号"才认游戏身份，所以只有这些商店 / 平台算。
+# 直播平台（虎牙、斗鱼、B站直播、Twitch、Kick）记的是"分区名"，不是游戏编号：它们只能说明
+# 某个游戏现在有多少人在看，不能凭一个分区名断定"出现了一个新游戏"。所以不算发现源。
+DISCOVERY_SOURCES = {"tapmaker", "taptap", "steam", "roblox",
                      "haoyou", "mistore", "appcn", "appus", "itch", "poki", "crazygames", "fortnite",
-                     "kick", "twitch", "bili", "wxmini", "dymini"}
+                     "wxmini", "dymini"}
 
 BIG_COMPANIES = [
     "tencent", "腾讯", "netease", "网易", "mihoyo", "米哈游", "hoyoverse", "electronic arts", "ea",

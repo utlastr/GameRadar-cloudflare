@@ -2,7 +2,8 @@
 
 _NAMESPACES = {"tapmaker": "taptap", "appcn": "appstore", "appus": "appstore"}
 _NAME_ONLY = {"huya_t", "douyu_t", "bili_t", "twitch_t", "bvideo"}
-_LIVE = {"huya", "douyu", "bili", "twitch"}
+# 直播平台记的是"分区名"，不是游戏编号。分区名不能当游戏身份，否则每个分区都会变成一个"游戏"。
+_LIVE = {"huya", "douyu", "bili", "twitch", "kick"}
 
 
 def game_key(source, entity):

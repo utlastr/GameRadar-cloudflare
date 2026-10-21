@@ -7,7 +7,7 @@
 <style>
 body{margin:0;background:#000;overflow:hidden;color:#e6e8eb;font:13px/1.5 "Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif}
 #globeViz,#flat{position:fixed;left:0;top:0;right:0;bottom:0}
-#flat{display:none;touch-action:none}
+#flat{display:none;touch-action:none;width:100%;height:100%}
 #incw{display:inline-flex;align-items:center;gap:6px;font-size:12px}
 #incr{width:120px;accent-color:#2563eb}
 #sol{position:fixed;left:0;top:0;width:0;height:0;z-index:2}
@@ -95,12 +95,28 @@ const LMIN = Math.log(500), LMAX = Math.log(80000);
 
 let W = null, R = null, IDX = {}, RG = null, NEAR = {}, PINC = {}, UP = [], CL = [];
 let selCC = null, selCl = null, showPop = true, showBd = true;
+let selU = -1, selUCC = null;      /* 选中的省 / 州（单元）及其所属国家 */
 const geo = await (await fetch("/map/countries.geojson")).json();
 const FEATS = geo.features;
+/* three-globe 用 d3-geo 判断面在球上的内外：环向决定"哪边是里面"。
+   外环必须是顺时针（面积 < 0），洞必须是逆时针；个别 Natural Earth 小岛是反的，
+   会被当成"整个球面减去这个小岛"，于是铺满全地球（绿色 + 极卡）。这里统一环向。 */
+function ringArea(r) {
+  let a = 0;
+  for (let i = 0, n = r.length; i < n; i++) { const p = r[i], q = r[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; }
+  return a / 2;
+}
+function fixWinding(polys) {
+  for (const poly of polys) for (let i = 0; i < poly.length; i++) {
+    const a = ringArea(poly[i]);
+    if ((i === 0 ? a > 0 : a < 0)) poly[i].reverse();
+  }
+  return polys;
+}
 for (const f of FEATS) {
   f.cc = f.properties.cc; f.u = -1;
   const g = f.geometry;
-  f.polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  f.polys = fixWinding(g.type === "Polygon" ? [g.coordinates] : g.coordinates);
   let a = 180, b = 90, c = -180, d = -90;
   for (const p of f.polys) for (const [x, y] of p[0]) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); }
   f.bb = [a, b, c, d];
@@ -112,6 +128,7 @@ let UNITS = [], COVER = new Set(), SHAPES = FEATS;
 function setRegions(rg) {
   RG = rg; UNITS = []; COVER = new Set();
   if (rg) rg.units.forEach((u, i) => {
+    fixWinding(u.g);
     let a = 180, b = 90, c = -180, d = -90;
     for (const p of u.g) for (const [x, y] of p[0]) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); }
     UNITS.push({ cc: u.cc, u: i, en: u.en, loc: u.loc, rf: u.rf, pop: u.pop, polys: u.g, bb: [a, b, c, d], geometry: { type: "MultiPolygon", coordinates: u.g } });
@@ -186,12 +203,30 @@ function bright(k, cc) {
   return clusterOf(k) ? .85 : .5;
 }
 let HOVSET = null, hovCl = null;
+/* 亮度的最终裁决：选中省 > 同国其他省 > 别国；没有选中省时走原来的规则 */
+function brightOf(s) {
+  if (selU < 0) return bright(keyOf(s), s.cc);
+  if (s.u === selU) return 1;
+  if (s.cc === selUCC) return .4;
+  return .13;
+}
 function clusterOf(k) {
   if (!R || !k) return null;
   const id = R.places ? (R.places[k] || {}).cluster : (R.countries[k] || {}).cluster;
   return id ? CL.find(c => c.id === id) || null : null;
 }
-const capColor = (s, alpha = .6) => { const b = bright(keyOf(s), s.cc); const [r, g, bl] = rgbS(s); return `rgba(${Math.round(r*b)},${Math.round(g*b)},${Math.round(bl*b)},${alpha})`; };
+const capColor = (s, alpha = .6) => { const b = brightOf(s); const [r, g, bl] = rgbS(s); return `rgba(${Math.round(r*b)},${Math.round(g*b)},${Math.round(bl*b)},${alpha})`; };
+/* 选中某个省时：该国临时补上省级填色（1098 个省的填色一起画太慢），
+   选中的省最亮、同国其他省变暗、别国更暗。 */
+const NO_POLY = [];
+let POLYREF = null, POLYKEY = "";
+function polySet() {
+  const key = selUCC || "";
+  if (key === POLYKEY && POLYREF) return POLYREF;
+  POLYKEY = key;
+  POLYREF = key ? FEATS.concat(UNITS.filter(u => u.cc === key)) : FEATS;
+  return POLYREF;
+}
 
 function inRing(x, y, r) {
   let c = false;
@@ -331,26 +366,60 @@ function flatDots() {
   FL = { v: incVer, n, lng, lat, rnd, gi, cell, mass, inc, cc, at, H, order, pbar: tp / n };
   return FL;
 }
+/* 每个点代表一份收入额度 Q（滑块越高，Q 越大、点越少）。
+   1) 合并：一个点从自己 + 周围同国的格子凑收入，凑满 Q 就是满点（140K = 50K + 90K）；
+   2) 凑不满：不足 Q 的余数也画出来，只是点按比例变小；
+   3) 超限分散：一个格子的收入远超 Q 时，多出来的部分摊到周围还没放点的位置
+      （1000K、Q=50K ⇒ 周围 20 个点，加起来仍是 1000K），不再像以前那样只出一个点、其余直接丢掉。 */
 function siphon(X) {
-  const F = flatDots(), w = POPG.w, Q = X * F.pbar, taken = new Uint8Array(F.n), out = [];
-  for (const s of F.order) {
-    if (taken[s] || !(F.mass[s] > 0)) continue;
-    taken[s] = 1;
-    let m = F.mass[s], pp = POPG.pop[F.gi[s]];
+  const F = flatDots(), w = POPG.w, cd = POPG.cellDeg;
+  const Q = Math.max(1e-9, X * F.pbar), EPS = Q * .02;
+  const rem = Float64Array.from(F.mass), used = new Uint8Array(F.n), dots = [];
+  const take = (s, want) => {
+    let got = Math.min(rem[s], want);
+    rem[s] -= got;
+    if (got >= want) return got;
     const r0 = (F.cell[s] / w) | 0, c0 = F.cell[s] - r0 * w, cs = F.cc[s];
-    for (let o = 0; o < OFFS.length && m < Q; o += 2) {
+    for (let o = 0; o < OFFS.length && got < want; o += 2) {
       const r = r0 + OFFS[o];
       if (r < 0 || r > F.H) continue;
       const k = F.at[r * w + (c0 + OFFS[o + 1] + w) % w];
-      if (k < 0 || taken[k] || F.cc[k] !== cs) continue;
-      taken[k] = 1; m += F.mass[k]; pp += POPG.pop[F.gi[k]];
+      if (k < 0 || F.cc[k] !== cs || rem[k] <= 0) continue;
+      const t = Math.min(rem[k], want - got);
+      rem[k] -= t; got += t;
     }
-    if (m >= Q * .5) out.push(s, pp);
+    return got;
+  };
+  for (const s of F.order) {
+    if (used[s] || !(F.mass[s] > 0)) continue;
+    const got = take(s, Q);
+    if (got < EPS) continue;
+    used[s] = 1;
+    dots.push(s, got);
   }
-  const cd = POPG.cellDeg, dMx = cd * MAX_FRAC, lo = Math.log(cd * MIN_FRAC), hi = Math.log(dMx);
+  for (const s of F.order) {
+    let guard = 0;
+    while (rem[s] > EPS && guard++ < 512) {
+      const r0 = (F.cell[s] / w) | 0, c0 = F.cell[s] - r0 * w, cs = F.cc[s];
+      let spot = -1;
+      for (let o = 0; o < OFFS.length; o += 2) {
+        const r = r0 + OFFS[o];
+        if (r < 0 || r > F.H) continue;
+        const k = F.at[r * w + (c0 + OFFS[o + 1] + w) % w];
+        if (k < 0 || used[k] || F.cc[k] !== cs) continue;
+        spot = k; break;
+      }
+      if (spot < 0) break;
+      used[spot] = 1;
+      const got = take(spot, Q);
+      if (got >= EPS) dots.push(spot, got);
+    }
+  }
+  const dMx = cd * MAX_FRAC, dMn = cd * MIN_FRAC, lo = Math.log(dMn), hi = Math.log(dMx);
   const bk = Array.from({ length: BUCKETS }, (_, b) => ({ deg: Math.exp(lo + (hi - lo) * b / (BUCKETS - 1)), pts: [] }));
-  for (let q = 0; q < out.length; q += 2) {
-    const s = out[q], d = Math.max(Math.exp(lo), Math.min(dMx, dMx * Math.sqrt(out[q + 1] / POP_FULL)));
+  for (let q = 0; q < dots.length; q += 2) {
+    const s = dots[q], f = Math.min(1, dots[q + 1] / Q);
+    const d = Math.max(dMn, Math.min(dMx, dMn + (dMx - dMn) * Math.sqrt(f)));
     bk[Math.round((Math.log(d) - lo) / (hi - lo) * (BUCKETS - 1))].pts.push([F.lng[s], F.lat[s], F.rnd[s], F.gi[s]]);
   }
   return bk.filter(s => s.pts.length);
@@ -370,7 +439,7 @@ const world = new Globe(gEl, { animateIn: false })
   .width(gEl.clientWidth).height(gEl.clientHeight)
   .globeImageUrl("/map/a/earth-night").bumpImageUrl("/map/a/earth-topology").backgroundImageUrl("/map/a/night-sky")
   .polygonsData(FEATS).polygonGeoJsonGeometry(f => f.geometry).polygonAltitude(.004).polygonsTransitionDuration(0)
-  .polygonSideColor(() => "rgba(0,0,0,0)")
+  .polygonSideColor(() => null).polygonCapCurvatureResolution(4)
   .labelsData(MARKS).labelLat(d => d.lat).labelLng(d => d.lng).labelText(() => "").labelSize(.01).labelDotRadius(.35)
   .labelAltitude(.006).labelsTransitionDuration(0)
   .particlesList(d => d.pts).particleLat(d => d[1]).particleLng(d => d[0]).particleAltitude(.006).particlesSizeAttenuation(true)
@@ -412,10 +481,145 @@ world.onGlobeReady(() => {
   world.particlesTexture(() => dotTex).particlesSize(d => d.deg * Math.PI / 180 * Rg / tanHalf);
   setPop();
   setupSol();
+  buildBorders();
 });
 function setPop() {
   if (!dotTex) return;
   world.particlesData(shownSets());
+}
+
+/* ---------- 边界：国界粗而亮、省界细而暗 ----------
+   以前每个省/州多边形都是独立 mesh（2634 个对象、1.3 万次 draw call），鼠标一动就卡死。
+   现在：国家仍用多边形填色；国界用合并的"带状三角网"画（WebGL 的线宽固定在 1px，
+   只有三角带能真正画粗）；省界用合并线段（1px 细线、更暗），两者层级分开不再糊成一片。 */
+let BORD = null, BRD = null, BORDSEL = null, SELKEY = "";
+let MATBAD = 0;
+function lineCtor() {
+  let Seg = null, Mat = null, Base = null, Attr = null, Mesh = null, MMat = null, MBasic = false;
+  let cand = null;   /* 兜底：任意网格材质，避免拿到大气层那种 ShaderMaterial */
+  world.scene().traverse(o => {
+    if (!Seg && o.isLineSegments && o.material && o.geometry) { Seg = o.constructor; Mat = o.material.constructor; }
+    if (!Base && o.isMesh && o.geometry && o.geometry.type === "SphereGeometry") { Base = o.geometry.constructor; Mesh = o.constructor; }
+    const m = o.isMesh && o.material;
+    if (m) {
+      if (!cand) cand = m;
+      if (!MMat && m.isMeshBasicMaterial) { MMat = m.constructor; MBasic = true; }   /* 不受光照影响，最稳 */
+      if (!MMat && "emissive" in m) MMat = m.constructor;                            /* Lambert/Phong 用自发光 */
+    }
+    if (!Attr && o.geometry && o.geometry.attributes && o.geometry.attributes.position) Attr = o.geometry.attributes.position.constructor;
+  });
+  if (!MMat && cand) MMat = cand.constructor;
+  MATBAD = MMat && !MBasic && !("emissive" in new MMat({})) ? 1 : 0;
+  return Seg && Base && Attr && MMat ? { Seg, Mat, Base, Attr, Mesh, MMat, MBasic } : null;
+}
+function lineGeometry(mk, pos) {
+  const g = new mk.Base();      /* 球体几何当空壳，再换成线段顶点（描边几何的构造函数要参数，不能直接 new） */
+  g.setIndex(null);
+  for (const k of Object.keys(g.attributes)) g.deleteAttribute(k);
+  g.setAttribute("position", new mk.Attr(new Float32Array(pos), 3));
+  g.boundingSphere = null;
+  return g;
+}
+function sph(lng, lat, r) {
+  const t = (90 - lat) * D2R, p = (90 - lng) * D2R;
+  return [r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p)];
+}
+function ringSegments(shapes, radius) {
+  const pos = [];
+  for (const f of shapes) for (const poly of f.polys) for (const ring of poly) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      pos.push(...sph(a[0], a[1], radius), ...sph(b[0], b[1], radius));
+    }
+  }
+  return pos;
+}
+function makeLines(shapes, radius, opacity) {
+  const mk = lineCtor();
+  if (!mk) return null;
+  const pos = ringSegments(shapes, radius);
+  if (!pos.length) return null;
+  const g = lineGeometry(mk, pos);
+  const o = new mk.Seg(g, new mk.Mat({ color: 0xffffff, transparent: true, opacity, depthWrite: false }));
+  world.scene().add(o);
+  return o;
+}
+function dropLines(o) { if (!o) return; o.parent && o.parent.remove(o); o.geometry && o.geometry.dispose(); }
+/* 把一圈经纬度做成连续的"带"：每个顶点用相邻两条边做斜接（miter），
+   转角处补满，所以不会出现一段一段的断口；颜色是白的，不再是一层黑线。 */
+function makeRibbons(shapes, radius, halfW, opacity) {
+  const mk = lineCtor();
+  if (!mk || !mk.Mesh || !mk.MMat || MATBAD) return null;
+  const pos = [];
+  for (const f of shapes) for (const poly of f.polys) for (const ring of poly) {
+    const n = ring.length;
+    if (n < 3) continue;
+    const P = ring.map(([lng, lat]) => sph(lng, lat, radius));
+    const E = [];
+    for (let i = 0; i < n; i++) {
+      const a = P[i], b = P[(i + 1) % n];
+      const nx = a[1]*b[2] - a[2]*b[1], ny = a[2]*b[0] - a[0]*b[2], nz = a[0]*b[1] - a[1]*b[0];
+      const l = Math.hypot(nx, ny, nz);
+      E.push(l < 1e-12 ? null : [nx / l, ny / l, nz / l]);
+    }
+    const V = [];
+    for (let i = 0; i < n; i++) {
+      const e0 = E[(i + n - 1) % n], e1 = E[i], ref = e1 || e0;
+      if (!ref) { V.push([0, 0, 0]); continue; }
+      let nx = ref[0], ny = ref[1], nz = ref[2];
+      if (e0 && e1) { nx = e0[0] + e1[0]; ny = e0[1] + e1[1]; nz = e0[2] + e1[2]; }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      nx /= l; ny /= l; nz /= l;
+      const s = halfW / Math.max(.45, Math.abs(nx * ref[0] + ny * ref[1] + nz * ref[2]));
+      V.push([nx * s, ny * s, nz * s]);
+    }
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      if (!E[i]) continue;
+      const a = P[i], b = P[j], va = V[i], vb = V[j];
+      pos.push(a[0]-va[0], a[1]-va[1], a[2]-va[2], b[0]-vb[0], b[1]-vb[1], b[2]-vb[2], b[0]+vb[0], b[1]+vb[1], b[2]+vb[2]);
+      pos.push(a[0]-va[0], a[1]-va[1], a[2]-va[2], b[0]+vb[0], b[1]+vb[1], b[2]+vb[2], a[0]+va[0], a[1]+va[1], a[2]+va[2]);
+    }
+  }
+  if (!pos.length) return null;
+  const g = lineGeometry(mk, pos);
+  const mat = mk.MBasic
+    ? new mk.MMat({ color: 0xffffff, transparent: true, opacity, depthWrite: false, side: 2, toneMapped: false })
+    : new mk.MMat({ color: 0x000000, emissive: 0xffffff, transparent: true, opacity, depthWrite: false, side: 2 });
+  const o = new mk.Mesh(g, mat);
+  o.frustumCulled = false;
+  world.scene().add(o);
+  return o;
+}
+function buildBorders() {
+  dropLines(BORD); BORD = null;
+  dropLines(BRD); BRD = null;
+  if (!UNITS.length) return;
+  const R = world.getGlobeRadius();
+  /* 光点在 1.006，边界必须画在它上面，否则被密集光点盖住就是"断断续续" */
+  BORD = makeLines(UNITS, R * 1.0072, .13);             /* 省界：1px 细线，淡一点 */
+  BRD = makeRibbons(FEATS, R * 1.0080, R * .0015, .5);  /* 国界：连续白带，略粗一点 */
+  if (BORD) BORD.renderOrder = 4;
+  if (BRD) BRD.renderOrder = 5;
+  SELKEY = ""; syncBorders();
+}
+function selList() {
+  if (selU >= 0) return UNITS.filter(u => u.u === selU);
+  if (!selCC) return [];
+  return SHAPES.filter(f => keyOf(f) === selCC || (f.cc === selCC && !NEAR[selCC]));
+}
+function buildSelOutline() {
+  dropLines(BORDSEL); BORDSEL = null;
+  const list = selList();
+  if (!list.length) return;
+  BORDSEL = makeRibbons(list, world.getGlobeRadius() * 1.006, world.getGlobeRadius() * .0022, 1);
+  if (BORDSEL) BORDSEL.renderOrder = 3;
+}
+function syncBorders() {
+  const on = showBd && mode === "globe";
+  if (BORD) BORD.visible = on;
+  if (BRD) BRD.visible = on;
+  if (BORDSEL) BORDSEL.visible = on;
 }
 
 /* ---------- 太阳系：同一个场景，真实距离和大小 ---------- */
@@ -758,24 +962,39 @@ function glProg(vs, fs) {
   return { p, u };
 }
 const VHEAD = "uniform vec2 c; uniform vec2 s; uniform float o; vec4 at(vec2 q){ return vec4((q.x + o - c.x) * s.x, -(q.y - c.y) * s.y, 0., 1.); }\n";
-let PB, PP, PD, BFan, BLn, NLn = 0, BDot = null, NDot = 0, BSm, nightTex = null;
+let PB, PP, PD, BFan, BLn, NLn = 0, BBd = null, NBd = 0, NCn = 0, BDot = null, NDot = 0, BSm, nightTex = null;
 const mkBuf = arr => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); return b; };
 function buildFlatGeo() {
   if (!gl) return;
-  const fanArr = [0, 0, 1, 0, 0, 1, 1, 1], lnArr = [];
-  for (const f of SHAPES) {
+  const fanArr = [0, 0, 1, 0, 0, 1, 1, 1], lnArr = [], bdArr = [];
+  for (const f of FEATS.concat(UNITS)) {
     const s = fanArr.length / 2, ls = lnArr.length / 2;
+    const country = f.u < 0;
     let a = 9, b = 9, c = -9, d = -9;
     for (const poly of f.polys) for (const ring of poly) {
       const q = ring.map(([x, y]) => [mX(x), mY(y)]);
       for (const [x, y] of q) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); }
       for (let i = 1; i + 1 < q.length; i++) fanArr.push(q[0][0], q[0][1], q[i][0], q[i][1], q[i + 1][0], q[i + 1][1]);
       for (let i = 0; i < q.length; i++) { const j = (i + 1) % q.length; lnArr.push(q[i][0], q[i][1], q[j][0], q[j][1]); }
+      /* 国界单独做成"三角带"，平铺模式里也能画粗、画清楚 */
+      if (country) {
+        const hw = .00055;
+        for (let i = 0; i < q.length; i++) {
+          const x1 = q[i][0], y1 = q[i][1], x2 = q[(i + 1) % q.length][0], y2 = q[(i + 1) % q.length][1];
+          const dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy) || 1;
+          const ox = -dy / l * hw, oy = dx / l * hw;
+          bdArr.push(x1 - ox, y1 - oy, x2 - ox, y2 - oy, x2 + ox, y2 + oy);
+          bdArr.push(x1 - ox, y1 - oy, x2 + ox, y2 + oy, x1 + ox, y1 + oy);
+        }
+      }
     }
     f.fan = [s, fanArr.length / 2 - s]; f.ln = [ls, lnArr.length / 2 - ls]; f.mb = [a, b, c - a, d - b];
+    if (country) NCn = lnArr.length / 2;      /* 国界线在先、省界线在后，边界处正好是 NCn */
   }
   if (BFan) { gl.deleteBuffer(BFan); gl.deleteBuffer(BLn); }
+  if (BBd) gl.deleteBuffer(BBd);
   BFan = mkBuf(new Float32Array(fanArr)); BLn = mkBuf(new Float32Array(lnArr)); NLn = lnArr.length / 2;
+  BBd = mkBuf(new Float32Array(bdArr)); NBd = bdArr.length / 2;
 }
 function uploadFlatDots() {
   if (!gl) return;
@@ -818,7 +1037,7 @@ function clampView() {
   fv.y = half >= .5 ? .5 : Math.max(half, Math.min(1 - half, fv.y));
   fv.x = ((fv.x % 1) + 1) % 1;
 }
-const rgba = (s, a) => { const b = bright(keyOf(s), s.cc), c = rgbS(s); return [c[0] * b / 255, c[1] * b / 255, c[2] * b / 255, a]; };
+const rgba = (s, a) => { const b = brightOf(s), c = rgbS(s); return [c[0] * b / 255, c[1] * b / 255, c[2] * b / 255, a]; };
 const DOTC = [1, 180 / 255, 90 / 255, 1];
 let fraf = 0;
 function drawFlat() { if (gl && mode === "flat" && !fraf) fraf = requestAnimationFrame(renderFlat); }
@@ -829,6 +1048,7 @@ function renderFlat() {
   const W = Math.round(flat.clientWidth * dpr), H = Math.round(flat.clientHeight * dpr);
   if (flat.width !== W || flat.height !== H) { flat.width = W; flat.height = H; }
   clampView();
+
   const wp = fpx() * dpr, sx = 2 * wp / W, sy = 2 * wp / H;
   const L = fv.x - W / 2 / wp, Rt = fv.x + W / 2 / wp, T = fv.y - H / 2 / wp, B = fv.y + H / 2 / wp;
   const copies = [];
@@ -847,28 +1067,34 @@ function renderFlat() {
   use(PP); bindP(BFan, 2);
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.enable(gl.STENCIL_TEST); gl.stencilMask(1);
-  if (showBd) for (const o of copies) {
-    gl.uniform1f(PP.u.o, o);
-    for (const f of SHAPES) {
-      const [a, b, w, h] = f.mb;
-      if (a + o > Rt || a + w + o < L || b > B || b + h < T) continue;
-      gl.colorMask(false, false, false, false);
-      gl.stencilFunc(gl.ALWAYS, 0, 1); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
-      gl.uniform4f(PP.u.r, 0, 0, 0, 0);
-      gl.drawArrays(gl.TRIANGLES, f.fan[0], f.fan[1]);
-      gl.colorMask(true, true, true, true);
-      gl.stencilFunc(gl.EQUAL, 1, 1); gl.stencilOp(gl.ZERO, gl.ZERO, gl.ZERO);
-      gl.uniform4f(PP.u.r, a, b, w, h);
-      gl.uniform4fv(PP.u.col, rgba(f, .6));
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  if (showBd) {
+    const fillList = selUCC ? FEATS.concat(UNITS.filter(u => u.cc === selUCC)) : FEATS;
+    for (const o of copies) {
+      gl.uniform1f(PP.u.o, o);
+      for (const f of fillList) {
+        const [a, b, w, h] = f.mb;
+        if (a + o > Rt || a + w + o < L || b > B || b + h < T) continue;
+        gl.colorMask(false, false, false, false);
+        gl.stencilFunc(gl.ALWAYS, 0, 1); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
+        gl.uniform4f(PP.u.r, 0, 0, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, f.fan[0], f.fan[1]);
+        gl.colorMask(true, true, true, true);
+        gl.stencilFunc(gl.EQUAL, 1, 1); gl.stencilOp(gl.ZERO, gl.ZERO, gl.ZERO);
+        gl.uniform4f(PP.u.r, a, b, w, h);
+        gl.uniform4fv(PP.u.col, rgba(f, f.u >= 0 ? .75 : .6));
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
     }
   }
   gl.disable(gl.STENCIL_TEST);
-  bindP(BLn, 2); gl.uniform4f(PP.u.r, 0, 0, 0, 0);
-  const selF = selCC ? SHAPES.filter(f => keyOf(f) === selCC || (f.cc === selCC && !NEAR[selCC])) : [];
+  const selF = selList();
   if (showBd) for (const o of copies) {
     gl.uniform1f(PP.u.o, o);
-    gl.uniform4f(PP.u.col, 1, 1, 1, .15); gl.drawArrays(gl.LINES, 0, NLn);
+    gl.uniform4f(PP.u.r, 0, 0, 0, 0);
+    /* 国界：三角带（粗、亮）；省界：细线（暗） */
+    if (BBd && NBd) { bindP(BBd, 2); gl.uniform4f(PP.u.col, 1, 1, 1, .5); gl.drawArrays(gl.TRIANGLES, 0, NBd); }
+    bindP(BLn, 2);
+    if (NCn < NLn) { gl.uniform4f(PP.u.col, 1, 1, 1, .12); gl.drawArrays(gl.LINES, NCn, NLn - NCn); }
     gl.uniform4f(PP.u.col, 1, 1, 1, 1);
     for (const f of selF) gl.drawArrays(gl.LINES, f.ln[0], f.ln[1]);
   }
@@ -955,7 +1181,8 @@ function placeTip(tip, cx, cy) {
 function clickAt(cx, cy) {
   if (mode === "globe") { const b = pickBody(cx, cy); if (b && (b.k !== focus || cs.h > b.R * 30)) { flyTo(b.k); return; } }
   const sh = locate(cx, cy), k = sh ? keyOf(sh) : null;
-  select(k && k !== selCC ? k : null);
+  const same = k && k === selCC && (selU < 0 || !sh || sh.u === selU);
+  select(same ? null : k, sh);
 }
 let hoverRaf = 0;
 function hoverAt(cx, cy) {
@@ -972,7 +1199,7 @@ function hoverAt(cx, cy) {
     if (!sh) { tip.style.display = "none"; return; }
     const s = selCC && k !== selCC ? simOf(selCC, k) : null;
     const cl = clusterOf(k);
-    tip.innerHTML = badge(k, s, false, sh) + (cl && cl.games.length > 1 ? `<div class="ics">${cl.games.slice(1, 5).map(gameInfo).map(g => g.icon ? `<img src="${esc(g.icon)}" referrerpolicy="no-referrer" title="${esc(g.name)}">` : "").join("")}</div>` : "");
+    tip.innerHTML = badge(k, s, false, sh) + (cl && cl.games && cl.games.length > 1 ? `<div class="ics">${cl.games.slice(1, 5).map(gameInfo).map(g => g.icon ? `<img src="${esc(g.icon)}" referrerpolicy="no-referrer" title="${esc(g.name)}">` : "").join("")}</div>` : "");
     tip.style.display = "block";
     tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, cx + 16)) + "px";
     tip.style.top = Math.max(8, Math.min(innerHeight - tip.offsetHeight - 8, cy + 16)) + "px";
@@ -980,7 +1207,7 @@ function hoverAt(cx, cy) {
 }
 function badge(k, s, enOnly, sh) {
   const cc = ccOf(k), c = R && R.countries[cc], p = PL(k), cl = clusterOf(k);
-  const g0 = cl && cl.games[0] ? gameInfo(cl.games[0]) : null;
+  const g0 = cl && cl.games && cl.games[0] ? gameInfo(cl.games[0]) : null;
   const emb = cl ? `<div class="emb">${g0 && g0.icon ? `<img src="${esc(g0.icon)}" referrerpolicy="no-referrer">` : ""}</div>` : "";
   let t3 = "";
   if (!R || (!R.places && c && c.aff && c.aff.length)) {
@@ -989,7 +1216,7 @@ function badge(k, s, enOnly, sh) {
   }
   const same = selCC && k !== selCC && SELSET ? (SELSET.has(k) ? " · same circle" : " · other circle") : "";
   const unit = sh && sh.u >= 0;
-  const title = unit ? unitName(sh) + (p && p.units.length > 1 ? ` · ${p.name}` : "") : nameK(k, !enOnly);
+  const title = unit ? `${unitName(sh)}, ${enName(sh.cc)}` : nameK(k, !enOnly);
   const traits = cl && cl.traits && cl.traits.length ? "Leans: " + cl.traits.map(([g, x]) => `${esc(gEn(g))} ×${x}`).join(", ") : "";
   const likes = p && p.likes && p.likes.length ? `More than rest of ${esc(enName(cc))}: ` + p.likes.slice(0, 3).map(([a, x]) => `${esc(appOf(a).name)} ×${x}`).join(", ") : "";
   const top = o => Object.entries(o || {}).filter(([, x]) => x >= 1.15).sort((a, b) => b[1] - a[1]);
@@ -997,7 +1224,7 @@ function badge(k, s, enOnly, sh) {
   const none = !R ? "Data not ready" : unit && R.places && !p ? "No regional data yet" : "No chart data";
   return `<div class="bdg">${emb}<div><div class="t1">${esc(title)}&ensp;<span class="m">${fmtInc(unit ? incS(sh) : incK(k))}${same}</span></div>`
     + `<div class="t2">${cl ? esc(clName(cl)) : none}</div>`
-    + (cl ? `<div class="t3">${cl.solo ? "Unlike anywhere else" : cl.members.length + " places"}${g0 ? " · Top: " + esc(g0.name) : ""}</div>` : "")
+    + (cl ? `<div class="t3">${cl.solo ? "Unlike anywhere else" : (cl.members || []).length + " places"}${g0 ? " · Top: " + esc(g0.name) : ""}</div>` : "")
     + (traits ? `<div class="t3">${traits}</div>` : "")
     + (likes ? `<div class="t3">${likes}</div>` : "")
     + (plat ? `<div class="t3">${plat}</div>` : "")
@@ -1017,20 +1244,29 @@ gEl.addEventListener("pointermove", e => { if (!e.buttons) hoverAt(e.clientX, e.
 gEl.addEventListener("pointerleave", () => { $("tip").style.display = "none"; setHover(null); });
 
 function repaint() {
-  const want = showBd ? SHAPES : [];
+  const want = showBd ? polySet() : NO_POLY;
   if (world.polygonsData() !== want) world.polygonsData(want).labelsData(showBd ? MARKS : []);
-  world.polygonCapColor(f => capColor(f))
-    .polygonStrokeColor(f => selCC && (keyOf(f) === selCC || (f.cc === selCC && !NEAR[selCC])) ? "#ffffff" : f.u >= 0 ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.18)")
+  world.polygonAltitude(f => f.u >= 0 ? .0046 : .004)
+    .polygonCapColor(f => capColor(f))
+    .polygonStrokeColor(f => f.u >= 0
+      ? (f.u === selU ? "rgba(255,255,255,.95)" : "rgba(255,255,255,.18)")
+      : (selU < 0 && selCC && (keyOf(f) === selCC || f.cc === selCC) ? "rgba(255,255,255,.8)" : null))
     .labelColor(d => capColor({ cc: d.cc, u: -1 }, 1));
+  syncBorders();
+  const sk = (selCC || "") + "|" + selU;
+  if (BORD && sk !== SELKEY) { SELKEY = sk; buildSelOutline(); syncBorders(); }
   if (mode === "flat") drawFlat();
 }
 function layout() {
   document.body.classList.toggle("sel", !!(selCC || selCl));
   return false;
 }
-function select(cc) {
+function select(cc, sh) {
+  const prev = selCC;
   selCC = cc; selCl = null; CLSET = null; HOVSET = null; hovCl = null;
   MAXSIM = 1;
+  if (cc && sh && sh.u >= 0) { selU = sh.u; selUCC = sh.cc; }
+  else if (!cc || cc !== prev) { selU = -1; selUCC = null; }
   const cl = cc && clusterOf(cc);
   SELSET = cl ? new Set(cl.members) : null;
   repaint(); renderPanel();
@@ -1118,7 +1354,7 @@ function placeCard(k) {
   const p = PL(k);
   if (!p) return "";
   const cc = p.cc, cl = clusterOf(k);
-  let h = `<span class="x" data-x>×</span><h2>${esc(nameK(k, true))}</h2><div class="m"><span data-cc="${cc}" style="cursor:pointer;text-decoration:underline">${esc(enName(cc))}</span> · population ${fmtPop(p.pop)} · income per person ${fmtInc(incK(k))}</div>`;
+  let h = `<span class="x" data-x>×</span><h2>${esc(nameKC(k))}</h2><div class="m"><span data-cc="${cc}" style="cursor:pointer;text-decoration:underline">${esc(enName(cc))}</span> · population ${fmtPop(p.pop)} · income per person ${fmtInc(incK(k))}</div>`;
   if (cl) h += `<div data-cl="${cl.id}" style="cursor:pointer">${badge(k, null, true)}</div>`;
   if (p.likes && p.likes.length) h += `<h3>Liked more than the rest of ${esc(enName(cc))}</h3>` + p.likes.map(([a, x]) => gameRow(a, x)).join("");
   if (p.ent && Object.keys(p.ent).length) h += `<h3>Entertainment vs ${esc(enName(cc))} average</h3>` + chips(p.ent);
@@ -1163,6 +1399,7 @@ $("mode").addEventListener("click", e => {
   solEl.style.display = mode === "globe" ? "" : "none";
   $("tip").style.display = "none";
   world.pauseAnimation && (mode === "flat" ? world.pauseAnimation() : world.resumeAnimation());
+  syncBorders();
   if (mode === "flat") {
     if (focus === "earth") { const pv = world.pointOfView(); fv.x = mX(pv.lng); fv.y = mY(pv.lat); }
     if (!fv.init) { fv.z = Math.log2(Math.max(flat.clientWidth, 256) / 512); fv.init = true; }
@@ -1210,7 +1447,7 @@ async function load() {
   const igNew = (!IG || IG.kind !== 2) && await loadIncGrid();
   if (first || igNew) { dotIncomes(); if (dotMode === "inc") refreshDots(); }
   let rgNew = false;
-  if (!RG) { const rg = await getJSON("/api/regions"); if (rg && rg.units) { setRegions(rg); buildFlatGeo(); rgNew = true; } }
+  if (!RG) { const rg = await getJSON("/api/regions"); if (rg && rg.units) { setRegions(rg); buildFlatGeo(); buildBorders(); rgNew = true; } }
   IDX = {}; NEAR = {}; UP = []; PINC = {}; CL = [];
   if (R) {
     R.order.forEach((cc, i) => IDX[cc] = i);
@@ -1231,6 +1468,7 @@ async function load() {
 repaint();
 renderLegend();
 await load();
+
 </script>
 </body>
 </html>

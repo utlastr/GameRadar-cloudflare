@@ -122,6 +122,11 @@ def guard(quiet=False):
         return True
     if _norm(root) == _norm(base_dir()):
         return True
+    if not os.path.isdir(root):
+        # 登记的位置已经不存在了（搬过家、注册表没跟上）。再拦下去用户只能手动改注册表，
+        # 所以直接把当前位置认领成唯一位置。
+        claim()
+        return True
     if not quiet:
         ok = _open_canonical(root)
         _msg("这份雷达是多余的副本，已阻止启动。\n\n"

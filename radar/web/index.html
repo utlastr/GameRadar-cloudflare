@@ -275,7 +275,7 @@ const SRC = {steam:"Steam", roblox:"Roblox", taptap:"TapTap", tapmaker:"TapTap�
 const MET = {players:"在线人数", heat:"直播热度", rooms:"主播数", downloads:"累计热度", reserves:"预约数", fans:"关注数", reviews:"评论数", visits:"累计访问", viewers:"观看人数", videos:"视频数", views:"播放量", rank:"名次"};
 const PAGES = [
   {k:"must", t:"必看"},
-  {k:"opp", t:"机会"},
+  {k:"hit", t:"成功案例"},
   {k:"plat", t:"各平台"},
   {k:"status", t:"运行情况"},
 ];
@@ -460,6 +460,7 @@ function renderContent(){
   if(S.analyze_error) h += `<div class="notice" style="border-color:#dc2626;color:#b42318"><b>分析出错（${ago(S.analyze_error.ts)}），下面显示的是上一次成功的结果${S.updated?"（"+ago(S.updated)+"）":""}，不是最新的。</b><br>${esc(S.analyze_error.error)}<details><summary>详细错误（发给开发者）</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(S.analyze_error.trace||"")}</pre></details></div>`;
   for(const x of S.holidays||[]) h += `<div class="notice">今天是${esc(x.name)}，大盘可能整体偏高。系统已按大盘扣除，但请留意节后回落。</div>`;
   if(page==="must") h += mustView();
+  else if(page==="hit") h += hitView();
   else if(page==="opp") h += oppView();
   else if(page==="plat") h += platView();
   else if(page==="status") h += statusView();
@@ -475,6 +476,7 @@ function afterRender(){
   if(page==="status" && STATS) withCharts(mountStatus);
   if(page==="plat" && PLAT.tab==="movers" && IDX) withCharts(mountIndex);
   if(page==="opp" && !OPP.list) loadOpp();
+  if(page==="hit"){ if(!HIT.list) loadHit(); if(HIT.game) withCharts(()=>mountHit(HIT.game)); }
 }
 function pickPlat(id){
   PLAT.src = id; RAW.source = id; RAW.data = null; RAW.sort = null; RAW.limit = 300; RAW.q = "";
@@ -1168,25 +1170,9 @@ function termHtml(){
   if(!LOG.length) return '<span class="m">还没有日志</span>';
   return LOG.map(l=>{ const m=esc(l.msg); const cls=/失败|错误|Error|Traceback|Exception/.test(l.msg)?"e":(/完成/.test(l.msg)?"g":""); return cls?`<span class="${cls}">${m}</span>`:m; }).join("\n");
 }
-function aiPanel(){
-  const a = S.ai||{};
-  const err = a.error && (a.err_ts||0) > (a.ok_ts||0);
-  const body = !a.enabled
-    ? `<div class="t2">未启用</div>`
-    : `<div class="kv"><span class="k">状态</span><span>${err?`<span class="up">出错：${esc(a.error)}（${ago(a.err_ts)}）</span>`:(a.ok_ts?`正常，最近一次 ${ago(a.ok_ts)}`:"已填密钥，等下一次分析")}</span>
-       <span class="k">接口</span><span>${a.official===false?`中转站 ${esc(a.host||"")}`:"DeepSeek 官方"}，模型 ${esc(a.model||"")}</span>
-       <span class="k">今天</span><span class="num">读了 ${a.count||0} 款，花费 ${(+(a.spent||0)).toFixed(2)} 元，上限 ${a.limit} 元${a.official===false?"":""}${a.note?"（"+esc(a.note)+"）":""}</span>
-       ${a.last?`<span class="k">上一轮</span><span>${ago(a.last.ts)}：候选 ${a.last.cand} 款，已判断 ${a.last.judged} 款，待读 ${a.last.todo} 款，这轮读了 ${a.last.read} 款${a.last.fail?`，<span class="up">失败 ${a.last.fail} 款</span>`:""}${a.last.no_src?``:""}${a.last.why?`<br><span class="${a.last.fail?"up":"t2"}">${esc(a.last.why)}</span>`:""}</span>`:""}</div>`;
-  return `<div class="panel"><div class="panel-h"><h2>AI 读评论</h2><span class="sub">DeepSeek</span></div><div class="pbody">${body}</div></div>`;
-}
 function statusView(){
   const src = Object.entries(S.sources||{});
-  const tap=S.tap_priority||{};
-  const tapStatus=tap.ts?panel("TapTap 重点 ID 采样",`${tap.running?"采集中":"最近一轮"} · ${ago(tap.ts)}`,
-    `<div>${(tap.results||[]).length} / ${(tap.ids||[]).length} 个 ID 成功</div>`+
-    (tap.results||[]).map(r=>`<div class="why">ID ${esc(r.id)} · 热度 ${fmt(r.metrics.downloads)} · 关注 ${fmt(r.metrics.fans)} · ${ago(r.ts)}</div>`).join("")+
-    (tap.errors||[]).map(e=>`<div class="why up">ID ${esc(e.id)}：${esc(e.error)}</div>`).join("")):"";
-  let h = nowCard() + tapStatus + aiPanel() + histPanel() + `<div class="panel"><div class="panel-h"><h2>实时日志</h2></div><div class="term" id="term">${termHtml()}</div></div>`;
+  let h = nowCard() + histPanel() + `<div class="panel"><div class="panel-h"><h2>实时日志</h2></div><div class="term" id="term">${termHtml()}</div></div>`;
   h += `<div class="panel"><div class="panel-h"><h2>数据源</h2>${(S.todo||[]).length?``:""}</div><div class="scroll-x"><table><thead><tr><th>平台</th><th>状态</th><th class="r">条目数</th><th>最近成功</th><th>错误信息</th></tr></thead><tbody>` +
     (src.length ? src.map(([k,v])=>{ const st=sourceState(v); return `<tr><td class="g-name">${SRC[k]||k}</td><td><span class="tag ${st==="ok"?"ok":(st==="err"?"hot":"")}">${st==="ok"?"正常":(st==="err"?"失败":"未运行")}</span></td><td class="r num">${fmt(v.count)}</td><td class="t2">${ago(v.ok_ts)}</td><td class="muted">${esc(v.error||(v.warn?"部分失败："+v.warn:""))}</td></tr>`; }).join("") : `<tr><td colspan="5" class="muted">还没有运行过</td></tr>`) + `</tbody></table></div></div>`;
 
@@ -1440,6 +1426,109 @@ function oppGameView(g){
     ${rows?`<table class="tbl" style="margin-top:12px"><thead><tr><th>视频</th><th>UP 主</th><th>对应方式</th><th>可信度</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="t2">还没有对应到视频。</div>`}`);
 }
 
+/* ---------- 成功案例（历史爆款研究） ---------- */
+const HIT = {list:null, game:null, open:null, err:"", loaded:false, loading:false};
+async function loadHit(){
+  if(HIT.loading) return;
+  HIT.loading = true;
+  try{ HIT.list = await getJSON("/api/hit/list"); HIT.err=""; }
+  catch(e){ HIT.err = "读不到案例列表：" + e; }
+  HIT.loaded = true; HIT.loading = false;
+  if(page==="hit") renderContent();
+}
+async function loadHitGame(id){
+  HIT.open = id;
+  try{ HIT.game = await getJSON("/api/hit/game?id="+encodeURIComponent(id)); }
+  catch(e){ HIT.game = {error:String(e)}; }
+  if(page==="hit") renderContent();
+}
+function hitView(){
+  if(HIT.err) return `<div class="notice" style="border-color:#dc2626;color:#b42318">${esc(HIT.err)}<br>检查雷达是否在跑、<code>/api/hit/list</code> 是否可达。</div>`;
+  if(!HIT.loaded){ loadHit(); return empty("加载中","正在读案例数据"); }
+  if(!HIT.list) return empty("没有数据","接口返回空");
+  const items = HIT.list.items || [];
+  if(!items.length){
+    return panel("成功案例","", `<div class="t2">还没有案例数据。跑 <code>python radar/hit/bsearch.py all</code> 采集。</div>`);
+  }
+  const rows = items.map(it=>`<tr>
+    <td><a class="lnk" data-hit="${esc(it.id)}">${esc(it.name)}</a></td>
+    <td class="r num">${fmt(it.play_sum)}</td>
+    <td class="r num">${it.n_video}</td>
+    <td class="r num">${it.n_up}</td>
+    <td class="r num">${fmt(it.play_median)}</td>
+    <td class="r num">${fmt(it.play_top1)}</td>
+    <td>${esc(it.start||"-")}</td>
+    <td>${esc(it.burst||"未见起爆")}</td>
+    <td>${esc(it.peak_day||"-")}</td>
+    <td class="r num">${it.peak_video??"-"}</td>
+    <td>${esc(it.half_day||"未回落")}</td>
+  </tr>`).join("");
+  let h = panel(`成功案例（${items.length} 款）`,
+    "体量按播放总量排。点名字看逐日曲线和 UP 主结构。",
+    `<table class="tbl"><thead><tr><th>游戏</th><th>总播放</th><th>视频</th><th>UP</th>
+      <th>播放中位</th><th>最高单条</th><th>起点</th><th>起爆日</th><th>峰值日</th><th>峰值/天</th><th>回落一半</th>
+    </tr></thead><tbody>${rows}</tbody></table>`);
+  if(HIT.open && HIT.game) h += hitGameView(HIT.game);
+  return h;
+}
+function hitGameView(g){
+  if(g.error) return panel("详情","", `<div class="up">${esc(g.error)}</div>`);
+  const s = g.summary || {}, lc = s.lifecycle || {};
+  const kv = [
+    ["总播放", fmt(s.play_sum)], ["视频数", s.n_video], ["UP 主数", s.n_up],
+    ["播放中位数", fmt(s.play_median)], ["最高单条", fmt(s.play_top1)],
+    ["起点", lc.start], ["起爆日", lc.burst || "未识别"],
+    ["峰值日", lc.peak_day], ["峰值/天", lc.peak_video],
+    ["回落一半", lc.half_day || "未回落"], ["跨度天数", lc.days],
+  ].map(([k,v])=>`<div class="kv"><span class="k">${k}</span><span class="num">${v??"-"}</span></div>`).join("");
+
+  const upRows = (g.up_structure||[]).map(x=>`<tr>
+    <td>${esc(x.tier)}</td><td class="r num">${x.n_up}</td><td class="r num">${x.n_video}</td>
+    <td class="r num">${fmt(x.play)}</td><td class="r num">${(x.play_pct*100).toFixed(1)}%</td></tr>`).join("");
+
+  const topRows = (g.top||[]).map((v,i)=>`<tr>
+    <td class="r num">${i+1}</td>
+    <td><a class="lnk" href="${esc(v.url)}" target="_blank">${esc(v.title)}</a></td>
+    <td>${esc(v.up)}</td><td class="r num">${v.followers==null?"-":fmt(v.followers)}</td>
+    <td>${esc(v.tier)}</td><td class="r num">${fmt(v.play)}</td><td>${esc(v.day)}</td></tr>`).join("");
+
+  return panel(`${esc(g.name)} · 全部数据`, "",
+    `<div class="notice">${esc(g.note||"")}</div>${kv}
+     <h3 style="margin:16px 0 6px;font-size:14px">每天新增视频和播放</h3>
+     ${chartBox("hitDaily", 300)}
+     <h3 style="margin:16px 0 6px;font-size:14px">UP 主粉丝档结构</h3>
+     ${chartBox("hitUp", 240)}
+     <table class="tbl" style="margin-top:8px"><thead><tr><th>粉丝档</th><th>UP 数</th><th>视频数</th><th>播放</th><th>占总播放</th></tr></thead><tbody>${upRows}</tbody></table>
+     <h3 style="margin:16px 0 6px;font-size:14px">播放前 20</h3>
+     <table class="tbl"><thead><tr><th>#</th><th>视频</th><th>UP 主</th><th>粉丝</th><th>档位</th><th>播放</th><th>发布</th></tr></thead><tbody>${topRows}</tbody></table>`);
+}
+function mountHit(g){
+  const d = (g && g.daily) || [];
+  if(!d.length) return;
+  const days = d.map(x=>x.day);
+  mountChart("hitDaily", {
+    tooltip:{trigger:"axis"}, legend:{top:0, left:0},
+    grid:{left:50,right:50,top:34,bottom:60},
+    dataZoom:[{type:"inside"},{type:"slider",height:18,bottom:8}],
+    xAxis:{type:"category", data:days, axisLabel:{color:"#667085"}},
+    yAxis:[{type:"value", name:"视频数", splitLine:{lineStyle:{color:"#eef0f3"}}},
+           {type:"value", name:"播放", axisLabel:{formatter:v=>fmt(v)}, splitLine:{show:false}}],
+    series:[
+      {name:"新增视频", type:"bar", data:d.map(x=>x.n_video), itemStyle:{opacity:.75}},
+      {name:"当天视频总播放", type:"line", yAxisIndex:1, data:d.map(x=>x.play), showSymbol:false, lineStyle:{width:1.8}},
+    ]});
+  const up = (g && g.up_structure) || [];
+  if(up.length) mountChart("hitUp", {
+    tooltip:{trigger:"axis"}, legend:{top:0, left:0},
+    grid:{left:50,right:20,top:34,bottom:30},
+    xAxis:{type:"category", data:up.map(x=>x.tier)},
+    yAxis:{type:"value", splitLine:{lineStyle:{color:"#eef0f3"}}},
+    series:[
+      {name:"视频数", type:"bar", data:up.map(x=>x.n_video)},
+      {name:"UP 数", type:"bar", data:up.map(x=>x.n_up)},
+    ]});
+}
+
 function renderLive(){
   const n = nowText(), s = ACT.state||{};
   $("pulse").className = "pulse" + (n.busy?" on":"");
@@ -1478,7 +1567,7 @@ function goPage(p){
   contentPage = null; render(); document.querySelector("main").scrollTo(0,0); window.scrollTo(0,0);
 }
 document.addEventListener("click", async e=>{
-  const t = e.target.closest("[data-page],[data-dismiss],[data-undismiss],[data-unblock2],[data-mustab],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-link],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],[data-opp],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
+  const t = e.target.closest("[data-page],[data-dismiss],[data-undismiss],[data-unblock2],[data-mustab],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-link],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],[data-opp],[data-hit],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
   if(!t) return;
   // v51：整行都能点开详情；行里的“打开原网页”链接、勾选框照常用
   if(t.tagName==="TR" && e.target.closest("a[href],input,select,textarea,label,button")) return;
@@ -1487,6 +1576,7 @@ document.addEventListener("click", async e=>{
   if(t.dataset.mustab){ MUST.tab=t.dataset.mustab; renderContent(); return; }
   if(t.dataset.plat){ pickPlat(t.dataset.plat); return; }
 if(t.dataset.opp){ loadOppGame(t.dataset.opp); return; }
+if(t.dataset.hit){ loadHitGame(t.dataset.hit); return; }
   if(t.dataset.ptab){ PLAT.tab=t.dataset.ptab; if(PLAT.tab==="fresh") FRESH.data=null; else if(PLAT.tab==="movers") IDX=null; else if(PLAT.tab==="raw") RAW.data=null; contentPage=null; renderContent(); return; }
   if(t.dataset.mkscope){ MKSCOPE=t.dataset.mkscope; contentPage=null; renderContent(); return; }
   if(t.dataset.dismiss || t.dataset.undismiss || t.dataset.unblock2){

@@ -94,7 +94,7 @@ def _direct():
 
 
 def _req(url, headers, timeout):
-    """requests 抓一页。SSLEOFError 之类连接被掐断的错误：换成不走代理再试，最多 3 次。"""
+    """requests 抓一页。连接被掐断、读超时：换成不走代理、隔几秒再试，最多 3 次。"""
     global _direct_mode
     import requests
     last = None
@@ -106,6 +106,9 @@ def _req(url, headers, timeout):
                 _direct_mode = True
                 _say("TapTap：走代理时连接被掐断（SSLEOFError），改成不走代理直接连，成功了；这次运行之后都直接连")
             return resp
+        except requests.exceptions.Timeout as e:              # 读超时：TapTap 自己慢，等一下再试
+            last = e
+            time.sleep(2 * attempt + 1)
         except requests.exceptions.ConnectionError as e:      # 包括 SSLError、ProxyError、连不上
             last = e
             time.sleep(2 * attempt + 1)
@@ -289,6 +292,7 @@ def board_lists(progress=None):
 
 # ---------------- 游戏详情页 ----------------
 GONE = "gone"
+DETAIL_TIMEOUT = 20   # 详情页偶尔很慢，15 秒时经常还没回包就被判失败
 
 
 def _ld_and_nuxt(page_html):
@@ -317,10 +321,10 @@ def _og_image(page_html):
     return ""
 
 
-def detail(app_id, strict=False):
+def detail(app_id, strict=False, timeout=DETAIL_TIMEOUT):
     """Fetch this native ID; strict mode preserves failures for monitoring."""
     try:
-        status, page_html = _get(f"{BASE_URL}/app/{app_id}?os=android", DETAIL_HEADERS, 15)
+        status, page_html = _get(f"{BASE_URL}/app/{app_id}?os=android", DETAIL_HEADERS, timeout)
         if status == 404:
             return GONE
         if status != 200:
@@ -431,8 +435,9 @@ def parse_app(app):
         "fans": _num(st.get("fans_count")),
         "reviews": _num(st.get("review_count")),
     }
-    if _num(st.get("hits_total")):
-        metrics["downloads"] = _num(st.get("hits_total"))
+    hits = _num(st.get("hits_total"))
+    if hits is not None:      # 0 也是有效数字（刚上线的游戏热度就是 0），不能当成"没抓到"
+        metrics["downloads"] = hits
     if st.get("reserve_count"):
         metrics["reserves"] = st.get("reserve_count")
     return {

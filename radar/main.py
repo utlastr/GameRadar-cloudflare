@@ -103,6 +103,10 @@ def loop(stop_event=None):
     if getattr(config, "OPP_ENABLED", False):
         from . import opp
         _safe(opp.start, stop_event)
+    # 成功案例：每日播放快照（活着的游戏不记就永久丢数据）
+    if getattr(config, "HIT_ENABLED", True):
+        from .hit import watch as hit_watch
+        _safe(hit_watch.start, stop_event)
     # v48：引力引擎签名探测已经完成使命（微信 / 抖音小游戏已接上），不再每次启动都跑。
     # 以后对方改了算法，可以临时把下面两行加回来：from . import gravity_probe; _safe(gravity_probe.start)
     while not (stop_event and stop_event.is_set()):

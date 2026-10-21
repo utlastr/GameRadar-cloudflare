@@ -272,6 +272,12 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/opp/unknown":
             from .opp import gamemap
             self._json(gamemap.unknown_list())
+        elif u.path == "/api/hit/list":
+            from .hit import api as hitapi
+            self._json(hitapi.api_list())
+        elif u.path == "/api/hit/game":
+            from .hit import api as hitapi
+            self._json(hitapi.api_game(q.get("id", [""])[0]))
         else:
             self._send("not found", "text/plain", 404)
 

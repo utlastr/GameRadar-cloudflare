@@ -236,7 +236,7 @@ def run():
         main.run_forever()
         return
     _redirect_output()
-    from . import single                       # 只允许 D:\GameRadar-main 这一份在跑
+    from . import single                       # 只允许登记过的那一份在跑
     if not single.guard():
         _log("检测到非正式安装目录，已拒绝启动：", config.BASE_DIR)
         return
