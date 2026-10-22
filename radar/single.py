@@ -3,30 +3,19 @@
 规则（v70 起）：
 - 规范路径记在注册表 HKCU\\Software\\GameRadar\\Root，另存一份 radar_data/canonical.txt 兜底。
 - 从任何非规范目录启动的副本都会被拒绝，并尝试打开规范路径那一份。
-- 启动时顺手清扫：把别处的同名目录/安装包挪进 _quarantine，保证"永远只有一个"。
+- 只拦启动，不碰别处的文件夹（v72 去掉了"把别处同名目录挪进 _quarantine"的清扫：程序不该动你的文件）。
+- 只在托盘版（app.run）里拦；命令行 / 开发运行不拦。
 
 规范路径只在第一次运行时自动认领（当前目录即规范路径）。
 要真的搬家，见 _tools/move_install.ps1 —— 它先改注册表再搬文件，顺序不能反。
 """
 import os
-import re
 import sys
 import ctypes
-import threading
-import shutil
-import time
 
 REG_KEY = r"Software\GameRadar"
 REG_VALUE = "Root"
 MARKER = "canonical.txt"
-
-# 这些目录里的同名文件夹会被清扫（都不该放雷达）
-SCAN_ROOTS = ("%USERPROFILE%", "%USERPROFILE%\\Desktop", "%USERPROFILE%\\Downloads",
-              "%USERPROFILE%\\Documents")
-SKIP_DIRS = {"AppData", ".git", "node_modules", "__pycache__", ".cache", "Local Settings",
-             "Application Data", "My Documents", "Start Menu", "SendTo", "NetHood", "PrintHood",
-             "Recent", "Templates", "Cookies", "Favorites", "Links", "Saved Games", "Searches",
-             "Contacts", "3D Objects", "OneDrive"}
 
 
 def base_dir():
@@ -133,91 +122,3 @@ def guard(quiet=False):
              "唯一允许的位置：\n" + root +
              ("\n\n已经帮你打开那一份。" if ok else "\n\n但它现在不存在，请把它放回去。"))
     return False
-
-
-# ---------------- 清扫 ----------------
-def _quarantine_dir():
-    return os.path.join(canonical() or base_dir(), "_quarantine")
-
-
-_DUPE_RE = re.compile(r"^gameradarmain(\(\d+\))?$")
-
-
-def _is_dupe_name(name):
-    """GameRadar-main / Game Radar.Main / GameRadar-main (2) 这类都算重复。"""
-    bare = re.sub(r"[\s._\-]", "", name).lower()
-    return bool(_DUPE_RE.match(bare))
-
-
-def sweep(verbose=False):
-    """把规范路径之外的 GameRadar-main* 目录挪进 _quarantine，返回被挪走的列表。"""
-    root = canonical()
-    if not root:
-        return []
-    root_n = _norm(root)
-    qdir = os.path.join(root, "_quarantine", time.strftime("%Y%m%d"))
-    moved = []
-    seen = set()
-
-    def scan(path, depth):
-        if depth <= 0 or not path or not os.path.isdir(path):
-            return
-        if _norm(path) in seen:
-            return
-        seen.add(_norm(path))
-        try:
-            entries = list(os.scandir(path))
-        except OSError:
-            return
-        for e in entries:
-            try:
-                if not e.is_dir(follow_symlinks=False):
-                    continue
-            except OSError:
-                continue
-            name = e.name
-            if _norm(e.path) == root_n:
-                continue                     # 规范路径本身
-            if _is_dupe_name(name) and os.path.abspath(e.path) != os.path.abspath(root):
-                try:
-                    os.makedirs(qdir, exist_ok=True)
-                    dst = os.path.join(qdir, name)
-                    i = 1
-                    while os.path.exists(dst):
-                        i += 1
-                        dst = os.path.join(qdir, f"{name}_{i}")
-                    shutil.move(e.path, dst)
-                    moved.append((e.path, dst))
-                except Exception as exc:     # noqa: BLE001
-                    if verbose:
-                        print("跳过", e.path, exc)
-                continue
-            if name in SKIP_DIRS or name.startswith(".") or name.startswith("$"):
-                continue
-            scan(e.path, depth - 1)
-
-    for r in SCAN_ROOTS:
-        p = os.path.expandvars(r)
-        if os.path.isdir(p):
-            scan(p, 8)
-
-    if moved:
-        try:
-            os.makedirs(qdir, exist_ok=True)
-            with open(os.path.join(qdir, "sweep.log"), "a", encoding="utf-8") as f:
-                for src, dst in moved:
-                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{src}\t->\t{dst}\n")
-        except OSError:
-            pass
-    return moved
-
-
-def sweep_async():
-    threading.Thread(target=lambda: _safe_sweep(), daemon=True).start()
-
-
-def _safe_sweep():
-    try:
-        sweep()
-    except Exception:
-        pass

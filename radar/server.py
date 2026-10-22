@@ -149,6 +149,16 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/world":
             from . import worldmap
             self._json(worldmap.payload())
+        elif u.path == "/api/platforms":
+            from . import platforms
+            self._json(platforms.payload())
+        elif u.path.startswith("/map/picon/"):
+            from . import platforms
+            a = platforms.icon(u.path[len("/map/picon/"):])
+            if not a:
+                self._send("not found", "text/plain", 404)
+                return
+            self._send(a[0], a[1], cache="max-age=86400")
         elif u.path == "/api/regions":
             from . import regions
             b = regions.public_json()
@@ -278,6 +288,16 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/hit/game":
             from .hit import api as hitapi
             self._json(hitapi.api_game(q.get("id", [""])[0]))
+        elif u.path == "/api/archive/report":
+            from . import archive
+            self._json(archive.report())
+        elif u.path == "/api/archive/game":
+            from . import archive
+            gid = q.get("id", [""])[0]
+            self._json({"members": archive.cluster_view(gid), "bili": archive.bili_block(gid)})
+        elif u.path.startswith("/api/social/"):
+            from . import social    # 社交平台（抖音/快手/小红书/TikTok/指数）+ 关键词漏斗
+            social.http_get(self, u.path, q)
         else:
             self._send("not found", "text/plain", 404)
 
@@ -294,13 +314,29 @@ class Handler(BaseHTTPRequestHandler):
                           dismissed=body.get("dismissed"))
             reanalyze_soon()
             self._json({"ok": True})
-        elif p == "/api/link":
-            if body.get("relation") == "same":
-                self._json({"error": "只允许按平台游戏 ID 识别，禁止手动合并不同 ID"}, 400)
+        elif p in ("/api/link", "/api/archive/decide"):
+            from . import archive
+            try:
+                r = archive.decide(body["a"], body["b"], body.get("relation"), body.get("origin") or "api")
+            except (KeyError, ValueError) as e:
+                self._json({"error": str(e)}, 400)
                 return
-            db.save_link(body["a"], body["b"], body["relation"])
             reanalyze_soon()
-            self._json({"ok": True})
+            self._json(r)
+        elif p == "/api/archive/split":
+            from . import archive
+            try:
+                r = archive.split(body["member"])
+            except (KeyError, ValueError) as e:
+                self._json({"error": str(e)}, 400)
+                return
+            reanalyze_soon()
+            self._json(r)
+        elif p == "/api/archive/undo":
+            from . import archive
+            r = archive.undo(body["a"], body["b"])
+            reanalyze_soon()
+            self._json(r)
         elif p == "/api/run":
             RUN_NOW.set()
             self._json({"ok": True})
@@ -308,6 +344,9 @@ class Handler(BaseHTTPRequestHandler):
             from . import worldmap
             worldmap.RUN_NOW.set()
             self._json({"ok": True})
+        elif p.startswith("/api/social/"):
+            from . import social
+            social.http_post(self, p, body)
         else:
             self._json({"error": "unknown"}, 404)
 

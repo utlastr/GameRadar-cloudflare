@@ -32,6 +32,12 @@ _TRANSIENT = ("timeout", "timed out", "连接", "连不上", "没读到", "验�
 
 
 def _sample(entity, tries=2):
+    from .collect import platform_lock
+    with platform_lock("taptap"):
+        return _sample_locked(entity, tries)
+
+
+def _sample_locked(entity, tries=2):
     """采一个 ID。超时、页面没读到这类偶发失败，隔几秒再采一次（TapTap 有时候就是一回慢一回快）。"""
     last = None
     for attempt in range(tries):
@@ -68,7 +74,7 @@ def run_once():
             parsed = _sample(entity)
             results.append({"id": entity, "name": parsed["name"], "metrics": parsed["metrics"],
                             "ts": parsed["extra"]["detail_at"]})
-            activity.say(f"TapTap ID {entity}：热度 {parsed['metrics']['downloads']:,}，"
+            activity.say(f"TapTap {parsed['name']}：热度 {parsed['metrics']['downloads']:,}，"
                          f"关注 {parsed['metrics']['fans']:,}")
         except Exception as e:
             error = str(e)[:180]
@@ -82,7 +88,7 @@ def run_once():
                     extra.update(fetch_attempt_at=int(time.time()), fetch_error=error)
                     c.execute("UPDATE entities SET extra=? WHERE source='tapmaker' AND entity=?",
                               (json.dumps(extra, ensure_ascii=False), entity))
-            activity.say(f"TapTap ID {entity} 采样失败：{error}")
+            activity.say(f"TapTap {entity} 采样失败：{error}")
         db.kv_set("tap_priority", {"ts": started, "finished": int(time.time()), "running": True,
                                   "ids": ids, "results": results, "errors": errors})
     report = {"ts": started, "finished": int(time.time()), "running": False,

@@ -65,6 +65,13 @@ body.sel #panel{display:block}
 .cl .mem span{cursor:pointer}
 .cl .mem span:hover{color:#fff}
 details{color:#8a90a0;font-size:12px;margin-top:10px}
+.pf{margin:8px 0 2px}
+.pf .pl{display:flex;justify-content:space-between;color:#cfd3dc;font-size:12px;margin-bottom:4px}
+.pf .pl span{color:#6b7180;font-size:11px}
+.pf .ap{display:flex;flex-wrap:wrap;gap:8px}
+.pf .a{display:flex;flex-direction:column;align-items:center;width:58px;text-align:center;font-size:10px;color:#aab;line-height:1.2}
+.pf .a img,.pf .a b{width:36px;height:36px;border-radius:9px;background:#222;margin-bottom:3px;object-fit:cover}
+.pf .a b{display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;background:#2b3040}
 @media (max-width:760px){
   #panel{top:auto;width:100%;height:46vh;border-left:none;border-top:1px solid #2a2d35}
   body.sel .legend{bottom:calc(46vh + 10px)}
@@ -1309,7 +1316,7 @@ function simRows(cc) {
 }
 function countryCard(cc) {
   const c = R && R.countries[cc];
-  let h = `<span class="x" data-x>×</span><h2>${esc(enName(cc))}</h2><div class="m">Income per person ${fmtInc(incOf(cc))}</div>`;
+  let h = `<span class="x" data-x>×</span><h2>${esc(enName(cc))}</h2><div class="m">Income per person ${fmtInc(incOf(cc))}</div>` + platBlock(cc);
   if (!c) return h + `<p class="m">No chart data here yet</p>`;
   const cl = clusterOf(cc);
   if (cl) h += `<div data-cl="${cl.id}" style="cursor:pointer">${badge(cc, null, true)}</div>`;
@@ -1350,12 +1357,32 @@ function circleBlock(cl, ks) {
   return `<div class="cl" data-cl="${cl.id}" style="cursor:pointer"><div>${esc(clName(cl))}${cl.solo ? " · solo" : ""}</div>${ent ? `<div style="margin-top:4px">${ent}</div>` : ""}`
     + `<div class="mem">${ks.map(m => `<span data-cc="${m}">${esc(nameK(m))}</span>`).join(" · ")}${rest.length ? ` <span class="m">+ ${rest.length} elsewhere</span>` : ""}</div></div>`;
 }
+let PF = null;
+const PF_HOW = { country: "specific to this country", region: "shared by the region", general: "general list" };
+function platBlock(cc) {
+  const c = PF && PF.by_cc && PF.by_cc[cc];
+  if (!c) return "";
+  return `<h3>Platforms people use</h3>` + PF.cats.map(([k, label]) => {
+    const g = c[k]; if (!g) return "";
+    const apps = g.apps.map(a => { const x = PF.apps[a] || { name: a }; return `<div class="a">${x.icon ? `<img src="/map/picon/${esc(a)}" loading="lazy">` : `<b>${esc((x.name || a)[0])}</b>`}${esc(x.name || a)}</div>`; }).join("");
+    return `<div class="pf"><div class="pl">${esc(label)}<span>${esc(PF_HOW[g.how] || "")}</span></div><div class="ap">${apps}</div></div>`;
+  }).join("");
+}
+async function loadPF() {
+  const p = await getJSON("/api/platforms");
+  if (!p) return;
+  const missing = Object.values(p.apps).some(a => !a.icon) && Object.keys(p.errors || {}).length < Object.values(p.apps).filter(a => !a.icon).length;
+  PF = p;
+  if (selCC) renderPanel();
+  if (missing) setTimeout(loadPF, 20000);
+}
 function placeCard(k) {
   const p = PL(k);
   if (!p) return "";
   const cc = p.cc, cl = clusterOf(k);
   let h = `<span class="x" data-x>×</span><h2>${esc(nameKC(k))}</h2><div class="m"><span data-cc="${cc}" style="cursor:pointer;text-decoration:underline">${esc(enName(cc))}</span> · population ${fmtPop(p.pop)} · income per person ${fmtInc(incK(k))}</div>`;
   if (cl) h += `<div data-cl="${cl.id}" style="cursor:pointer">${badge(k, null, true)}</div>`;
+  h += platBlock(cc);
   if (p.likes && p.likes.length) h += `<h3>Liked more than the rest of ${esc(enName(cc))}</h3>` + p.likes.map(([a, x]) => gameRow(a, x)).join("");
   if (p.ent && Object.keys(p.ent).length) h += `<h3>Entertainment vs ${esc(enName(cc))} average</h3>` + chips(p.ent);
   if (p.plat && Object.keys(p.plat).length) h += `<h3>Gaming platforms vs ${esc(enName(cc))} average</h3>` + chips(p.plat);
@@ -1467,6 +1494,7 @@ async function load() {
 }
 repaint();
 renderLegend();
+loadPF();
 await load();
 
 </script>

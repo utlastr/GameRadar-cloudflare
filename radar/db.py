@@ -50,6 +50,22 @@ CREATE TABLE IF NOT EXISTS scores (
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS runs (ts INTEGER, job TEXT, seconds REAL, ok INTEGER, detail TEXT);
 CREATE TABLE IF NOT EXISTS changelog (ts INTEGER, source TEXT, note TEXT);
+CREATE TABLE IF NOT EXISTS games (gid TEXT PRIMARY KEY, name TEXT, n INTEGER, created INTEGER, updated INTEGER);
+CREATE TABLE IF NOT EXISTS game_members (
+    member TEXT PRIMARY KEY, gid TEXT, name TEXT, method TEXT, evidence TEXT, ts INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_game_members_gid ON game_members(gid);
+CREATE TABLE IF NOT EXISTS archive_decisions (
+    a TEXT, b TEXT, relation TEXT, pattern TEXT, origin TEXT, ts INTEGER, PRIMARY KEY (a, b)
+);
+CREATE TABLE IF NOT EXISTS archive_queue (
+    a TEXT, b TEXT, pattern TEXT, evidence TEXT, rank REAL, ts INTEGER, PRIMARY KEY (a, b)
+);
+CREATE TABLE IF NOT EXISTS archive_log (ts INTEGER, action TEXT, a TEXT, b TEXT, detail TEXT);
+CREATE TABLE IF NOT EXISTS revisit (
+    member TEXT PRIMARY KEY, last_ts INTEGER, interval_h REAL, n INTEGER, last_v REAL,
+    hist TEXT, sig TEXT, reason TEXT
+);
 """
 
 

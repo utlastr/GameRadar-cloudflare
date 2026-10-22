@@ -156,7 +156,7 @@ def age_percentile(feat):
 
 def game_videos(gid, until=None):
     """这个游戏的相关视频，带对应方式和可信度。"""
-    q = ("SELECT v.bvid, v.pubdate, v.mid, m.method, m.conf FROM opp_vmap m "
+    q = ("SELECT v.bvid, v.pubdate, v.mid, m.method FROM opp_vmap m "
          "JOIN opp_videos v ON v.bvid = m.bvid WHERE m.gid = ?")
     args = [gid]
     if until:
@@ -218,7 +218,7 @@ def game_features(gid, d=None, now=None):
         cut = statistics.median(medians)
         out["n_up_small"] = sum(1 for k, fs in ups.items()
                                 if (fs[0].get("followers") or 0) < cut
-                                and (fs[0].get("mult") or 0) >= 3)
+                                and (fs[0].get("mult") or 0) >= _mult_min())
 
     # 需求率按播放加权
     for key in ("demand_mobile", "demand_name", "demand_want"):
@@ -227,23 +227,36 @@ def game_features(gid, d=None, now=None):
             out[key] = round(sum((f.get(key) or 0) * (f.get("view") or 0)
                                  for f in feats if f.get(key) is not None) / tot, 4)
 
-    low = [v["bvid"] for v in vids if (v.get("conf") or 0) < 0.8]
-    out["low_conf_n"] = len(low)
+    out["by_method"] = {}
+    for v in vids:
+        out["by_method"][v.get("method") or ""] = out["by_method"].get(v.get("method") or "", 0) + 1
     out["videos"] = len(vids)
-    out["n_live"] = _live_streamers(g["name_cn"] if "name_cn" in g.keys() else "", until or now)
+    out["n_live"] = _live_streamers(gid, until or now)
     return out
 
 
-def _live_streamers(name, ts):
-    """3.8：直播平台上播这个游戏的主播数（取当天最高）。第一期只读已有 metrics。"""
-    if not name:
+def _live_streamers(member, ts):
+    """同一个游戏档案里的直播分区（虎牙 / 斗鱼 / B站），当天最多几个主播在播。没并进档案就没有。"""
+    from .. import archive
+    lives = [m for m in archive.members_of(archive.gid_of(member) or "")
+             if m.split(":", 1)[0] in ("huya", "douyu", "bili")]
+    if not lives:
         return None
     day = int(ts // 86400 * 86400)
+    best = None
     with db.session() as c:
-        r = c.execute("SELECT MAX(value) FROM metrics WHERE source IN ('huya','douyu','bili') "
-                      "AND entity LIKE ? AND metric = 'streamers' AND ts >= ?",
-                      ("%" + name + "%", day)).fetchone()
-    return int(r[0]) if r and r[0] is not None else None
+        for m in lives:
+            s, e = m.split(":", 1)
+            r = c.execute("SELECT MAX(value) FROM metrics WHERE source = ? AND entity = ? AND metric = 'rooms' "
+                          "AND ts >= ? AND ts <= ?", (s, e, day, int(ts))).fetchone()
+            if r and r[0] is not None:
+                best = max(best or 0, int(r[0]))
+    return best
+
+
+def _mult_min():
+    from .. import config
+    return float(getattr(config, "OPP_TRACK_MIN_MULT", 3) or 3)
 
 
 def save_features(gid, d, feat):

@@ -201,6 +201,35 @@ def _release(source, x):
     return None
 
 
+def _game_age(members, entities, src_first, first_run, now):
+    """(上线天数, 依据)。launch = 平台给的上线日期（取最早）；soon = 还没上线（预约 / 即将推出）；
+    seen = 没有上线日期，按雷达第一次看到算（只在每个发现平台成员都是在雷达开始抓这个平台一天以后才出现时用）；
+    天数 None = 判断不了（没有上线日期，雷达开始抓的时候就已经在了）。"""
+    rel, soon, seen, early = None, False, [], False
+    for m in members:
+        s, e = m.split(":", 1)
+        ent = entities.get((s, e)) or {}
+        x = ent.get("extra") or {}
+        r = _release(s, x)
+        if r and (rel is None or r < rel):
+            rel = r
+        if x.get("coming_soon") or x.get("preorder"):
+            soon = True
+        if s in config.DISCOVERY_SOURCES:
+            fs = ent.get("first_seen") or 0
+            if fs and fs - src_first.get(s, first_run) > DAY:
+                seen.append(fs)
+            else:
+                early = True
+    if rel:
+        return max(0.0, (now - rel) / DAY), "launch"
+    if soon:
+        return 0.0, "soon"
+    if seen and not early:
+        return max(0.0, (now - min(seen)) / DAY), "seen"
+    return None, "unknown"
+
+
 # ---------------- 只有名次的榜单 ----------------
 def _rank_scores(entities):
     """好游快爆、小米商店、App Store、itch.io、Poki、CrazyGames、Fortnite 的榜单名次 → 热度。
@@ -503,14 +532,16 @@ def _established(entities):
 
 
 # ---------------- 2. 合并同一个游戏 ----------------
-def build_groups(entities, labels, links):
-    """Only native IDs can establish identity; names and saved links cannot."""
+def build_groups(entities, labels, links, archive=None):
+    """一个游戏 = 一份档案。archive 是游戏档案（radar/archive.py）给的 {成员: 档案号}；
+    不给时只按平台编号分组。旧的 links 表（v67 以前按名字合并留下的）永远不参与。"""
     groups = defaultdict(list)
     for (src, e), ent in entities.items():
-        gid = identity.game_key(src, e)
+        m = f"{src}:{e}"
+        gid = (archive or {}).get(m) or identity.game_key(src, e)
         if gid is None:
             continue
-        groups[gid].append(f"{src}:{e}")
+        groups[gid].append(m)
     return groups
 
 
@@ -626,9 +657,7 @@ def _run_logged(allow_network, send_notify, allow_ai=None):
         d = _run(allow_network, send_notify, allow_ai)
         t = d.get("totals") or {}
         nsp = sum(len(v) for v in (d.get("sprouts") or {}).values())
-        activity.say(f"分析完成：必看 {t.get('cards', len(d['cards']))} 个，老游戏 {t.get('old', len(d['old']))} 个，"
-                     f"先不看 {t.get('dismissed', len(d['dismissed']))} 个，不做 {t.get('blocked', len(d['blocked']))} 个，"
-                     f"刚起势 {nsp} 个，用时 {d['seconds']} 秒")
+        activity.say(f"分析完成：必看 {t.get('cards', len(d['cards']))} 款，刚起势 {nsp} 个，用时 {d['seconds']} 秒")
         db.kv_set("analyze_error", None)
         return d
     except Exception as e:
@@ -642,6 +671,87 @@ def _run_logged(allow_network, send_notify, allow_ai=None):
         raise
     finally:
         activity.end()
+
+
+def _social_terms(order, groups, entities, n=60):
+    """排名靠前的游戏名交给抖音 / 快手 / 小红书 去搜（social.funnel.queue 读 kv radar_social_terms）。"""
+    out = []
+    for g in order:
+        names = []
+        for m in groups[g]:
+            e = entities.get(tuple(m.split(":", 1))) or {}
+            names += [(e.get("extra") or {}).get("name_cn"), e.get("name")]
+        t = next((x for x in names if x and match.has_cjk(x)), None) or next((x for x in names if x), None)
+        if t and t not in out:
+            out.append(t)
+        if len(out) >= n:
+            break
+    try:
+        db.kv_set("radar_social_terms", out)
+    except Exception:                                   # noqa: BLE001
+        pass
+
+
+def _bili_terms(order, groups, entities):
+    """新游戏的名字交给 B站 按名字搜（opp.bili_track.search_games 读 kv radar_bili_terms）。"""
+    out = []
+    for g in order:
+        ms = groups[g]
+        names = []
+        for m in ms:
+            e = entities.get(tuple(m.split(":", 1))) or {}
+            names += [(e.get("extra") or {}).get("name_cn"), e.get("name"), (e.get("extra") or {}).get("name_en")]
+        names = [x for i, x in enumerate(names) if x and x not in names[:i]]
+        names.sort(key=lambda x: not match.has_cjk(x))
+        if names:
+            out.append({"gid": g, "member": ms[0], "names": names[:3]})
+    try:
+        db.kv_set("radar_bili_terms", out)
+    except Exception:                                   # noqa: BLE001
+        pass
+
+
+def _new_games(groups, entities, now):
+    """{档案号: {days, how}}：上线不超过 NEW_MAX_DAYS 天的游戏（只看有发现平台成员、不是大杂烩分区的）。"""
+    first_run = db.kv_get("first_run") or now
+    src_first = db.source_first_runs()
+    out = {}
+    for g, ms in groups.items():
+        if not any(m.split(":", 1)[0] in config.DISCOVERY_SOURCES for m in ms):
+            continue
+        if any(((entities.get(tuple(m.split(":", 1))) or {}).get("extra") or {}).get("generic") for m in ms):
+            continue
+        days, how = _game_age(ms, entities, src_first, first_run, now)
+        if days is None or days > config.NEW_MAX_DAYS:
+            continue
+        nm, ncn, nen = _display(ms, entities)
+        if _big_game({"name": nm, "name_cn": ncn, "name_en": nen, "members": ms}):
+            continue
+        out[g] = {"days": round(days, 1), "how": how}
+    return out
+
+
+def _plat_diag(groups, hs, elig, now_ts):
+    """每个发现平台：32 小时内抓到几款、几款有分数、几款是大作 / 大厂、两种排名下最好第几。"""
+    from .heat import rank_key
+    with db.session() as c:
+        seen = {r[0]: r[1] for r in c.execute(
+            "SELECT source, COUNT(DISTINCT entity) FROM metrics WHERE ts >= ? GROUP BY source", (now_ts - 32 * 3600,))}
+    pos_f = {g: i + 1 for i, g in enumerate(sorted(elig, key=lambda g: rank_key(hs[g], "final")))
+             if hs[g]["final"] is not None}
+    pos_r = {g: i + 1 for i, g in enumerate(sorted(elig, key=lambda g: rank_key(hs[g], "raw")))
+             if hs[g]["raw"] is not None}
+    out = []
+    for s in sorted(config.DISCOVERY_SOURCES):
+        if not config.source_on(s):
+            continue
+        p = s + ":"
+        mine = [g for g in elig if any(m.startswith(p) for m in groups[g])]
+        out.append({"src": s, "seen": seen.get(s, 0), "scored": sum(1 for g in mine if hs[g]["raw"] is not None),
+                    "zero": sum(1 for g in mine if hs[g]["big"]),
+                    "best": min((pos_f[g] for g in mine if g in pos_f), default=None),
+                    "best_raw": min((pos_r[g] for g in mine if g in pos_r), default=None)})
+    return out
 
 
 def _run(allow_network=True, send_notify=True, allow_ai=None):
@@ -658,7 +768,25 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     for s in signals:
         sig_by_key[f"{s['source']}:{s['entity']}"].append(s)
 
-    groups = build_groups(entities, labels, links)
+    try:
+        from . import archive
+        amap = archive.rebuild(entities)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        activity.say(f"游戏档案重算失败，这一轮只按平台编号分组：{e}")
+        amap = None
+    try:
+        from . import revisit
+        plan = revisit.Plan()
+        revisit.bili_signals(plan)
+        plan.flush()
+        if plan.stat["fired"]:
+            activity.say(f"B站 新视频突增，{plan.stat['fired']} 款游戏回到每轮深查")
+    except Exception:                             # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+    groups = build_groups(entities, labels, links, amap)
     established = _established(entities)
 
     # 供给检查用的 TapTap 列表：榜单 + TapTap制造 + 创意工坊，每个游戏用它自己最近一次的数据
@@ -704,8 +832,21 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         sprout_rows = {}
     sprout_sc = {r["key"]: r for rows in sprout_rows.values() for r in rows if r["hot"] > 0}
 
+    # v81 评分（radar/heat.py）：异常值。先给所有档案算分，两种排名各取前 400 做卡片
+    from . import heat
+    hs, heat_meta = heat.score_groups(groups, entities)
+    # v82：必看只有新游戏：上线不超过 NEW_MAX_DAYS 天；老牌大游戏、判断不了上线时间的不进
+    ages = _new_games(groups, entities, now_ts)
+    elig = [g for g in ages if g in hs]
+    by_r = sorted(elig, key=lambda g: heat.rank_key(hs[g], "raw"))
+    pick = set(by_r[:400]) | set(sorted(elig, key=lambda g: heat.rank_key(hs[g], "final"))[:400])
+    _social_terms(by_r, groups, entities)
+    _bili_terms(by_r + [g for g in ages if g not in hs], groups, entities)
+
     cards = []
     for gid, members in groups.items():
+        if gid not in pick:
+            continue
         sigs = [s for m in members for s in sig_by_key.get(m, [])]
         launch_m = {m: launch_sc[m] for m in members if m in launch_sc}
         launch_m.update({m: live_new[m] for m in members if m in live_new})
@@ -713,8 +854,6 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
             if m in rank_sc and rank_sc[m]["hot"] > (launch_m.get(m) or {}).get("hot", -1):
                 launch_m[m] = rank_sc[m]
         sp = sorted((sprout_sc[m] for m in members if m in sprout_sc), key=lambda r: -r["hot"])
-        if not sigs and not launch_m and not sp:
-            continue
         # 开播时就很大的直播分区（英雄联盟、和平精英……）：大主播在里面播不算信号；上线时间查到后按年头降到 0
         live_old = {m for m in members if m.split(":", 1)[0] in LIVE_NAME and established.get(m)}
         disc = [m for m in members if m.split(":", 1)[0] in config.DISCOVERY_SOURCES]
@@ -725,10 +864,6 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         star_hits = [st for m in members if m not in live_old for st in star_by_cat.get(m, [])]
         lhot = max([v["hot"] for v in launch_m.values()] + [0.0] + ([config.STAR_HOT] if star_hits else [])
                    + [r["hot"] for r in sp])
-        hot_any = max([s["hot"] for s in sigs] + [lhot])
-        # 唯一决定看不看得到的条件：热度（大主播在播也算热度）
-        if hot_any < config.OBSERVE_MIN_HOT and not any(s["fast"] for s in sigs):
-            continue
         info = group_info(members, entities)
         if info["generic"]:
             continue          # 大杂烩分区本身不是游戏（里面的具体游戏看大主播标题）
@@ -820,6 +955,11 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         ev = _event_hint([entities[tuple(m.split(":", 1))]["name"] for m in members])
         if ev:
             flags.append({"t": "名字带更新/活动字样，热度可能是活动带来的", "c": "warn"})
+        ag = ages.get(gid) or {}
+        if ag.get("how") == "seen":
+            flags.append({"t": f"雷达 {_age_text(ag['days'])}前第一次看到（没有上线日期）", "c": ""})
+        elif ag.get("how") == "soon":
+            flags.append({"t": "还没上线", "c": "ok"})
         cats = {x.lower() for x in info.get("categories") or []}
         if cats & {"online pvp", "pvp"}:
             flags.append({"t": "能和陌生人对战", "c": "ok"})
@@ -840,6 +980,7 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
             "image": (info["images"] + info["fallback_images"] + [""])[0],
             "label": label, "hot": round(hot, 3), "market_hot": {k: round(v, 3) for k, v in mh.items()},
             "flags": flags, "factor": round(factor, 3), "factor_why": factor_why,
+            "heat": hs[gid], "raw": hs[gid]["raw"], "final": hs[gid]["final"], "age": ages.get(gid),
             "launch": best_l[1] if best_l else None,
             "fast": any(s["fast"] for s in sigs),
             "first_seen": min(entities[tuple(m.split(":", 1))]["first_seen"] or 0 for m in members),
@@ -878,9 +1019,6 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         ai_status = ai.status()
         ai_status.update({"error": f"{type(e).__name__}：{e}"[:200], "err_ts": int(time.time())})
     for card in cards:
-        imit, why, basis = scoring.imitability(card["_info"], card["label"], card.get("ai"))
-        card.update({"imit": round(imit, 3), "imit_why": why, "imit_basis": basis})
-        card["final"] = round(100 * card["hot"] * (0.25 + 0.75 * imit) * card["factor"], 1)
         card["best_market"] = max(card["market_hot"], key=card["market_hot"].get) if card["market_hot"] else None
         for k in ("_info", "_ai_member", "_reviews", "_old_hint", "_heavy"):
             card.pop(k, None)
@@ -888,11 +1026,11 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     # 同类检查：只当参考写在卡片上，不进分数（按名字搜，搜到的不一定是同玩法）
     st_all = db.kv_get("source_status", {}) or {}
     tap_ok = any((st_all.get(s) or {}).get("ok_ts", 0) > time.time() - 6 * 3600 for s in ("tapmaker", "taptap"))
-    cards.sort(key=lambda c: -c["final"])
+    cards.sort(key=lambda c: heat.rank_key(c["heat"], "final"))
     checked = 0
-    for card in cards:
+    for i, card in enumerate(cards):
         card["markets"] = {}
-        if card["label"].get("blocked") or card["age_w"] <= 0:
+        if i >= 400 or card["label"].get("blocked") or card["age_w"] <= 0:
             continue
         for mkt, h in card["market_hot"].items():
             best = None
@@ -930,27 +1068,16 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
                 if a != b and b in tracked and mh.get(a, 0) >= 0.4 and mh.get(b, 0) < 0.1:
                     card["flags"].append({"t": f"{config.MARKETS[a]}火、{config.MARKETS[b]}没热度", "c": "blue"})
 
-    # 只有两种情况不在"必看"里：你标了不做；你点了先不看（热度涨到当时的 DISMISS_BACK 倍会回来）
-    must, dismissed, blocked, old = [], [], [], []
-    for c in cards:
-        d = c["label"].get("dismissed") or 0
-        if c["label"].get("blocked"):
-            blocked.append(c)
-        elif c["age_w"] <= 0:
-            old.append(c)          # 上线超过一年：0 分，单独放，不占必看
-        elif d and c["hot"] < max(d + 0.05, min(0.95, d * config.DISMISS_BACK)):   # 热度最高是 1，到顶就封顶
-            dismissed.append(c)
-        else:
-            if d:
-                c["flags"].insert(0, {"t": "你点过先不看，热度又涨了很多", "c": "hot"})
-            must.append(c)
-    must.sort(key=lambda c: -c["final"])
-    dismissed.sort(key=lambda c: -c["final"])
+    # v76：必看 = 全部游戏按分数排名，没有分数门槛、没有分栏
+    must = sorted(cards, key=lambda c: heat.rank_key(c["heat"], "final"))
+    dismissed, blocked, old = [], [], []
+    by_raw = sorted(cards, key=lambda c: heat.rank_key(c["heat"], "raw"))
+    seen = {c["gid"] for c in must[:400]}
+    cards_out = must[:400] + [c for c in by_raw[:400] if c["gid"] not in seen]
+    plat_diag = _plat_diag(groups, hs, elig, now_ts)
     gid_of = {m: c["gid"] for c in cards for m in c["members"]}
     star_out = [{**{k: v for k, v in s.items() if not k.startswith("_")}, "gid": gid_of.get(s["cat_key"])}
                 for s in stars[:80]]
-    blocked.sort(key=lambda c: -c["hot"])
-    old.sort(key=lambda c: -c["hot"])
     opportunities, observe = must, []
 
     # 各平台涨幅榜
@@ -987,8 +1114,9 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
 
     with db.session() as c:
         c.executemany("INSERT OR REPLACE INTO scores(ts, akey, name, final, hot, imit, win) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                      [(now, x["akey"], x["name"], x["final"], x["hot"], x["imit"],
-                        (x["markets"].get(x["best_market"]) or {}).get("window", 0)) for x in cards if x["final"] > 0])
+                      [(now, x["akey"], x["name"], x["final"], x["hot"], None,
+                        (x["markets"].get(x["best_market"]) or {}).get("window", 0)) for x in cards
+                       if x["final"] is not None])
 
     if send_notify:
         notify.process(opportunities + observe)
@@ -998,16 +1126,17 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         "sources": {k: v for k, v in (db.kv_get("source_status", {}) or {}).items() if config.source_on(k)},
         "index": index, "holidays": holidays,
         # 面板只放前面这些（太多页面会卡）；totals 是真实总数，页面上照实写
-        "cards": must[:400], "dismissed": dismissed[:200], "blocked": blocked[:200], "ai": ai_status,
+        "cards": cards_out, "plat_diag": plat_diag, "dismissed": dismissed[:200], "blocked": blocked[:200], "ai": ai_status,
         "stars": star_out, "old": old[:300],
-        "totals": {"cards": len(must), "dismissed": len(dismissed), "blocked": len(blocked), "old": len(old)},
+        "totals": {"cards": len(elig), "dismissed": 0, "blocked": 0, "old": 0},
+        "heat_meta": heat_meta,
         "sprouts": {s: [{k: r[k] for k in ("key", "id", "name", "url", "label", "kind", "streak", "daily", "total",
                                            "pos", "now", "then", "gap", "days", "series", "hot")}
                         for r in rows[:60]] for s, rows in sprout_rows.items()},
         "todo": [{"name": n, "why": w, "need": need} for n, w, need in config.PLATFORM_TODO
                  if not (n == "Twitch" and config.TWITCH_CLIENT_ID and config.TWITCH_CLIENT_SECRET)],
         "movers": movers, "keywords": keywords, "candidates": candidates[:40],
-        "config": {"opportunity_min": config.OPPORTUNITY_MIN, "notify_min": config.NOTIFY_MIN_SCORE,
+        "config": {"new_max_days": config.NEW_MAX_DAYS, "opportunity_min": config.OPPORTUNITY_MIN, "notify_min": config.NOTIFY_MIN_SCORE,
                    "markets": config.MARKETS, "targets": config.TARGET_NAMES,
                    "fast_minutes": config.FAST_MINUTES, "slow_minutes": config.SLOW_MINUTES},
     }
@@ -1018,5 +1147,5 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     except Exception:
         pass
     db.log_run("analyze", time.time() - t0, True,
-               f"必看 {len(must)}，先不看 {len(dismissed)}，不做 {len(blocked)}")
+               f"必看 {len(elig)} 款")
     return dash

@@ -66,24 +66,16 @@ def process(cards):
         last = {r[0]: (r[1], r[2]) for r in c.execute("SELECT akey, MAX(ts), score FROM alerts GROUP BY akey")}
     video_sent = sum(v.get("day") == today for v in (db.kv_get("video_alerts", {}) or {}).values())
     budget = config.NOTIFY_MAX_PER_DAY - sent_today - video_sent
+    ranked = sorted((c for c in cards if c.get("final") is not None), key=lambda x: -x["final"])
     todo = []
-    for card in sorted(cards, key=lambda x: -x["final"]):
-        fast = card.get("fast") and card["hot"] >= 0.5
-        if card["final"] < config.NOTIFY_MIN_SCORE and not fast:
-            continue
+    for i, card in enumerate(ranked[:max(0, budget)], 1):
         prev = last.get(card["akey"])
-        if prev and now - prev[0] < config.NOTIFY_COOLDOWN_HOURS * 3600 and card["final"] < (prev[1] or 0) + 15:
+        if prev and now - prev[0] < config.NOTIFY_COOLDOWN_HOURS * 3600:
             continue
-        todo.append(card)
-    for card in todo[:max(0, budget)]:
-        urgent = card["final"] >= config.URGENT_SCORE
-        mkt = card.get("best_market")
-        m = card["markets"].get(mkt, {}) if mkt else {}
-        target = config.TARGET_NAMES.get(m.get("best"), "")
-        level = "紧急" if urgent else ("增长异常" if card["final"] < config.NOTIFY_MIN_SCORE else "关注")
-        popup(f"热度雷达 [{level}] {card['name']}",
-              f"分数 {card['final']:.0f}  {config.MARKETS.get(mkt, '')} {target}\n热度 {card['hot']:.2f}  可模仿 {card['imit']:.2f}",
-              sound=urgent)
+        todo.append((i, card))
+    for i, card in todo:
+        level = "第 %d 名" % i
+        popup(f"热度雷达 [{level}] {card['name']}", f"综合互动 {card['final']:.2f} 倍正常水平", sound=i == 1)
         with db.session() as c:
             c.execute("INSERT INTO alerts(akey, ts, score, level) VALUES (?, ?, ?, ?)",
                       (card["akey"], now, card["final"], level))

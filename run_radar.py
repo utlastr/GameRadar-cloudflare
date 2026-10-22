@@ -19,7 +19,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.once:
         d = main.run_once()
-        print(f"完成：必看 {len(d['cards'])} 个，先不看 {len(d['dismissed'])} 个，不做 {len(d['blocked'])} 个")
+        print(f"完成：必看 {d.get('totals', {}).get('cards', len(d['cards']))} 款")
         for name, st in (d.get("sources") or {}).items():
             print(f"  {name}: {'正常 ' + str(st.get('count')) + ' 条' if not st.get('error') else '失败 ' + st['error']}")
     elif a.serve:

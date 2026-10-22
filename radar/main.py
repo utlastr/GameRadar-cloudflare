@@ -85,7 +85,7 @@ def _tick(last):
 def loop(stop_event=None):
     last = {"live": 0.0, "slow": 0.0, "maint": 0.0}
     activity.say("雷达开始运行：上次抓过、还没到时间的平台直接跳过；TapTap 上次没抓完的接着抓。"
-                 "顺序：直播 → Steam、App Store、好游快爆等 → 分析 → TapTap")
+                 "跨平台最多 10 路并行，同平台串行；抓完分析")
     with BUSY:
         # 启动（包括更新后重启）先用已有数据按新规则算一遍，面板马上是新结果，不用等抓完
         _safe(analyze.run, allow_network=False, send_notify=False)
@@ -107,6 +107,12 @@ def loop(stop_event=None):
     if getattr(config, "HIT_ENABLED", True):
         from .hit import watch as hit_watch
         _safe(hit_watch.start, stop_event)
+    # 社交平台：抖音/抖音指数/哔哩指数/快手/小红书/TikTok + 关键词漏斗（settings.json 里 SOCIAL_ENABLED 关）
+    try:
+        from . import social
+        _safe(social.start, stop_event)
+    except Exception as e:      # 社交平台出任何问题都不影响雷达本身
+        print("社交平台没启动：%s" % e)
     # v48：引力引擎签名探测已经完成使命（微信 / 抖音小游戏已接上），不再每次启动都跑。
     # 以后对方改了算法，可以临时把下面两行加回来：from . import gravity_probe; _safe(gravity_probe.start)
     while not (stop_event and stop_event.is_set()):
@@ -129,9 +135,6 @@ def start_background(open_browser=False):
 
 
 def run_forever(open_browser=None):
-    from . import single
-    if not single.guard():
-        return
     activity.install()
     db.init()
     _, url = server.start()

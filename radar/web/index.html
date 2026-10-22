@@ -225,6 +225,15 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
 .ph-d{color:var(--text-2);font-size:12px;margin-top:4px}
 .ph-m{color:var(--muted);margin-left:10px;white-space:nowrap}
 .todo .kv{grid-template-columns:96px 1fr;font-size:13px;gap:10px 16px}
+/* 视频平台大厅（抖音 / 快手 / 小红书 / TikTok / 指数） */
+.pd-h.hub{cursor:pointer;border-radius:6px}
+.pd-h.hub:hover,.pd-h.hub.on{background:var(--accent-weak);color:var(--accent)}
+.soc-jobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.soc-job{border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:var(--subtle);font-size:12px}
+.soc-job b{font-size:12.5px;display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.soc-term{font-weight:600;cursor:pointer}
+.soc-term:hover{color:var(--accent)}
+.soc-err{color:var(--hot)}
 
 @media (max-width:960px){
   .app{grid-template-columns:1fr;height:auto}
@@ -296,10 +305,12 @@ const PLAT_DIR = [
     {src:"huya"}, {src:"douyu"}, {src:"bili"}, {src:"twitch", todo:"Twitch"}, {src:"kick"},
     {todo:"抖音直播 / 快手直播", t:"抖音 / 快手直播"}, {todo:"YouTube 直播 / YouTube Shorts", t:"YouTube 直播"}]},
   {k:"video", t:"视频平台", items:[
-    {src:"bvideo"}, {todo:"YouTube 直播 / YouTube Shorts", t:"YouTube Shorts"},
-    {todo:"抖音 / 快手 / 小红书 / TikTok 短视频", t:"抖音 / 快手 / 小红书 / TikTok"}]},
+    {src:"bvideo"}, {soc:"douyin", t:"抖音"}, {soc:"douyin_index", t:"抖音指数"}, {soc:"bili_index", t:"哔哩指数"},
+    {soc:"kuaishou", t:"快手"}, {soc:"xiaohongshu", t:"小红书"}, {soc:"tiktok", t:"TikTok"},
+    {todo:"YouTube 直播 / YouTube Shorts", t:"YouTube Shorts"}]},
 ];
-const itemId = it => it.src || ("todo:"+it.t);
+const HUBS = {video:"视频平台大厅"};      // 点分组标题进汇总大厅；以后应用商店 / 小游戏 / 直播也可以加
+const itemId = it => it.soc ? "soc:"+it.soc : (it.src || ("todo:"+it.t));
 const PLAT_ITEMS = PLAT_DIR.flatMap(g=>g.items.map(it=>Object.assign({g:g.k, id:itemId(it)}, it)));
 const PLATS = PLAT_ITEMS.filter(it=>it.src).map(it=>it.src);
 const PLAT_ABOUT = {
@@ -311,12 +322,13 @@ const PLAT_ABOUT = {
   itch:"“新而热门”和网页游戏两个榜的名次",
   wxmini:"人气榜、最多人玩榜、畅销榜各前 100 名（按天出榜，数据来自引力引擎小游戏排行榜）",
   dymini:"人气榜、新游榜、畅销榜各前 100 名（按天出榜，数据来自引力引擎小游戏排行榜）",
-  huya:"游戏区所有直播间：每个分区几个主播在播、直播热度；大主播在播什么", douyu:"游戏区所有直播间：每个分区几个主播在播、直播热度；大主播在播什么",
+  huya:"游戏区所有直播间：每个分区几个主播在播、直播热度", douyu:"游戏区所有直播间：每个分区几个主播在播、直播热度",
   bili:"网游、手游、单机三个大分区的直播间：每个分区几个主播在播", twitch:"所有直播间：每个分类几个主播在播、观看人数", kick:"每个游戏分类的观看人数（Kick 不给主播数）",
   bvideo:"按 BV 号记录视频、作者、发布时间和播放采样；游戏归属按 ID 核对"};
 function todoOf(name){ return (S.todo||[]).find(x=>x.name===name); }
 // 一个平台现在的状态：ok 正常 / err 失败 / todo 没接上（或缺密钥）/ wait 还没抓过
 function itemState(it){
+  if(it.soc) return socState(it.soc);
   if(it.src==="bvideo"){
     const h=S.video_hotspots||{}, c=h.collection||{}, status=h.status||"未采集";
     return {k:c.failed?"err":(status==="已采样"?"ok":"wait"),t:status,
@@ -374,7 +386,8 @@ function dtm(ts){ const d=new Date(ts*1000); return md(ts)+" "+pad(d.getHours())
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function mkName(k){ return (S.config?.markets||{})[k]||k||"-"; }
 function tgName(k){ return (S.config?.targets||{})[k]||k||"-"; }
-function scoreCls(v){ const c=S.config||{}; return v>=(c.notify_min||55)?"s3":(v>=(c.opportunity_min||35)?"s2":"s1"); }
+function scoreCls(v){ return v!=null&&v>1?"s3":"s1"; }
+function fmtZ(v){ return v==null?"-":(+v).toFixed(2)+" 倍"; }
 function meter(v){ v=Math.max(0,Math.min(1,+v||0)); return `<div class="meter"><div class="bar"><i style="width:${Math.round(v*100)}%"></i></div><span class="v num">${v.toFixed(2)}</span></div>`; }
 function toast(t){ const e=$("toast"); e.textContent=t; e.classList.add("on"); clearTimeout(e._t); e._t=setTimeout(()=>e.classList.remove("on"),2000); }
 async function post(u,b){ try{ const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); return r.ok; }catch(e){ return false; } }
@@ -434,8 +447,9 @@ function counts(){ return {must:(S.totals||{}).cards ?? (S.cards||[]).length}; }
 function sourceState(v){ const err = v.error && (!v.ok_ts || (v.err_ts||0) > v.ok_ts); return err?"err":(v.ok_ts?"ok":""); }
 function render(){
   const c = counts();
-  $("nav").innerHTML = PAGES.map(p=>p.group?`<div class="nav-group">${p.group}</div>`:`<a class="${page===p.k?"on":""}" data-page="${p.k}"><span>${p.t}</span><span class="c num">${c[p.k]!=null?c[p.k]:""}</span></a>`).join("")
-    + `<a href="/map" style="text-decoration:none"><span>地图</span><span class="c">各地口味</span></a>`;
+  // 地图排在运行情况前面；运行情况永远最后一个
+  const mapLink = `<a href="/map" style="text-decoration:none"><span>地图</span><span class="c">各地口味</span></a>`;
+  $("nav").innerHTML = PAGES.map(p=>(p.k==="status"?mapLink:"")+(p.group?`<div class="nav-group">${p.group}</div>`:`<a class="${page===p.k?"on":""}" data-page="${p.k}"><span>${p.t}</span><span class="c num">${c[p.k]!=null?c[p.k]:""}</span></a>`)).join("");
   const src = Object.entries(S.sources||{});
   // 平台多了：失败的一个个列出来，正常的合成一行
   const bad = src.filter(([k,v])=>sourceState(v)==="err"), good = src.filter(([k,v])=>sourceState(v)!=="err");
@@ -461,7 +475,6 @@ function renderContent(){
   for(const x of S.holidays||[]) h += `<div class="notice">今天是${esc(x.name)}，大盘可能整体偏高。系统已按大盘扣除，但请留意节后回落。</div>`;
   if(page==="must") h += mustView();
   else if(page==="hit") h += hitView();
-  else if(page==="opp") h += oppView();
   else if(page==="plat") h += platView();
   else if(page==="status") h += statusView();
   root.innerHTML = h;
@@ -475,7 +488,7 @@ function afterRender(){
   if(sc && bstate(sc).data) withCharts(()=>mountBoard(sc));
   if(page==="status" && STATS) withCharts(mountStatus);
   if(page==="plat" && PLAT.tab==="movers" && IDX) withCharts(mountIndex);
-  if(page==="opp" && !OPP.list) loadOpp();
+  if(page==="plat" && PLAT.src==="hub:video" && SOC.termData) withCharts(socMountTerm);
   if(page==="hit"){ if(!HIT.list) loadHit(); if(HIT.game) withCharts(()=>mountHit(HIT.game)); }
 }
 function pickPlat(id){
@@ -486,12 +499,13 @@ function platDir(cur){
   const groups = PLAT_DIR.map(g=>{
     const items = PLAT_ITEMS.filter(it=>it.g===g.k);
     const on = items.filter(it=>itemState(it).k!=="todo").length;
-    return `<div class="pd-g"><div class="pd-h"><span>${g.t}</span><span class="num">${on} / ${items.length} 已接</span></div>` +
+    const hub = HUBS[g.k] ? `hub ${cur==="hub:"+g.k?"on":""}" data-plat="hub:${g.k}" title="点开看${HUBS[g.k]}` : "";
+    return `<div class="pd-g"><div class="pd-h ${hub}"><span>${g.t}${hub?" ›":""}</span><span class="num">${on} / ${items.length} 已接</span></div>` +
       items.map(it=>{ const st=itemState(it);
         return `<a class="pd-i ${it.id===cur?"on":""} ${st.k==="todo"?"off":""}" data-plat="${esc(it.id)}"><span class="dot ${st.k}"></span><span class="n">${esc(itemName(it))}</span><span class="r">${esc(st.t)}</span></a>`; }).join("") + `</div>`;
   }).join("");
   // 手机上目录太长，换成下拉框
-  const opts = PLAT_DIR.map(g=>`<optgroup label="${g.t}">${PLAT_ITEMS.filter(it=>it.g===g.k).map(it=>{ const st=itemState(it); return `<option value="${esc(it.id)}" ${it.id===cur?"selected":""}>${esc(itemName(it))}${st.k==="ok"?"":"（"+st.t+"）"}</option>`; }).join("")}</optgroup>`).join("");
+  const opts = PLAT_DIR.map(g=>`<optgroup label="${g.t}">${HUBS[g.k]?`<option value="hub:${g.k}" ${cur==="hub:"+g.k?"selected":""}>${HUBS[g.k]}</option>`:""}${PLAT_ITEMS.filter(it=>it.g===g.k).map(it=>{ const st=itemState(it); return `<option value="${esc(it.id)}" ${it.id===cur?"selected":""}>${esc(itemName(it))}${st.k==="ok"?"":"（"+st.t+"）"}</option>`; }).join("")}</optgroup>`).join("");
   return `<div class="pd panel">${groups}</div><select class="sel pd-sel" data-platsel>${opts}</select>`;
 }
 function platHead(it, st){
@@ -501,15 +515,17 @@ function platHead(it, st){
   if(v.ok_ts) meta.push("最近成功 "+ago(v.ok_ts)+(v.count!=null?"，抓到 "+fmt(v.count)+" 条":""));
   const g = PLAT_DIR.find(x=>x.k===it.g);
   let h = `<div class="ph"><div class="ph-t"><h2>${esc(itemName(it))}</h2>${tag}<span class="ph-g">${g?g.t:""}</span></div>
-    <div class="ph-d">${esc(PLAT_ABOUT[it.src]||"")}${meta.length?`<span class="ph-m">${meta.join(" · ")}</span>`:""}</div></div>`;
+    <div class="ph-d">${esc(PLAT_ABOUT[it.src]||(it.soc&&SOC_ITEMS[it.soc]||{}).about||"")}${meta.length?`<span class="ph-m">${meta.join(" · ")}</span>`:""}</div></div>`;
   if(st.k==="err") h += `<div class="notice">最近一次抓取失败（${ago(v.err_ts)}）：${esc(v.error)}</div>`;
   else if(v.warn) h += `<div class="notice">上一次部分失败：${esc(v.warn)}</div>`;
   return h;
 }
 function platView(){
+  if(PLAT.src==="hub:video"){ loadSoc(); return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${socHubView()}</div></div>`; }
   if(!PLAT_ITEMS.some(it=>it.id===PLAT.src)) PLAT.src = "steam";
   const it = PLAT_ITEMS.find(x=>x.id===PLAT.src), st = itemState(it);
   let main = platHead(it, st);
+  if(it.soc){ loadSoc(); return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${main}${socItemView(it.soc)}</div></div>`; }
   if(st.k==="todo"){
     const t = st.todo||{};
     main += `<div class="panel"><div class="pbody todo">
@@ -535,6 +551,195 @@ function platView(){
   else { if(RAW.source!==PLAT.src && !(RAW.source||"").startsWith(PLAT.src+"_")){ RAW.source=PLAT.src; RAW.data=null; } h += rawView(); }
   return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${h}</div></div>`;
 }
+
+/* ---------- 视频平台大厅 + 抖音 / 抖音指数 / 哔哩指数 / 快手 / 小红书 / TikTok（数据在 radar/social/） ---------- */
+const SOC_ITEMS = {
+  douyin:{jobs:["douyin_hot","douyin_kw","douyin_open"], about:"抖音热榜每小时读一次；新游戏名去抖音搜索，看视频数、点赞、多少是 7 天内发的。填了抖音开放平台密钥再加官方视频搜索"},
+  douyin_index:{jobs:["douyin_index_hot","douyin_index_kw"], about:"抖音指数（原巨量算数）热点榜；新游戏名查逐日指数曲线（相对值，不是人数）。要用抖音号登录"},
+  bili_index:{jobs:["bili_index_home","bili_index_kw"], about:"哔哩指数首页榜单；新游戏名查逐日指数曲线。用 B站账号登录"},
+  kuaishou:{jobs:["kuaishou_hot","kuaishou_kw"], about:"快手热榜；新游戏名去快手搜索，看视频数和点赞"},
+  xiaohongshu:{jobs:["xiaohongshu_kw"], about:"新游戏名去小红书搜索，看笔记数和点赞（小红书没有公开热榜）"},
+  tiktok:{jobs:["tiktok_hashtag","tiktok_ads"], about:"TikTok 创意中心热门话题（要能上外网）；填了 Commercial Content API 密钥再查欧盟广告库里这个游戏投了多少广告"},
+};
+let SOC = {data:null, ts:0, loading:false, b:"new", h:null, term:null, termData:null};
+const SOC_LABELS = [["game","是游戏"],["gameplay","玩法词"],["old","老游戏"],["not","不是游戏"]];
+async function loadSoc(force){
+  if(SOC.loading || (!force && SOC.ts && Date.now()-SOC.ts < 55000)) return;
+  SOC.loading = true;
+  const d = await getJSON("/api/social/state");
+  SOC.loading = false; SOC.ts = Date.now();
+  if(d) SOC.data = d;
+  if(page==="plat") renderContent();
+}
+function socJobErr(j){ return j.error && (!j.ok_ts || (j.err_ts||0) > j.ok_ts); }
+function socState(key){
+  const d = SOC.data, it = SOC_ITEMS[key];
+  if(!d){ if(!SOC.ts) loadSoc(); return {k:"wait", t:SOC.ts?"读不到":"读取中"}; }
+  if(!d.enabled) return {k:"todo", t:"已关", todo:{why:"settings.json 里 SOCIAL_ENABLED 是 false", need:"改成 true 后重开雷达"}};
+  const all = d.jobs.filter(j=>it.jobs.includes(j.job));
+  const js = all.filter(j=>j.on && j.ready);
+  if(!js.length) return {k:"todo", t:all.some(j=>!j.on)?"已关":"缺密钥", todo:{why:"这个平台在 settings.json 的 SOCIAL_PLATFORMS 里关掉了", need:"改成 true 后重开雷达"}};
+  const ok = js.filter(j=>j.ok_ts && !socJobErr(j)), bad = js.filter(socJobErr);
+  const v = {ok_ts: ok.length ? Math.max(...ok.map(j=>j.ok_ts)) : null,
+             err_ts: bad.length ? Math.max(...bad.map(j=>j.err_ts||0)) : null,
+             error: bad.map(j=>j.name+"："+j.error).join("；")};
+  if(ok.length && !bad.length) return {k:"ok", t:ago(v.ok_ts), v};
+  if(ok.length) return {k:"ok", t:"部分失败", v:{ok_ts:v.ok_ts, warn:v.error}};
+  if(bad.length) return {k:"err", t:"失败", v};
+  return {k:"wait", t:d.browser?"等第一次抓取":"浏览器没开", v:{}};
+}
+function socSumm(p, s){
+  if(!s) return "";
+  if(s.metrics) return s.metrics.slice(0,3).map(m=>`${esc(String(m.metric).split(".").pop())}：最近 7 天平均 ${fmt(m.avg7)}，之前 30 天 ${fmt(m.avg_prev30)}（${m.days} 天）`).join("<br>");
+  if(p==="tiktok_ads") return `${s.n} 条广告${s.capped?"（只读了前 30）":""}，投放中 ${s.active}，最早 ${esc(s.first_shown||"-")}，覆盖 ${fmt(s.reach_sum)} 人`+(s.advertisers||[]).slice(0,3).map(a=>` <span class="tag">${esc(a[0])}×${a[1]}</span>`).join("");
+  return `${s.n} 条，7 天内发布 ${s.n_7d ?? "-"} 条，点赞合计 ${fmt(s.likes_sum)}，最高 ${fmt(s.likes_max)}${s.plays_sum?`，播放合计 ${fmt(s.plays_sum)}`:""}${s.latest_ts?`，最新 ${ago(s.latest_ts)}`:""}`;
+}
+function socBanner(d){
+  const btns = `<button class="btn sm" data-socact="browser">打开雷达专用浏览器</button> <button class="btn sm" data-socact="run">继续到期轮次</button>`;
+  if(!d) return `<div class="notice">${SOC.ts?"读不到社交平台的数据（雷达版本太旧，或后台出错）":"读取中…"}</div>`;
+  let h = "";
+  if(!d.enabled) h += `<div class="notice">社交平台关着（settings.json 里 SOCIAL_ENABLED 是 false）。</div>`;
+  else if(!d.browser) h += `<div class="notice">雷达专用浏览器现在没开（端口 ${d.port}）。雷达到时间会自己在后台把它打开（最小化），不用你管。第一次用要点下面的按钮，在弹出的窗口里登录一次抖音、抖音指数（抖音号）、快手、小红书、B站，以后不用再登录。<div style="margin-top:6px">${btns}</div></div>`;
+  if(d.error) h += `<div class="notice">后台出错：${esc(d.error)}</div>`;
+  if(d.busy) h += `<div class="t2" style="margin-bottom:8px">正在：${esc(d.busy)}</div>`;
+  return h || `<div class="toolbar">${btns}</div>`;
+}
+function socJobsGrid(jobs){
+  return `<div class="soc-jobs">${jobs.map(j=>{
+    const off = !j.on || !j.ready, err = socJobErr(j);
+    const k = off ? "todo" : err ? "err" : j.ok_ts ? "ok" : "wait";
+    const line = !j.on ? `<span class="muted">已关（SOCIAL_PLATFORMS）</span>` : !j.ready ? `<span class="muted">没填密钥，不查</span>`
+      : err ? `<span class="soc-err">${esc(j.error)}</span>` : j.ok_ts ? `${ago(j.ok_ts)}成功 · ${esc(j.note||"")}` : `<span class="muted">还没轮到</span>`;
+    // 平台弹了人机验证 / 要登录：点一下在雷达专用浏览器里把那个页面打开，拖一下滑块或登录，完了关掉
+    const fix = err && j.url && /人机验证|要登录/.test(j.error||"") ? `<div style="margin-top:4px"><button class="btn sm" data-socact="open" data-url="${esc(j.url)}">${/人机验证/.test(j.error)?"打开去验证":"打开去登录"}</button></div>` : "";
+    return `<div class="soc-job"><b><span class="dot ${k}"></span>${esc(j.name)}</b>${line}${fix}</div>`; }).join("")}</div>`;
+}
+function socHotTable(H){
+  if(!H || !(H.items||[]).length) return empty("还没读到", "");
+  return `<div class="scroll-x"><table class="tbl"><thead><tr><th class="r">名次</th><th>词</th><th class="r">热度</th></tr></thead><tbody>${H.items.map(i=>`<tr>
+    <td class="r num">${i.rank}</td><td>${i.url?`<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.text)}</a>`:esc(i.text)}</td><td class="r num">${fmt(i.value)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function socLookupTable(L, withPlat){
+  if(!L.length) return empty("还没查过", `漏斗里有了新游戏 / 玩法词，或者你加了每天要查的词，就会一个一个去查（每个平台每天最多 ${(SOC.data.settings||{}).per_day} 个）。`);
+  return `<div class="scroll-x"><table class="tbl"><thead><tr><th>时间</th>${withPlat?"<th>平台</th>":""}<th>词</th><th>结果</th></tr></thead><tbody>${L.map(x=>`<tr>
+    <td class="t2 nowrap">${ago(x.ts)}</td>${withPlat?`<td class="t2">${esc(x.name)}</td>`:""}
+    <td><span class="soc-term" data-socopen="${esc(x.term)}">${esc(x.term)}</span></td>
+    <td>${x.ok?socSumm(x.platform, x.summary):`<span class="soc-err">${esc(x.note||"失败")}</span>`}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function socTermPanel(){
+  const t = SOC.term; if(!t) return "";
+  const d = SOC.termData;
+  let body;
+  if(!d) body = `<div class="muted">读取中…</div>`;
+  else {
+    const ser = Object.entries(d.series||{});
+    body = ser.length ? ser.map(([k],i)=>`<div class="t2" style="margin-top:8px">${esc(k)}</div>${chartBox("socser"+i, 160)}`).join("")
+      : `<div class="muted">还没有指数曲线（抖音指数 / 哔哩指数还没查到这个词，或者这个词没被收录）。</div>`;
+    body += `<div style="margin-top:12px">` + ((d.lookups||[]).length ? `<table class="tbl"><tbody>${d.lookups.map(x=>`<tr><td class="t2 nowrap">${ago(x.ts)}</td><td class="t2">${esc(x.name)}</td><td>${x.ok?socSumm(x.platform,x.summary):`<span class="soc-err">${esc(x.note||"失败")}</span>`}${x.ok&&x.summary&&x.summary.top?`<details><summary class="t2">点赞最多的几条</summary>${x.summary.top.map(v=>`<div>${v.url?`<a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.title)}</a>`:esc(v.title)} <span class="muted">赞 ${fmt(v.likes)}${v.ts?" · "+ago(v.ts):""}</span></div>`).join("")}</details>`:""}</td></tr>`).join("")}</tbody></table>` : `<div class="muted">各平台还没查过这个词。</div>`) + `</div>`;
+  }
+  return panel(esc(t), "各平台查到的数字和指数曲线", body, `<button class="btn sm ghost" data-socact="closeterm">关闭</button>`);
+}
+function socMountTerm(){
+  const ser = Object.entries((SOC.termData||{}).series||{});
+  ser.forEach(([k,pts],i)=>mountChart("socser"+i, miniLine(pts.map(p=>[Date.parse(p[0]+"T00:00:00")/1000, p[1]]))));
+}
+function socHubView(){
+  const d = SOC.data;
+  let h = `<div class="ph"><div class="ph-t"><h2>视频平台大厅</h2><span class="ph-g">视频平台</span></div>
+    <div class="ph-d">游戏视频新增监测 · 搜索样本与分区发现 · 非全平台总量</div></div>`;
+  h += socBanner(d);
+  if(!d) return h;
+  h += socTermPanel();
+  if(d.schedule){
+    const sc=d.schedule, batch=sc.active||sc.last_batch;
+    const stamp=t=>new Date(t*1000).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false});
+    const tasks=batch?batch.tasks||[]:[];
+    h += panel("采集轮次", "北京时间每天 00:00、12:00 · 主机漏跑开机补采",
+      `<div class="t2">下一轮 ${esc(stamp(sc.next_end))}${batch?`<br>本轮时段 ${esc(stamp(batch.start))} 至 ${esc(stamp(batch.end))}<br>${sc.active?"进行中":"已执行，覆盖不全"} · 已采样 ${tasks.filter(t=>t.state==="sampled").length} / ${tasks.length} · 失败 ${tasks.filter(t=>t.state==="failed").length}`:""}</div>`);
+  }
+  if(d.douyin_games){
+    const dg=d.douyin_games,c=dg.counts||{},p=dg.probe||{};
+    const gr=dg.growth||{},tags=(gr.rows||[]).filter(r=>r.metric==="likes"&&r.scope==="observed_sample");
+    h += panel("抖音 · 视频标签增长", "官方增长榜未接通 · 游戏兴趣受众未取得 · 监测样本",
+      `<div class="t2">视频 ${gr.videos||0} · 原始标签 ${gr.tags||0} · 未知计数不计作零</div>`+
+      (tags.length?`<div class="scroll-x"><table class="tbl"><thead><tr><th>标签</th><th>视频</th><th>作者</th><th>可比视频</th><th>新增点赞 / 小时</th><th>增速</th><th>样本占比</th><th>加速度</th><th>档案</th></tr></thead><tbody>${tags.slice(0,100).map(r=>`<tr><td><details><summary>${esc(r.tag)}</summary>${r.video_ids.map(v=>`<div><a href="https://www.douyin.com/video/${encodeURIComponent(v)}" target="_blank" rel="noopener">${esc(v)}</a></div>`).join("")}</details></td><td>${r.videos}</td><td>${r.authors}</td><td>${r.measured_videos}</td><td>${r.hour_rate===null?"待快照":r.hour_rate.toFixed(1)}</td><td>${r.growth_ratio===null?"-":r.growth_ratio.toFixed(2)+"×"}</td><td>${r.share===null?"-":(r.share*100).toFixed(2)+"%"}</td><td>${r.acceleration===null?"冷启动":r.acceleration.toFixed(3)}</td><td>${esc(r.archive|| (r.ambiguous_archives?"同名待核":"未关联"))}</td></tr>`).join("")}</tbody></table></div>`:`<div class="muted">尚未取得含原始话题标签的结构化视频。</div>`));
+    h += panel("抖音 · 游戏分类审核", "平台分类未取得 · 受众比例未取得 · 非全量",
+      `<div class="t2">通过 ${c.included||0} · 排除 ${c.excluded||0} · 证据不足 ${c.unknown||0} · 历史待核 ${dg.historical_unverified||0}</div>`+
+      `<div class="t2">${p.ts?`${ago(p.ts)} · 页面响应 ${p.captures} 份 · 结构化视频 ${p.videos} 条` : "尚未执行非搜索采集"}${p.error?` · <span class="soc-err">${esc(p.error)}</span>`:""}</div>`+
+      (dg.rows||[]).map(r=>`<div class="t2"><a href="https://www.douyin.com/video/${encodeURIComponent(r.vid)}" target="_blank" rel="noopener">${esc(r.title||r.vid)}</a> · ${esc(r.reason)}</div>`).join(""));
+  }
+  const pub = d.publications;
+  if(pub){
+    const rows = pub.rows || [];
+    const totals = Object.entries(pub.totals||{}).map(([p,v])=>`${esc(p)}：24 小时已确认 ${v.observed_24h} 条，另有 ${v.missing_publication} 条发布时间未知`).join(" · ");
+    h += panel("新发内容", "已采集去重样本 · 基线未验证 · 搜索词归属待核", `<div class="t2">${totals||"尚无经过稳定 ID 验证的样本"}</div>` + (rows.length ?
+      `<div class="scroll-x"><table class="tbl"><thead><tr><th>平台</th><th>游戏 / 候选词</th><th>1 小时</th><th>3 小时</th><th>6 小时</th><th>24 小时</th><th>24 小时作者</th><th>信号</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.platform)}</td><td>${esc(r.topic)}</td>${[1,3,6,24].map(h=>`<td class="num">${r.windows[h].current}</td>`).join("")}<td>${r.authors_24h}</td><td>${esc(r.signal)}</td></tr>`).join("")}</tbody></table></div>` : ""));
+    h += panel("采集覆盖", "全量覆盖尚未取得", Object.entries(pub.sources||{}).map(([k,r])=>`<div class="t2">${esc(k)} · ${ago(r.ended)} · 新入库 ${r.added} / 读取 ${r.n} · ${esc(r.coverage)}${r.error?` · <span class="soc-err">${esc(r.error)}</span>`:""}</div>`).join("") || `<div class="muted">等待新版本采集；历史未验证记录不自动混入统计。</div>`);
+  }
+  h += panel("各平台", `每天两轮，半天一个统计时段；有限搜索结果不代表时段总量`, socJobsGrid(d.jobs) +
+    `<div class="t2" style="margin-top:8px">${d.ai&&d.ai.error?`<span class="soc-err">AI 判词失败：${esc(d.ai.error)}</span>（2 小时后再试）`:(d.ai&&d.ai.ok_ts?`AI 判词（一天一次，判过的词不再判）：${ago(d.ai.ok_ts)} · ${esc(d.ai.note||"")}`:"AI 判词：一天一次，还没轮到（判不出来的词留在“待判断”）")}</div>`);
+  const bn = d.bucket_names, rows = d.buckets[SOC.b]||[];
+  let fb = `<div class="toolbar">${seg(bn.map(([k,t])=>[k,t,(d.buckets[k]||[]).length]),"socb",SOC.b)}</div>`;
+  fb += rows.length ? `<div class="scroll-x"><table class="tbl"><thead><tr><th>词</th><th class="r">最好名次</th><th>上了哪些榜</th><th>为什么这么分</th><th>分错了就改</th></tr></thead><tbody>${rows.map(r=>`<tr>
+      <td><span class="soc-term" data-socopen="${esc(r.term)}">${esc(r.term)}</span>${r.label?` <span class="tag blue">你标的</span>`:""}</td>
+      <td class="r num">${r.best_rank&&r.best_rank<999?r.best_rank:"-"}</td>
+      <td>${(r.source_names||[]).map(s=>`<span class="tag">${esc(s)}</span>`).join("")}</td>
+      <td class="t2">${esc(r.cls_why||"")}${r.age_why?`<br><span class="muted">${esc(r.age_why)}</span>`:""}</td>
+      <td class="nowrap">${SOC_LABELS.map(([k,t])=>`<button class="btn sm ghost" data-soclab="${k}" data-socterm="${esc(r.term)}" ${r.label===k?"disabled":""}>${t}</button>`).join(" ")}${r.label?` <button class="btn sm ghost" data-soclab="" data-socterm="${esc(r.term)}">撤销</button>`:""}</td></tr>`).join("")}</tbody></table></div>`
+    : empty("这一栏还没有词", d.browser?"":"浏览器没开，热榜读不到");
+  const w = d.settings.watch||[];
+  fb += `<div class="toolbar" style="margin-top:10px"><span class="t2">每天都要查的词：</span>${w.map(t=>`<span class="tag">${esc(t)} <a href="#" data-socunwatch="${esc(t)}">×</a></span>`).join("")}
+    <input id="socWatchIn" class="sel" placeholder="游戏名" style="width:160px"> <button class="btn sm" data-socact="watchadd">加入</button></div>`;
+  h += panel("关键词漏斗", "热榜上的词 → 是不是游戏 → 老不老；分错了点按钮改，以后都按你标的", fb);
+  h += panel("查询结果", "点词看各平台的数字和指数曲线", socLookupTable(d.lookups||[], true));
+  const hk = Object.keys(d.hot);
+  if(!SOC.h || !d.hot[SOC.h]) SOC.h = hk.find(k=>(d.hot[k].items||[]).length) || hk[0];
+  h += panel("热榜原样", d.hot[SOC.h]&&d.hot[SOC.h].ts?"最近一次读到："+ago(d.hot[SOC.h].ts):"", `<div class="toolbar">${seg(hk.map(k=>[k,d.hot[k].name,(d.hot[k].items||[]).length]),"soch",SOC.h)}</div>` + socHotTable(d.hot[SOC.h]));
+  h += panel("第一次用要做的事", "", `<ol class="t2" style="margin:0;padding-left:18px">
+    <li>点“打开雷达专用浏览器”：会开一个单独的 Edge / Chrome 窗口（和你平时的浏览器分开，资料存在 radar_data/browser）。</li>
+    <li>在它打开的几个页面里分别登录一次：抖音、抖音指数（抖音号）、快手、小红书、B站、TikTok 创意中心。登录完可以关掉，以后雷达自己在后台开它。</li>
+    <li>平台偶尔会弹人机验证：上面对应的格子里会出现“打开去验证”按钮，点一下拖个滑块就行；没出现就不用管。</li>
+    <li>TikTok 要能上外网。</li>
+    <li>官方接口（可选，审核通过后）：在 radar_data/settings.json 填 DOUYIN_OPEN_CLIENT_KEY / DOUYIN_OPEN_CLIENT_SECRET（抖音开放平台“抖音视频垂搜”权限）、TIKTOK_CCAPI_CLIENT_KEY / TIKTOK_CCAPI_CLIENT_SECRET（TikTok Commercial Content API），改完退出雷达再打开。</li>
+    <li>哪一项一直失败：把 radar_data/social_debug/ 里同名的文件发给助手。</li></ol>`);
+  return h;
+}
+function socItemView(key){
+  const d = SOC.data, it = SOC_ITEMS[key];
+  if(!d) return socBanner(d);
+  let h = d.browser ? "" : socBanner(d);
+  h += panel("这个平台读什么", "", socJobsGrid(d.jobs.filter(j=>it.jobs.includes(j.job))));
+  for(const j of it.jobs) if(d.hot[j]) h += panel(d.hot[j].name, d.hot[j].ts?"最近一次读到："+ago(d.hot[j].ts):"", socHotTable(d.hot[j]));
+  h += panel("查过的词", "点词去视频平台大厅看详细", socLookupTable((d.lookups||[]).filter(x=>it.jobs.includes(x.platform)), it.jobs.length>1));
+  return h;
+}
+async function socOpen(term){
+  SOC.term = term; SOC.termData = null;
+  if(PLAT.src!=="hub:video"){ PLAT.src = "hub:video"; contentPage = null; }
+  renderContent(); const m=document.querySelector("main"); if(m) m.scrollTop = 0;
+  const d = await getJSON("/api/social/term?term="+encodeURIComponent(term));
+  if(SOC.term!==term) return;
+  SOC.termData = d || {series:{}, lookups:[]};
+  renderContent();
+}
+async function socPost(u, b){ try{ const r = await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})}); return await r.json(); }catch(e){ return {ok:false, note:String(e)}; } }
+document.addEventListener("click", async e=>{
+  const t = e.target.closest && e.target.closest("[data-socact],[data-soclab],[data-socb],[data-soch],[data-socopen],[data-socunwatch]");
+  if(!t) return;
+  e.preventDefault();
+  const ds = t.dataset;
+  if(ds.socb){ SOC.b = ds.socb; renderContent(); return; }
+  if(ds.soch){ SOC.h = ds.soch; renderContent(); return; }
+  if(ds.socopen){ socOpen(ds.socopen); return; }
+  if(ds.soclab!==undefined){ t.disabled = true; await socPost("/api/social/label",{term:ds.socterm, label:ds.soclab}); await loadSoc(true); return; }
+  if(ds.socunwatch){ await socPost("/api/social/watch",{term:ds.socunwatch, add:false}); await loadSoc(true); return; }
+  const a = ds.socact;
+  if(a==="closeterm"){ SOC.term = null; SOC.termData = null; renderContent(); }
+  else if(a==="run"){ const r = await socPost("/api/social/run"); toast(r.note||"好了"); setTimeout(()=>loadSoc(true), 5000); }
+  else if(a==="open"){ t.disabled = true; const r = await socPost("/api/social/open",{url:ds.url}); t.disabled = false; toast(r.note||""); }
+  else if(a==="browser"){ t.disabled = true; const r = await socPost("/api/social/browser"); t.disabled = false; toast(r.note||r.error||""); setTimeout(()=>loadSoc(true), 3000); }
+  else if(a==="watchadd"){ const el = $("socWatchIn"), v = el ? el.value.trim() : ""; if(!v) return; await socPost("/api/social/watch",{term:v, add:true}); await loadSoc(true); }
+});
 
 /* ---------- 历史对照 ---------- */
 const HIST_MIN = 15;
@@ -664,37 +869,21 @@ function releasePoolView(){
     rows.map(r=>`<tr><td><a class="lnk" data-game="steam:${esc(r.id)}" data-name="${esc(r.name)}">${esc(r.name)}</a><div class="g-alt">steam:${esc(r.id)}</div></td><td>${ymd(r.released)}</td><td class="r num">${fmt(r.reviews)}</td><td class="r num">${fmt(r.players)}</td><td>${r.sampled?ago(r.sampled):"等待首次采样"}</td></tr>`).join("")+`</tbody></table></div>`:empty("等待近期发行扫描","");
   return panel("近期发行追踪",`${rows.length} 款 · 扫描 ${ago(d.ts)}`,body+(d.error?`<div class="notice">${esc(d.error)}</div>`:""));
 }
-function mustView(){
-  const t = MUST.tab;
-  const T = S.totals||{}, tot = (k, l) => T[k]!=null ? T[k] : (l||[]).length;
-  let h = `<div class="toolbar">${seg([["rank","必看",tot("cards",S.cards)],["stars","大主播在播",(S.stars||[]).length],["old","老游戏",tot("old",S.old)],["dismissed","先不看",tot("dismissed",S.dismissed)],["blocked","不做",tot("blocked",S.blocked)]],"mustab",t)}<span class="info">${aiLine()}</span></div>`;
-  const capKey = {rank:"cards", old:"old", dismissed:"dismissed", blocked:"blocked"}[t];
-  if(capKey){ const all = tot(capKey, S[capKey]), shown = (S[capKey]||[]).length;
-    if(all > shown) h += `<div class="notice">一共 ${all} 个，这里只显示${capKey==="old"||capKey==="blocked"?"热度":"分数"}最高的 ${shown} 个（太多页面会卡）。</div>`; }
-  if(t==="rank") h += listPanel(S.cards, "暂时没有热度在涨的游戏", "刚开始运行时这里是空的。新游戏按“上线以来每天涨多少”判断，抓到一次就有；老游戏比“比昨天涨了多少”，要攒满 24 小时。", "rank");
-  else if(t==="stars") h += starsView();
-  else if(t==="old") h += listPanel(S.old, "没有热度在涨的老游戏", "上线超过一年、开始运行时就有的直播分区、老牌大游戏（含它的模拟器、手游版）0 分，放在这里；觉得值得跟就打 3 星以上，回到必看。", "old");
-  else if(t==="dismissed") h += listPanel(S.dismissed, "没有点过先不看的游戏", `热度涨到点的时候的 ${1.5} 倍会自动回到必看。`, "dismissed");
-  else if(t==="blocked") h += listPanel(S.blocked, "没有标记为不做的游戏", "", "blocked");
-  else if(t==="cand") h += candView();
-  return h;
+function platDiag(){
+  const d = S.plat_diag||[];
+  if(!d.length) return "";
+  const rows = d.map(r=>`<tr><td>${esc(SRC[r.src]||r.src)}</td><td class="r num">${fmt(r.seen)}</td><td class="r num">${fmt(r.scored)}</td><td class="r num">${fmt(r.zero)}</td><td class="r num">${r.best!=null?"第 "+r.best:"-"}</td><td class="r num">${r.best_raw!=null?"第 "+r.best_raw:"-"}</td></tr>`).join("");
+  return `<details class="panel"><summary class="pbody">各平台</summary><div class="scroll-x"><table class="dense"><thead><tr><th>平台</th><th class="r">32 小时内抓到</th><th class="r">有分数</th><th class="r">大作 / 大厂</th><th class="r">降分开最好名次</th><th class="r">降分关最好名次</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
-function starsView(){
-  const l = S.stars||[];
-  if(!l.length) return `<div class="panel">${empty("现在没有大主播在播小游戏", "")}</div>`;
-  const rows = l.map(x=>{
-    const h = Math.max(0, (Date.now()/1000 - (x.since||0))/3600);
-    const dur = h<1?"刚开始":(h<48?Math.round(h)+" 小时":Math.round(h/24)+" 天");
-    const rowAttr = x.gid ? `class="click" data-gid="${esc(x.gid)}"` : (x.cat_key && !x.generic ? `class="click" data-game="${esc(x.cat_key)}" data-name="${esc(x.game)}"` : "");
-    return `<tr ${rowAttr}>
-      <td class="g-name">${esc(x.nick)}</td><td class="t2">${esc(x.src_name)}</td>
-      <td>${esc(x.game)}${x.generic?' <span class="tag">大杂烩分区，看标题</span>':""}</td>
-      <td class="t2">${esc(x.title)}</td>
-      <td class="r num">${fmt(x.heat)}<div class="g-alt">最高 ${fmt(x.best)}</div></td>
-      <td class="nowrap t2">${dur}</td></tr>`;
-  }).join("");
-  return `<div class="panel"><div class="panel-h"><h2>大主播现在在播什么</h2></div><div class="scroll-x"><table>
-    <thead><tr><th>主播</th><th>平台</th><th>分区</th><th>标题</th><th class="r">热度</th><th>播这个分区多久</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+function mustView(){
+  const tot = (S.totals||{}).cards;
+  const key = MUST.raw ? "raw" : "final";
+  const dx = c => ((c.heat||{}).down||{}).x||0;
+  const list = [...(S.cards||[])].sort((a,b)=>((b[key]??-1e9)-(a[key]??-1e9))||(dx(b)-dx(a))).slice(0,400).map(c=>MUST.raw?{...c, final:c.raw}:c);
+  let h = `<div class="toolbar"><button class="btn${MUST.raw?"":" primary"}" data-rawtoggle>降分：${MUST.raw?"关":"开"}</button><span class="info">${fmt(tot!=null?tot:(S.cards||[]).length)} 款新游戏（上线不超过 ${fmt((S.config||{}).new_max_days)} 天）</span></div>`;
+  h += platDiag();
+  h += listPanel(list, "还没有游戏", "", "rank");
+  return h;
 }
 function signalTags(c){
   return (c.signals||[]).filter(s=>s.z!=null && s.g24!=null).slice(0,3).map(s=>{
@@ -716,11 +905,22 @@ function listTags(c){
   }
   return h;
 }
-function imitCell(c){
-  const r = c.ai?.res;
-  if(c.imit_basis==="AI" && r) return `<span class="score ${c.imit>=0.7?"s3":(c.imit>=0.45?"s2":"s1")} num">${Math.round(c.imit*10)}/10</span><div class="g-alt" style="max-width:260px">${esc(r.core||"")}</div>`;
-  if(c.imit_basis==="人工") return `<span class="score s2 num">${c.label?.stars} 星</span><div class="g-alt">你打的</div>`;
-  return `${meter(c.imit)}<div class="g-alt">${esc(c.ai?.note||"按标签估的")}</div>`;
+function heatItem(x){
+  if(!x) return '<span class="muted">-</span>';
+  const src = x.src==="bili_video" ? "B站视频" : (SRC[x.src]||x.src);
+  const rank = /^rank_/.test(x.metric), cum = /^(downloads|reserves|reviews|visits|fans|views_eq)$/.test(x.metric);
+  const met = x.metric==="views_eq" ? "播放" : (RAWMET[x.metric]||MET[x.metric]||x.metric);
+  const v = rank ? `第 ${Math.round(x.value)} 名 / 正常第 ${Math.round(x.normal)} 名` : `${cum?"每天 +":""}${fmt(Math.round(x.value))} / 正常 ${cum?"+":""}${fmt(Math.round(x.normal))}`;
+  return `${esc(src)} ${esc(met)} <b class="num">${x.x>=10?Math.round(x.x):x.x.toFixed(2)} 倍</b><div class="g-alt">${v}</div>`;
+}
+function videoRow(r, raw){
+  const z = raw ? r.z : r.zf;
+  return `${esc(r.name)} <b class="num">${fmtZ(z)}</b><div class="g-alt">每天 ${fmt(Math.round(r.value))} / 正常 ${fmt(Math.round(r.normal))} · ${fmt(r.n)} 条视频${r.full?"":" · 不满 7 天"}</div>`;
+}
+function videoItem(h, raw){
+  const v = (h||{}).videos||[];
+  if(!v.length) return '<span class="muted">-</span>';
+  return videoRow(v[0], raw) + (v.length>1?`<div class="g-alt">另 ${v.length-1} 个平台</div>`:"");
 }
 function launchCell(c){
   const ts = c.info?.launch_ts; if(!ts) return '<span class="muted">-</span>';
@@ -729,23 +929,22 @@ function launchCell(c){
 }
 function listPanel(list, t, h, mode){
   if(!list || !list.length) return `<div class="panel">${empty(t,h)}</div>`;
-  const act = c => mode==="old" ? "" : mode==="rank" ? `<button class="btn sm ghost" data-dismiss="${esc(c.gid)}">先不看</button>`
-    : (mode==="dismissed" ? `<button class="btn sm ghost" data-undismiss="${esc(c.gid)}">放回必看</button>` : `<button class="btn sm ghost" data-unblock2="${esc(c.gid)}">恢复</button>`);
+  const act = c => "";
   const rows = list.map((c,i)=>`<tr class="click" data-gid="${esc(c.gid)}">
       <td class="r t2 num">${i+1}</td>
       <td><div class="g-name">${esc(c.name)} ${c.fast?'<span class="tag solid" title="最近有效采样显示增长明显偏高">增长异常</span>':""}</div>
           <div class="g-alt">${esc((c.devs||[]).join("、")||"工作室未知")} · ${esc(c.gid)}</div>
           <div class="g-alt">${esc([c.name_en,c.name_cn].filter(x=>x&&x!==c.name).join(" / "))}</div>
           <div>${listTags(c)}</div></td>
-      <td class="r"><span class="score ${scoreCls(c.final)} num">${Math.round(c.final)}</span></td>
-      <td>${meter(c.hot)}</td>
-      <td>${imitCell(c)}</td>
+      <td class="r"><span class="score ${scoreCls(c.final)} num">${fmtZ(c.final)}</span></td>
+      <td class="t2">${heatItem((c.heat||{}).down)}</td>
+      <td class="t2">${videoItem(c.heat, MUST.raw)}</td>
       <td class="nowrap hide-sm">${launchCell(c)}</td>
       <td class="nowrap muted hide-sm">${ago(c.first_seen)}</td>
       <td class="r">${act(c)}</td>
     </tr>`).join("");
   return `<div class="panel"><div class="scroll-x"><table>
-    <thead><tr><th class="r">#</th><th>游戏</th><th class="r">分数</th><th>热度</th><th>能不能跟</th><th class="hide-sm">上线</th><th class="hide-sm">首次发现</th><th></th></tr></thead>
+    <thead><tr><th class="r">#</th><th>游戏</th><th class="r">分数</th><th>下载</th><th>视频平台</th><th class="hide-sm">上线</th><th class="hide-sm">首次发现</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div></div>`;
 }
 
@@ -1080,8 +1279,73 @@ function kwViewUnused(){
     l.map(x=>`<tr><td class="g-name">${esc(x.name)} ${x.new?'<span class="tag blue">新</span>':""}</td><td class="t2">${SRC[x.source]||x.source}</td><td class="r num">${fmt(x.rooms)}</td><td class="r num">${x.z!=null?x.z.toFixed(1):"-"}</td><td class="t2 hide-sm">${esc(Object.entries(x.games||{}).map(([g,n])=>g+" "+n).join("，"))}</td><td class="muted hide-sm">${esc(x.sample)}</td><td class="r"><button class="btn sm ghost" data-block="${esc(x.key)}">不是游戏</button></td></tr>`).join("") +
     `</tbody></table></div></div>`;
 }
-function candView(){
-  return `<div class="panel">${empty("按游戏 ID 独立记录","")}</div>`;
+/* ---------- 游戏档案（v73：全部自动判断，没有待确认） ---------- */
+const ARC = {data:null, loading:false};
+const ARC_METH = {founder:"建档", same_id:"同一平台编号", human:"你连的", store_link:"商店页互相链接", hit_cfg:"成功案例里写的别名", fs:"自动判断"};
+function arcMeth(m, ev){
+  if(m==="fs" && ev && ev.p!=null){
+    const w = ev.why||{}, bits = [];
+    if(ev.name) bits.push("同名"); else if(w.vlink) bits.push("B站 视频挂着 Steam 链接");
+    if(w.dev) bits.push(w.dev==="same"?"开发商一致":"开发商对不上");
+    if(w.rel) bits.push("上线相差"+w.rel);
+    return `自动判断：同一个的概率 ${Math.round(ev.p*100)}%` + (bits.length?`（${bits.join("，")}）`:"");
+  }
+  return ARC_METH[m]||m||"-";
+}
+async function loadArc(){
+  if(ARC.loading) return; ARC.loading = true;
+  ARC.data = (await getJSON("/api/archive/report")) || {error:true};
+  ARC.loading = false;
+  if(page==="status") renderContent();
+}
+function memTag(m, name){
+  const i = m.indexOf(":"), s = m.slice(0,i), id = m.slice(i+1);
+  const u = s==="btopic" ? "https://search.bilibili.com/all?keyword="+encodeURIComponent(id) : rawLink(s, id);
+  const t = s==="btopic" ? "B站话题" : (SRC[s]||s);
+  return (u?`<a class="tag" href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>`:`<span class="tag">${esc(t)}</span>`) + " " + esc(name||id);
+}
+function arcPanel(){
+  if(!ARC.data){ loadArc(); return `<div class="panel">${empty("游戏档案加载中","")}</div>`; }
+  const d = ARC.data;
+  if(d.error) return `<div class="panel">${empty("读不到游戏档案","雷达程序可能没在运行")}</div>`;
+  const st = d.stats||{}, fs = d.fs||{}, bm = d.by_method||{};
+  let h = `<div class="kpis" style="margin-top:16px">
+    <div class="kpi"><div class="l">游戏档案</div><div class="v num">${fmt(st.games)}<small> 份</small></div></div>
+    <div class="kpi"><div class="l">连了不止一个平台</div><div class="v num">${fmt(st.multi)}<small> 份</small></div></div>
+    <div class="kpi"><div class="l">自动判断连上</div><div class="v num">${fmt(st.linked)}<small> / ${fmt(st.candidates)} 对</small></div></div>
+    <div class="kpi"><div class="l">同一个的比例（模型估）</div><div class="v num">${fs.lambda==null?"-":Math.round(fs.lambda*100)+"%"}</div></div></div>`;
+  const line = `候选 ${fmt(st.candidates)} 对：连上 ${fmt(st.linked)}，概率不到一半 ${fmt(st.below)}，同平台两款分不出谁更像 ${fmt(st.tie)}，被"一个平台只能一个编号 / 你拆开过"挡住 ${fmt(st.blocked)}；${fmt(st.skipped)} 个名字太泛（对上 ${st.block_max||"-"} 款以上）不当候选。商店互链 ${fmt(bm.store_link)}、案例别名 ${fmt(bm.hit_cfg)}、同一平台编号 ${fmt(bm.same_id)}。更新于 ${ago(st.ts)}`;
+  const gold = (d.gold||[]).map(g=>`<div class="target"><div class="h"><b>${esc(g.name)}</b><span class="t2">${g.has_answer?`对 ${(g.correct||[]).length} · 漏 ${(g.missing||[]).length} · 多 ${(g.extra||[]).length}`:"没填标准答案，下面是现在的结果"}</span></div>` +
+    ((g.archives||[]).length?(g.archives||[]).map(a=>`<div class="g-alt" style="margin:4px 0">档案 ${esc(a.gid)}：${a.members.map(m=>memTag(m.member,m.name)).join("　")}</div>`).join(""):'<div class="muted">没找到叫这个名字的档案</div>') +
+    ((g.missing||[]).length?`<div class="up">漏了：${esc(g.missing.join("、"))}</div>`:"") + ((g.extra||[]).length?`<div class="up">多了：${esc(g.extra.join("、"))}</div>`:"") + `</div>`).join("");
+  h += panel("游戏档案：自动判断", "Fellegi–Sunter 概率链接，参数从数据里算，概率过半就连", `<div class="t2" style="margin-bottom:10px">${line}</div>` + gold);
+  if((d.conflicts||[]).length) h += panel("连不上的硬证据", "", (d.conflicts||[]).map(x=>`<div>${esc(x.a)} ↔ ${esc(x.b)}：${esc(x.why||"")}</div>`).join(""));
+  return h;
+}
+function revPanel(){
+  const d = ARC.data && ARC.data.revisit;
+  if(!d) return "";
+  const iv = d.interval||{}, sb = d.skip_by||{};
+  const line = `永久不深查 ${fmt(d.skip)} 款（${Object.entries(sb).map(([k,v])=>k+" "+fmt(v)).join("，")||"-"}）· 在调度里的 ${fmt(d.tracked)} 款：每轮都查 ${fmt(iv["每轮都查"]||0)}，≤4 小时 ${fmt(iv["≤4 小时"]||0)}，≤1 天 ${fmt(iv["≤1 天"]||0)}，≤1 周 ${fmt(iv["≤1 周"]||0)}`;
+  return panel("抓取调度", "已有官方手机版 / 大作不深查；平稳的越查越少；突增立刻回到每轮都查", `<div class="t2">${line}</div>`);
+}
+async function loadArcGame(c){
+  const d = await getJSON("/api/archive/game?id="+encodeURIComponent(c.gid));
+  if(openGid!==c.gid) return;
+  const el = $("d_arc"); if(!el) return;
+  if(!d){ el.innerHTML = '<div class="muted">读不到档案</div>'; return; }
+  const ms = d.members||[];
+  let h = ms.length>1 ? `<div class="mini"><table><thead><tr><th>成员</th><th>怎么连上的</th><th></th></tr></thead><tbody>${ms.map(m=>`<tr><td>${memTag(m.member,m.name)}</td><td class="t2">${esc(arcMeth(m.method, m.evidence))}</td><td class="r">${m.method==="founder"||m.method==="same_id"?"":`<button class="btn sm ghost" data-split="${esc(m.member)}">连错了，拆出</button>`}</td></tr>`).join("")}</tbody></table></div>`
+    : '<div class="muted">这份档案只连了一个平台编号（别的平台没找到同一个游戏）。</div>';
+  const b = d.bili||{};
+  h += `<h3 style="margin-top:14px">B站</h3>`;
+  if(!(b.topics||[]).length && !b.videos && !(b.cases||[]).length) h += '<div class="muted">档案里还没有 B站 话题，或者还没对应到视频。</div>';
+  else {
+    h += `<div class="kv"><span class="k">话题</span><span>${esc((b.topics||[]).map(x=>x.slice(7)).join("、")||"-")}</span><span class="k">对应到的视频</span><span class="num">${fmt(b.videos)} 条，${fmt(b.ups)} 个 UP 主</span></div>`;
+    if((b.top||[]).length) h += `<div class="mini"><table><tbody>${b.top.map(v=>`<tr><td><a class="lnk" href="https://www.bilibili.com/video/${esc(v.bvid)}" target="_blank" rel="noopener">${esc(v.title||v.bvid)}</a></td><td class="t2">${esc(v.owner||"")}</td><td class="r num">${fmt(v.view)}</td></tr>`).join("")}</tbody></table></div>`;
+    for(const k of b.cases||[]) h += `<div class="g-alt">成功案例「${esc(k.name)}」：${esc(k.state||"-")} · ${fmt(k.videos)} 条视频 · ${fmt(k.ups)} 个 UP · 总播放 ${fmt(k.play)}</div>`;
+  }
+  el.innerHTML = h;
 }
 
 /* ---------- 新冒头 ---------- */
@@ -1190,6 +1454,7 @@ function statusView(){
     h += `<div class="grid2">` + panel("成功和失败次数", "", chartBox("c_ok", 280)) + panel("每次用时（秒）", "", chartBox("c_sec", 280)) + `</div>`;
     h += panel("每天写入的数据条数", "", chartBox("c_vol", 300));
   }
+  h += arcPanel() + revPanel();
   if(runs===null){ loadRuns(); h += `<div class="panel">${empty("加载中","")}</div>`; }
   else h += `<div class="panel"><div class="panel-h"><h2>最近运行记录</h2><span class="act"><button class="btn sm" id="reloadRuns">刷新</button></span></div><div class="scroll-x"><table><thead><tr><th>时间</th><th>任务</th><th>结果</th><th class="r">用时</th><th>说明</th></tr></thead><tbody>` +
     (runs.length ? runs.map(r=>`<tr><td class="nowrap t2 num">${new Date(r.ts*1000).toLocaleString()}</td><td>${esc(r.job)}</td><td><span class="tag ${r.ok?"ok":"hot"}">${r.ok?"成功":"失败"}</span></td><td class="r num">${(+r.seconds).toFixed(1)}s</td><td class="muted" style="max-width:620px;white-space:pre-wrap;word-break:break-all">${esc(r.ok?(r.detail||"").slice(0,400):(r.detail||"").split("\n\nTraceback")[0].slice(0,800))}</td></tr>`).join("") : `<tr><td colspan="5" class="muted">暂无记录</td></tr>`) + `</tbody></table></div></div>`;
@@ -1225,8 +1490,7 @@ function judgeSec(l, c){
     '<div class="field"><label>别名备注</label><input id="f_alias" value="' + esc((l.aliases||[]).join("，")) + '" placeholder="备注名称"></div>' +
     '<div class="field"><label>玩法词</label><input id="f_kw" value="' + esc((l.keywords||[]).join("，")) + '" placeholder="例如：合成，种田，搬砖"></div>' +
     '<div class="field"><label>备注</label><input id="f_note" value="' + esc(l.note||"") + '"></div>' +
-    (c ? '<div class="row">' + (l.dismissed ? '<button class="btn" data-undismiss="' + esc(c.gid) + '">放回必看</button>' : '<button class="btn" data-dismiss="' + esc(c.gid) + '">先不看</button>') +
-      (l.blocked ? '<button class="btn" data-unblock>恢复（取消“不做”）</button>' : '<button class="btn danger" data-blockcard>不做</button>') + '</div>' : "") +
+    (c && l.blocked ? '<div class="row"><button class="btn" data-unblock>取消以前标的“不做”</button></div>' : "") +
     '</div>';
 }
 function judgeVals(){ const a=$("f_alias"), k=$("f_kw"), n=$("f_note"); if(!a||!k||!n) return null; return {aliases:splitList(a.value), keywords:splitList(k.value), note:n.value.trim()}; }
@@ -1272,18 +1536,29 @@ function aiBlock(c){
     ${r.risk?`<div class="why"><b>最大的问题：</b>${esc(r.risk)}</div>`:""}
     <div class="why muted">读了 ${esc(a.src||"")}${a.reviews?`（当时共 ${fmt(a.reviews)} 条评论）`:""} · ${ago(a.ts)}${a.cost!=null?` · 花费 ${(a.cost*100).toFixed(1)} 分钱`:""}</div>`;
 }
+function calcNote(c){
+  const P = ((S.heat_meta||{}).platforms)||{}, rows = (c.heat||{}).videos||[];
+  const lines = Object.entries(P).map(([k,m])=>{
+    const r = rows.find(x=>x.p===k);
+    if(!m.games) return `<div class="g-alt">${esc(m.name)}：没有数据</div>`;
+    const w = Object.entries(m.weights||{}).map(([f,x])=>`${esc(f)} ×${x}`).join(" + ");
+    const base = `${esc(m.name)}：每天综合量 = ${esc(m.unit)}${w?" + "+w:""}；正常值 ${fmt(m.normal)}（${fmt(m.pool_n||m.games)} 款${esc(m.pool||"")}的中位数）`;
+    return `<div class="g-alt">${base}${r?`；这款 ${fmt(r.value)} ÷ ${fmt(m.normal)} = ${fmtZ(r.z)}`:"；这款缺少有效数据或正常值为零"}</div>`;
+  });
+  const k = rows.length;
+  return lines.join("") + (k>1?`<div class="g-alt">${k} 个平台：Σz ÷ √${k}</div>`:"") || '<span class="muted">-</span>';
+}
 function scoreHtml(c){
   const l = c.label||{};
   return `<h3>评分</h3>
         ${l.blocked?`<div class="veto">你标记了不做</div>`:""}
-        <div class="final"><span class="v num">${Math.round(c.final)}</span><span class="l">${c.factor<1?"降权 ×"+c.factor:"没有降权"}</span></div>
+        <div class="final"><span class="v num">${fmtZ(MUST.raw?c.raw:c.final)}</span><span class="l">综合互动倍率 · 正常水平 1 倍</span></div>
         <div class="breakdown">
-          <div class="bd"><div class="l">热度</div><div class="v num">${(+c.hot).toFixed(2)}</div>${meter(c.hot)}</div>
-          <div class="bd"><div class="l">能不能跟（${esc(c.imit_basis||"")}）</div><div class="v num">${(+c.imit).toFixed(2)}</div>${meter(c.imit)}</div>
-          <div class="bd"><div class="l">降权（老游戏、大作、大厂；不是商店打折）</div><div class="v num">${(+c.factor).toFixed(2)}</div>${meter(c.factor)}<div class="g-alt">${esc((c.factor_why||[]).join("，")||"没有降权")}</div></div>
+          <div class="bd"><div class="l">视频平台</div>${((c.heat||{}).videos||[]).map(r=>`<div>${videoRow(r, MUST.raw)}</div>`).join("")||'<span class="muted">-</span>'}</div>
+          <div class="bd"><div class="l">怎么算的</div>${calcNote(c)}</div>
+          <div class="bd"><div class="l">下载（只做参考）</div>${heatItem((c.heat||{}).down)}</div>
+          <div class="bd"><div class="l">降分</div>${(c.heat||{}).big?esc(c.heat.big)+" → 不排名":(((c.heat||{}).cut||[]).map(([k,f])=>esc(k)+" ×"+f).join("，")||"-")}</div>
         </div>
-        <div class="why">能不能跟依据：${esc((c.imit_why||[]).join("；")||"-")}</div>
-        <div class="why">各市场热度：${Object.entries(c.market_hot||{}).map(([k,v])=>esc(mkName(k))+" "+v).join("，")||"-"}</div>
         ${(c.flags||[]).length?`<div style="margin-top:8px">${flagTags(c)}</div>`:""}`;
 }
 // v51：定时刷新时只换分数这一块，不重画整个详情（以前整块重画，看到一半会跳回顶上，没保存的字也会丢）
@@ -1307,6 +1582,7 @@ function renderDrawer(c, fetchSeries){
       <button class="btn ghost close" data-close>关闭</button></div>
     <div class="db">
       <div class="sec" id="d_score">${scoreHtml(c)}</div>
+      <div class="sec"><h3>游戏档案</h3><div id="d_arc"><div class="muted">加载中</div></div></div>
       <div class="sec"><h3>历史对照</h3>${histBlock(c)}</div>
       <div class="sec"><h3>AI 怎么看</h3>${aiBlock(c)}</div>
       <div class="sec"><h3>在哪里火</h3>
@@ -1329,7 +1605,7 @@ function renderDrawer(c, fetchSeries){
     </div>`;
   judgeInit(c.members[0], l, c);
   if(c.hist) withCharts(()=>mountHist(c));
-  if(fetchSeries) loadCharts(c);
+  if(fetchSeries){ loadCharts(c); loadArcGame(c); }
 }
 async function loadCharts(c){
   const sup = [];
@@ -1357,75 +1633,6 @@ async function loadCharts(c){
 }
 
 /* ---------- 实时运行情况 ---------- */
-/* ---------- 机会（第一期：B站早期信号） ---------- */
-const OPP = {list:null, game:null, err:"", open:null};
-async function loadOpp(){
-  try{ OPP.list = await getJSON("/api/opp/list"); OPP.err=""; }
-  catch(e){ OPP.err = "读不到机会列表：" + e; }
-  if(page==="opp") renderContent();
-}
-async function loadOppGame(gid){
-  OPP.open = gid;
-  try{ OPP.game = await getJSON("/api/opp/game?id="+encodeURIComponent(gid)); }
-  catch(e){ OPP.game = {error:String(e)}; }
-  if(page==="opp") renderContent();
-}
-function oppView(){
-  if(!OPP.list) { loadOpp(); return empty("加载中",""); }
-  if(OPP.err) return `<div class="notice" style="border-color:#dc2626;color:#b42318">${esc(OPP.err)}</div>`;
-  const items = OPP.list.items || [];
-  const cal = OPP.list.calibrated;
-  let h = `<div class="notice">未校准：下面只有原始指标和百分位，没有概率。概率要等案例库导入后用历史案例算出来。</div>`;
-  if(!items.length){
-    h += panel("机会","", `<div class="t2">还没有发现正在起势的电脑游戏。B站分区新视频每 20 分钟扫一轮，跟踪池里的视频每 2 小时采样一次。</div>`);
-    return h;
-  }
-  const groups = {};
-  for(const it of items){ (groups[it.state||"观察"] = groups[it.state||"观察"] || []).push(it); }
-  for(const st of Object.keys(groups)){
-    const g = groups[st];
-    const rows = g.map(it=>`<tr data-opp="${esc(it.id)}">
-      <td><a class="lnk" data-opp="${esc(it.id)}">${esc(it.name)}</a></td>
-      <td><span class="tag">${esc(it.state)}</span></td>
-      <td>${it.age_h==null?"-":it.age_h.toFixed(1)+" 小时"}</td>
-      <td class="r num">${it.n_up??"-"}</td>
-      <td class="r num">${fmt(it.views_sum)}</td>
-      <td class="r num">${it.views_top1_share==null?"-":(it.views_top1_share*100).toFixed(0)+"%"}</td>
-      <td class="r num">${it.demand_mobile==null?"-":(it.demand_mobile*100).toFixed(1)+"%"}</td>
-      <td class="r num">${it.best_age_pct==null?"-":(it.best_age_pct*100).toFixed(0)+"%"}</td>
-      <td class="r num">${it.n_live??"-"}</td>
-      <td>${it.low_conf_n?`<span class="up" title="对应可信度低">${it.low_conf_n} 条待核对</span>`:"-"}</td>
-    </tr>`).join("");
-    h += panel(`${st}（${g.length}）`,"",
-      `<table class="tbl"><thead><tr><th>游戏</th><th>状态</th><th>起势了多久</th><th>跟风 UP</th>
-        <th>总播放</th><th>头部占比</th><th>求手机版</th><th>同期百分位</th><th>在播主播</th><th>对应</th></tr></thead>
-        <tbody>${rows}</tbody></table>`);
-  }
-  if(OPP.open && OPP.game) h += oppGameView(OPP.game);
-  return h;
-}
-function oppGameView(g){
-  if(g.error) return panel("详情","", `<div class="up">${esc(g.error)}</div>`);
-  const f = g.features || {};
-  const rows = (g.videos||[]).slice().reverse().map(v=>`<tr>
-    <td><a class="lnk" href="${esc(v.url)}" target="_blank">${esc(v.title||v.bvid)}</a></td>
-    <td>${esc(v.owner||"")}</td>
-    <td>${esc(v.method||"")}</td>
-    <td class="r num">${v.conf!=null?(v.conf*100).toFixed(0)+"%":"-"}</td>
-    <td>${v.low_conf?`<span class="up">待核对</span>`:"-"}</td>
-  </tr>`).join("");
-  const kv = [["起势起点", f.t0?ago(f.t0):"-"],["跟风 UP", f.n_up],["24 小时新增 UP", f.n_up_new_24h],
-              ["总播放", fmt(f.views_sum)],["头部占比", f.views_top1_share==null?"-":(f.views_top1_share*100).toFixed(0)+"%"],
-              ["最好百分位", f.best_age_pct==null?"-":(f.best_age_pct*100).toFixed(0)+"%"],
-              ["求手机版率", f.demand_mobile==null?"-":(f.demand_mobile*100).toFixed(1)+"%"],
-              ["问游戏名率", f.demand_name==null?"-":(f.demand_name*100).toFixed(1)+"%"],
-              ["想玩率", f.demand_want==null?"-":(f.demand_want*100).toFixed(1)+"%"],
-              ["在播主播", f.n_live??"-"],["相关视频", f.videos]]
-    .map(([k,v])=>`<div class="kv"><span class="k">${k}</span><span class="num">${v??"-"}</span></div>`).join("");
-  return panel(`${esc(g.name)} · 明细`,"", `${kv}
-    ${rows?`<table class="tbl" style="margin-top:12px"><thead><tr><th>视频</th><th>UP 主</th><th>对应方式</th><th>可信度</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="t2">还没有对应到视频。</div>`}`);
-}
-
 /* ---------- 成功案例（历史爆款研究） ---------- */
 const HIT = {list:null, game:null, open:null, err:"", loaded:false, loading:false};
 async function loadHit(){
@@ -1549,7 +1756,7 @@ async function pollActivity(){
       const nc = $("nowcard"); if(nc) nc.outerHTML = nowCard();
     }
     if(lastRev!==null && r.state.rev < lastRev){ load(); }   // 程序重启过（可能是自动更新）
-    if(lastRev!==null && r.state.rev!==lastRev){ runs = null; STATS = null; IDX = null; FRESH.data = null; for(const b of Object.values(BD)){ b.stale = true; } load(); }
+    if(lastRev!==null && r.state.rev!==lastRev){ runs = null; STATS = null; IDX = null; ARC.data = null; FRESH.data = null; for(const b of Object.values(BD)){ b.stale = true; } load(); }
     lastRev = r.state.rev;
   }catch(e){
     $("pulse").className = "pulse"; $("liveText").textContent = "连接不上雷达程序（可能已退出）";
@@ -1567,15 +1774,16 @@ function goPage(p){
   contentPage = null; render(); document.querySelector("main").scrollTo(0,0); window.scrollTo(0,0);
 }
 document.addEventListener("click", async e=>{
-  const t = e.target.closest("[data-page],[data-dismiss],[data-undismiss],[data-unblock2],[data-mustab],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-link],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],[data-opp],[data-hit],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
+  const t = e.target.closest("[data-page],[data-rawtoggle],[data-dismiss],[data-undismiss],[data-unblock2],[data-mustab],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],[data-split],[data-hit],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
   if(!t) return;
   // v51：整行都能点开详情；行里的“打开原网页”链接、勾选框照常用
   if(t.tagName==="TR" && e.target.closest("a[href],input,select,textarea,label,button")) return;
   const sc = curBoard();
   if(t.dataset.page){ goPage(t.dataset.page); return; }
   if(t.dataset.mustab){ MUST.tab=t.dataset.mustab; renderContent(); return; }
+  if(t.dataset.rawtoggle!==undefined){ MUST.raw=!MUST.raw; renderContent(); if(openGid){ const c=findCard(openGid); if(c) refreshScore(c); } return; }
   if(t.dataset.plat){ pickPlat(t.dataset.plat); return; }
-if(t.dataset.opp){ loadOppGame(t.dataset.opp); return; }
+  if(t.dataset.split){ const ok = await post("/api/archive/split",{member:t.dataset.split}); toast(ok?"已拆出，重新打分后生效":"拆出失败：雷达程序可能没在运行"); if(ok && openGid){ const c=findCard(openGid); if(c) loadArcGame(c); } ARC.data=null; return; }
 if(t.dataset.hit){ loadHitGame(t.dataset.hit); return; }
   if(t.dataset.ptab){ PLAT.tab=t.dataset.ptab; if(PLAT.tab==="fresh") FRESH.data=null; else if(PLAT.tab==="movers") IDX=null; else if(PLAT.tab==="raw") RAW.data=null; contentPage=null; renderContent(); return; }
   if(t.dataset.mkscope){ MKSCOPE=t.dataset.mkscope; contentPage=null; renderContent(); return; }
@@ -1612,7 +1820,6 @@ if(t.dataset.hit){ loadHitGame(t.dataset.hit); return; }
   if(t.dataset.cmpclose){ const b=bstate(t.dataset.cmpclose); b.cmp=null; renderContent(); return; }
   if(t.dataset.gid){ openDrawer(t.dataset.gid); return; }
   if(t.dataset.block){ await post("/api/label",{member:t.dataset.block, blocked:true}); S.keywords=(S.keywords||[]).filter(x=>x.key!==t.dataset.block); renderContent(); afterChange("已标记，不再显示"); return; }
-  if(t.dataset.link){ await post("/api/link",{a:t.dataset.a, b:t.dataset.b, relation:t.dataset.link}); S.candidates=(S.candidates||[]).filter(x=>!(x.a===t.dataset.a&&x.b===t.dataset.b)); render(); afterChange("已记录"); return; }
   if(t.dataset.stars!==undefined){
     // v51：打分只改按钮本身，不重画详情（以前重画会跳回顶上）；必看里的和各平台里的游戏都能打
     const J = JUDGE; if(!J) return;

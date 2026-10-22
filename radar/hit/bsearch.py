@@ -10,45 +10,25 @@
   视频在游戏分区，且 标签命中专属标签 或 标题命中专属短语。
 
 "赌石"这种泛词只用来搜，**绝不用来判定归属**，否则脏数据会灌进来。
-判定靠 tag 比靠标题稳：标题里没写游戏名的视频不会漏，无关内容也不会混进来。
 
 ## 搜索上限 1000 条
 接口单次查询最多给 1000 条。所以按月切；某个月顶到 1000 就再切成天。
 
-## 为什么用 wbi 签名而不是浏览器 fetch
-不带签名的 `x/web-interface/search/type` 现在对谁都是 412（你的浏览器里也一样），
-带 wbi 签名的 `x/web-interface/wbi/search/type` 才返回 code=0。所以这里直接用
-Python 发签名请求，比开浏览器快得多，也不用在你窗口里留标签页。
-Cookie 从你已登录的浏览器取一次，缓存 6 小时，过期再取。
+请求、签名、Cookie、风控暂停全部走 radar/sources/bili.py（全程序唯一的 B站 客户端）。
+这里的每个 tag / 标题短语在游戏档案里是一个 btopic 成员，和 Steam / TapTap 等合并成同一个游戏。
 """
 import concurrent.futures
 import datetime
-import json
-import os
 import random
 import sys
 import threading
 import time
 
-_here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _here not in sys.path:
-    sys.path.insert(0, _here)
-# 托盘版 app.run() 把 sys.stdout 换成了 Tee，没有 reconfigure()，别在这里炸。
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except Exception:
-    pass
+from .. import config, db
+from ..sources import bili
+from . import ensure
 
-from radar import cdp, db, net                        # noqa: E402
-from radar.hit import ensure                          # noqa: E402
-from radar.opp import wbi                             # noqa: E402
-
-SEARCH_URL = "https://api.bilibili.com/x/web-interface/wbi/search/type"
-CARD_URL = "https://api.bilibili.com/x/web-interface/card"
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0")
-
-GAME_TIDS = {4, 17, 65, 171, 172, 173, 121, 136, 19}
+GAME_TIDS = bili.GAME_TIDS
 
 # 三款"成功"游戏（用户定的体量）。搜索词和归属判定分开写。
 # 这三款是人指定的种子。之后自动发现的游戏不进这里，进 hit_game_cfg 表，
@@ -118,6 +98,16 @@ def games():
     return out
 
 
+def topics(game):
+    """这个案例对应的 B站 话题成员（游戏档案里的 btopic:xxx）。"""
+    out = []
+    for t in list(game.get("tags") or []) + list(game.get("title_terms") or []):
+        n = bili.normalize(t)
+        if n and "btopic:" + n not in out:
+            out.append("btopic:" + n)
+    return out
+
+
 def add_game(name, kws=None, tags=None, title_terms=None, source="auto", note=""):
     """把一款游戏加进自动清单。返回它的 gid。"""
     ensure_cfg()
@@ -135,45 +125,6 @@ def add_game(name, kws=None, tags=None, title_terms=None, source="auto", note=""
                   (gid, name, ",".join(kws), ",".join(tags), ",".join(title_terms),
                    source, int(time.time()), note))
     return gid
-
-JS_SEARCH = """
-(async (kw, beg, end, page, order) => {
-  const u = new URL('https://api.bilibili.com/x/web-interface/search/type');
-  u.searchParams.set('search_type','video');
-  u.searchParams.set('keyword', kw);
-  u.searchParams.set('order', order);
-  u.searchParams.set('page', String(page));
-  u.searchParams.set('page_size','30');
-  u.searchParams.set('tids','4');
-  if (beg) u.searchParams.set('pubtime_begin_s', String(beg));
-  if (end) u.searchParams.set('pubtime_end_s', String(end));
-  const r = await fetch(u.toString(), {credentials:'include'});
-  const t = await r.text();
-  if (!t.trim().startsWith('{')) {
-    // B站被挑战/被拦时会返回一段 HTML 验证页。这绝不能被当成"没有数据"。
-    return {code:-1, message:'HTTP '+r.status+' 返回的不是 JSON（疑似反爬验证页）',
-            total:0, pages:0, list:[]};
-  }
-  const j = JSON.parse(t);
-  const d = j.data || {};
-  return {code:j.code, message:j.message||'', total:d.numResults||0, pages:d.numPages||0,
-    list:(d.result||[]).map(v=>({
-      bvid:v.bvid, play:v.play||0, like:v.like||0, reply:v.video_review||0,
-      mid:String(v.mid||''), up:v.author||'', tid:v.typeid, tname:v.typename||'',
-      pubdate:v.pubdate||0, title:(v.title||'').replace(/<[^>]+>/g,''),
-      tag:v.tag||''
-    }))};
-})(%s, %s, %s, %s, %s)
-"""
-
-JS_CARD = """
-(async (mid) => {
-  const r = await fetch('https://api.bilibili.com/x/web-interface/card?mid=' + mid, {credentials:'include'});
-  const j = await r.json();
-  const d = j.data || {};
-  return {code:j.code, follower:(d.follower||0), name:(d.card||{}).name || ''};
-})(%s)
-"""
 
 
 def _ts(y, m, d=1):
@@ -195,102 +146,26 @@ def month_ranges(y0=2018, y1=None):
 
 
 class Searcher:
-    """用 wbi 签名的搜索接口，Python 直发。
-
-    Cookie 从已登录的浏览器取一次，存到 radar_data/bili_cookie.json，6 小时内复用，
-    这样不会为了每次查询都在你窗口里开标签页。
-    """
-
-    CACHE_HOURS = 6
+    """旧调用方式的薄壳，实际全部转给 bili 客户端。"""
 
     def __init__(self, port=9222, cookie_file=None):
-        self.port = port
-        self.cookie_file = cookie_file or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "radar_data", "bili_cookie.json")
-        self._ck = None
         self.n = 0
 
-    def _load_cached(self):
-        try:
-            with open(self.cookie_file, "r", encoding="utf-8") as f:
-                d = json.load(f)
-            if time.time() - float(d.get("ts") or 0) < self.CACHE_HOURS * 3600 and d.get("cookie"):
-                return d["cookie"]
-        except Exception:                         # noqa: BLE001
-            pass
-        return None
-
-    def _fetch_cookies(self):
-        """从已登录的浏览器读一次 cookie，读完把标签页关掉。"""
-        tab = cdp.open_tab("https://www.bilibili.com/", self.port, wait=4.0, background=True)
-        try:
-            ck = tab.cookies(["https://www.bilibili.com"])
-        finally:
-            cdp.close_tab(tab)
-        if "SESSDATA" not in ck:
-            raise RuntimeError("浏览器里没有 B站 登录态，先登录一下")
-        val = "; ".join("%s=%s" % (k, v) for k, v in ck.items())
-        try:
-            os.makedirs(os.path.dirname(self.cookie_file), exist_ok=True)
-            with open(self.cookie_file, "w", encoding="utf-8") as f:
-                json.dump({"ts": time.time(), "cookie": val}, f)
-        except Exception:                         # noqa: BLE001
-            pass
-        return val
-
-    def cookie(self, force=False):
-        if force:
-            self._ck = None
-        if not self._ck:
-            self._ck = self._load_cached() or self._fetch_cookies()
-        return self._ck
-
-    def _headers(self):
-        return {"Cookie": self.cookie(), "Referer": "https://search.bilibili.com/",
-                "Origin": "https://search.bilibili.com", "User-Agent": UA}
-
     def search(self, kw, beg, end, page=1, order="pubdate"):
-        """查一页。
-
-        失败必须抛出来，不能返回 0。返回 0 会让"被拦住/调用失败"和"这款游戏这段
-        时间没有视频"看起来一模一样，生命周期起点会算错——上一版就是这么错的。
-        """
-        params = {"search_type": "video", "keyword": kw, "order": order,
-                  "page": page, "page_size": 30, "tids": 4}
-        if beg:
-            params["pubtime_begin_s"] = beg
-        if end:
-            params["pubtime_end_s"] = end
-        d = wbi.get_signed(SEARCH_URL, params, headers=self._headers(), retries=2)
-        if d.get("code") != 0:
-            raise RuntimeError("B站搜索 code=%s %s" % (d.get("code"), d.get("message") or ""))
-        data = d.get("data") or {}
+        """查一页。失败必须抛出来，不能返回 0。"""
+        r = bili.search(kw, beg, end, page, order)
         self.n += 1
-        return {"total": int(data.get("numResults") or 0),
-                "pages": int(data.get("numPages") or 0),
-                "list": [_clean(v) for v in (data.get("result") or [])]}
+        return r
 
     def card(self, mid):
-        """UP 主现在有多少粉丝。"""
-        d = net.get_json_strict(CARD_URL, {"mid": mid}, headers=self._headers(), retries=1, timeout=12)
-        data = d.get("data") or {}
-        return {"code": d.get("code"), "follower": int(data.get("follower") or 0),
-                "name": (data.get("card") or {}).get("name") or ""}
+        r = bili.card(mid)
+        return {"code": 0, "follower": r["follower"], "name": r["name"]}
+
+    def space_videos(self, mid, n=30):
+        return bili.space_videos(mid, n)
 
     def close(self):
         pass
-
-
-def _clean(v):
-    """把接口返回的一条整理成我们要的形状。"""
-    title = (v.get("title") or "")
-    for a, b in (('<em class="keyword">', ""), ("</em>", "")):
-        title = title.replace(a, b)
-    return {"bvid": v.get("bvid"), "play": v.get("play") or 0, "like": v.get("like") or 0,
-            "reply": v.get("video_review") or 0, "mid": str(v.get("mid") or ""),
-            "up": v.get("author") or "", "tid": v.get("typeid"), "tname": v.get("typename") or "",
-            "pubdate": v.get("pubdate") or 0, "title": title, "tag": v.get("tag") or ""}
 
 
 def _fetch_span(s, kw, beg, end):
@@ -336,15 +211,7 @@ def _fetch_span(s, kw, beg, end):
 
 
 def _tid(v):
-    """分区 id 统一成整数。
-
-    接口给的 typeid 是字符串（'17'），集合里是整数（17），直接比会永远不相等，
-    结果就是"一条都不属于这款游戏"——踩过一次，别再踩。
-    """
-    try:
-        return int(v.get("tid"))
-    except (TypeError, ValueError):
-        return None
+    return bili.tid_of(v)
 
 
 def belongs(game, v):
@@ -383,6 +250,9 @@ def _retry(fn, tries=4, backoff=(20, 60, 120)):
     for i in range(tries):
         try:
             return fn()
+        except bili.RiskError as e:
+            bili.note_risk(e)
+            raise
         except Exception as e:                    # noqa: BLE001
             last = e
             if i < tries - 1:
@@ -393,12 +263,12 @@ def _retry(fn, tries=4, backoff=(20, 60, 120)):
 
 
 def _total_until(s, game, end, beg=None):
-    """从 beg（默认 2018-01）到 end 之前，这款游戏一共有多少条（各别名相加）。
+    """从 beg（默认统计窗口起点）到 end 之前，这款游戏一共有多少条（各别名相加）。
 
     注意方向：必须是"从头到这个月"，不能是"从这个月到现在"。后者对任何较早的月份
     都成立（今天的数据也在区间里），二分会被带偏到 2018 年——踩过。
     """
-    beg = beg or _ts(2018, 1, 1)
+    beg = beg or _ts(_start_year(), 1, 1)
     tot = 0
     for kw in game["kws"]:
         r = _retry(lambda k=kw: s.search(k, beg, end, 1, order="pubdate"))
@@ -407,24 +277,51 @@ def _total_until(s, game, end, beg=None):
     return tot
 
 
-# 统计窗口起点。为什么不是 2018：
-# "竞拍之王"这种词在 2018 年也有零散视频（泛指"拍卖之王"），一条也算起点的话，
-# 要逐月取一百多个月、跑一个多小时，而且那条根本不是这款游戏。这两款都是近一两年
-# 起来的，从 2025-01 开始取，前面正好是一段贴着 0 的平线，"从零起势"看得清楚。
-WINDOW_START = (2025, 1)
+def _start_year():
+    return int(getattr(config, "HIT_WINDOW_START_YEAR", 2018) or 2018)
+
+
+def _lead_months():
+    return int(getattr(config, "HIT_LEAD_MONTHS", 3) or 0)
 
 
 def window_spans(y0=None):
-    """统计窗口内的月份列表（老 -> 新）。"""
-    y0 = y0 or WINDOW_START[0]
-    return month_ranges(y0)
+    """统计窗口内的月份列表（老 -> 新）。默认从 HIT_WINDOW_START_YEAR（2018）开始。"""
+    return month_ranges(y0 or _start_year())
+
+
+def lifecycle_start(s, game, spans=None):
+    """二分找这款游戏第一条视频出现在哪个月，再往前多取 HIT_LEAD_MONTHS 个月。
+
+    "从 2018 到这个月一共几条"随月份只增不减，所以可以二分，十来次请求就够，
+    不用逐月翻一百多个月。泛词在早年的零星视频也会让起点变早，这只多花请求，不会漏数据。
+    """
+    spans = spans or window_spans()
+    lo, hi = 0, len(spans) - 1
+
+    def has(i):
+        # 搜索接口会随机返回 0（见 discover._count），0 要再查一次才信
+        if _total_until(s, game, spans[i][2], spans[0][1]) > 0:
+            return True
+        time.sleep(1.0)
+        return _total_until(s, game, spans[i][2], spans[0][1]) > 0
+
+    if not has(hi):
+        return hi
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if has(mid):
+            hi = mid
+        else:
+            lo = mid + 1
+    return max(0, lo - _lead_months())
 
 
 def collect(game, y0=None, y1=None, quiet=False):
     """把一款游戏在统计窗口内的数据捞下来。返回统计。
 
     y0/y1 是可选的年份上下界，只用来补历史（比如只补 2020~2024），
-    不传就按 WINDOW_START 走。存库是 INSERT OR REPLACE，补历史不会动已有行。
+    不传就从 HIT_WINDOW_START_YEAR 起二分找起点。存库是 INSERT OR REPLACE，补历史不会动已有行。
     """
     ensure()
     s = Searcher(9222)
@@ -432,6 +329,8 @@ def collect(game, y0=None, y1=None, quiet=False):
     allv = {}
     try:
         active = window_spans(y0)
+        if not y0:
+            active = active[lifecycle_start(s, game, active):]
         if y1:
             active = [m for m in active if int(m[0][:4]) <= int(y1)]
         if not quiet:
@@ -456,9 +355,6 @@ def collect(game, y0=None, y1=None, quiet=False):
                 "sec": int(time.time() - t0)}
     finally:
         s.close()
-
-
-SPACE_URL = "https://api.bilibili.com/x/space/wbi/arc/search"
 
 
 def ensure_stat_table(c):
@@ -501,6 +397,9 @@ def snapshot(gid=None, days=21, quiet=False):
                         for v in _fetch_span(s, kw, beg, end):
                             if belongs(g, v):
                                 got[v["bvid"]] = v
+                    except bili.RiskError as e:
+                        bili.note_risk(e)
+                        raise
                     except Exception as e:        # noqa: BLE001
                         print("   快照 %s %s 失败：%s" % (g["name"], d, e))
                     time.sleep(random.uniform(0.2, 0.4))
@@ -549,14 +448,7 @@ def up_baseline(s, mid, n=30):
     必须剔掉本项目的视频：某个小 UP 因为一条游戏爆款冲上 200 万，如果不剔掉，
     他的"平时水平"会被自己抬高，爆款倍数就被算小了。
     """
-    params = {"mid": mid, "ps": n, "pn": 1, "order": "pubdate", "index": 0,
-              "tid": 0, "keyword": ""}
-    h = s._headers()
-    h["Referer"] = "https://space.bilibili.com/%s/video" % mid
-    d = wbi.get_signed(SPACE_URL, params, headers=h, retries=2)
-    if d.get("code") != 0:
-        raise RuntimeError("空间接口 code=%s %s" % (d.get("code"), d.get("message") or ""))
-    lst = (((d.get("data") or {}).get("list") or {}).get("vlist")) or []
+    lst = s.space_videos(mid, n)
     terms = _game_terms()
     plays, days = [], []
     for v in lst:
@@ -627,8 +519,13 @@ def baselines(gid=None, limit=3000, min_followers=10000, top=30, workers=8):
     lock = threading.Lock()
 
     def work(r):
+        if bili.paused():
+            return None
         try:
             b = up_baseline(s, r["mid"])
+        except bili.RiskError as e:
+            bili.note_risk(e)
+            return None
         except Exception as e:                    # noqa: BLE001
             with lock:
                 print("   失败 %s：%s" % (r["up"] or r["mid"], str(e)[:60]))

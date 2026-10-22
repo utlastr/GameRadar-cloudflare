@@ -5,10 +5,36 @@ import os
 import random
 import time
 import traceback
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
-from . import activity, config, db
+from . import activity, config, db, revisit
 from .sources import (appstore_rank, bili, crazygames, douyu, fortnite, gravity, haoyou, huya, itch, kick, mistore,
                       poki, roblox, steam, taptap, twitch)
+
+_status_lock = threading.Lock()
+_platform_locks = {}
+_platform_guard = threading.Lock()
+_between_lock = threading.Lock()
+
+
+def platform_lock(source):
+    key = {"tapmaker": "taptap", "appcn": "appstore", "appus": "appstore",
+           "bvideo": "bili"}.get(source, source)
+    with _platform_guard:
+        return _platform_locks.setdefault(key, threading.RLock())
+
+
+def _parallel(run, fns, ts):
+    # Each lane drains one platform; workers do not wait behind same-platform work.
+    lanes = {}
+    for source in run:
+        lanes.setdefault(id(platform_lock(source)), []).append(source)
+    def lane(sources):
+        for source in sources:
+            _run(source, fns[source], ts)
+    with ThreadPoolExecutor(max_workers=10, thread_name_prefix="collector") as pool:
+        list(pool.map(lane, lanes.values()))
 
 
 def _align(ts, minutes):
@@ -39,6 +65,11 @@ def _save(source, ts, items):
 
 
 def _status(source, ok, count=0, err="", warn=""):
+    with _status_lock:
+        _status_update(source, ok, count, err, warn)
+
+
+def _status_update(source, ok, count=0, err="", warn=""):
     st = db.kv_get("source_status", {}) or {}
     s = st.get(source, {})
     now = int(time.time())
@@ -62,6 +93,11 @@ SLOW_EVERY_HOURS = {"haoyou": 2, "mistore": 3, "appcn": 2, "appus": 2, "itch": 2
 
 
 def _run(source, fn, ts):
+    with platform_lock(source):
+        return _run_locked(source, fn, ts)
+
+
+def _run_locked(source, fn, ts):
     if not config.SOURCES_ENABLED.get(source, True):
         return
     name = NAMES.get(source, source)
@@ -313,14 +349,19 @@ def _steam(ts):
         raise RuntimeError("Steam 榜单和近期发行池均没有可追踪的游戏：" + "; ".join(errors))
 
     items, fetched = [], 0
+    plan = revisit.Plan(ts)
+    deep = set()
     # New releases need their details before already-known chart entries.
     ids.sort(key=lambda appid: (bool((known.get(str(appid)) or {}).get("fetched_at")),
                                -((known.get(str(appid)) or {}).get("release_ts") or 0)))
     for i, appid in enumerate(ids, 1):
         activity.progress(i, len(ids), f"游戏详情和在线人数 {i} / {len(ids)}")
         key = str(appid)
+        member = "steam:" + key
         extra = dict(known.get(key) or {})
         stale = ts - (extra.get("fetched_at") or 0) > 7 * 86400
+        if plan.skipped(member) and extra.get("fetched_at"):
+            stale = False
         if stale and fetched < config.MAX_STEAM_DETAILS_PER_RUN:
             fetched += 1
             try:
@@ -332,7 +373,14 @@ def _steam(ts):
         if extra.get("type") and extra["type"] != "game":
             continue
         metrics = {}
-        if not extra.get("coming_soon"):
+        r = ranks.get(appid)
+        if r:
+            metrics["rank_played"] = r.get("rank")
+            if r.get("peak"):
+                metrics["peak_daily"] = r["peak"]
+        plan.signal(member, revisit.rank_value(metrics))
+        if not extra.get("coming_soon") and plan.due(member):
+            deep.add(key)
             try:
                 p = steam.current_players(appid)
             except Exception:
@@ -340,11 +388,6 @@ def _steam(ts):
             if p is not None:
                 metrics["players"] = p
             time.sleep(0.15)
-        r = ranks.get(appid)
-        if r:
-            metrics["rank_played"] = r.get("rank")
-            if r.get("peak"):
-                metrics["peak_daily"] = r["peak"]
         if metrics:
             extra.pop("metrics_pending", None)
         extra["lists"] = lists.get(appid, [])
@@ -369,7 +412,7 @@ def _steam(ts):
     # 上线不久的游戏也要评论数（"上线以来平均每天多少条评论"靠它）
     for it in items:
         rel = it["extra"].get("release_ts") or 0
-        if it not in top and rel and not it["extra"].get("coming_soon") \
+        if it not in top and it["entity"] in deep and rel and not it["extra"].get("coming_soon") \
                 and ts - rel < config.LAUNCH_TRACK_DAYS * 86400:
             top.append(it)
     activity.say(f"Steam：榜单 {len(ids) - kept} 款，另有上线不久继续跟踪 {kept} 款，查评论数 {len(top)} 款")
@@ -386,6 +429,11 @@ def _steam(ts):
             it["metrics"]["reviews"] = total
             it["metrics"]["reviews_cn"] = cn or 0
             it["extra"]["cn_share"] = round((cn or 0) / total, 3)
+    for it in items:
+        if it["entity"] in deep:
+            plan.done("steam:" + it["entity"], it["metrics"], ts)
+    plan.flush()
+    activity.say("Steam：" + plan.summary())
     _save("steam", ts, items)
     return len(items)
 
@@ -407,12 +455,17 @@ _between_last = 0.0
 def _between():
     """TapTap 详情一抓就是几十分钟；中途到点了先抓一轮虎牙斗鱼，直播数据不断档。"""
     global _between_last
-    if _between_fn and time.time() - _between_last >= 60:
-        _between_last = time.time()
-        try:
-            _between_fn()
-        except Exception:
-            traceback.print_exc()
+    if not _between_lock.acquire(blocking=False):
+        return
+    try:
+        if _between_fn and time.time() - _between_last >= 60:
+            _between_last = time.time()
+            try:
+                _between_fn()
+            except Exception:
+                traceback.print_exc()
+    finally:
+        _between_lock.release()
 
 
 def _known(source):
@@ -470,11 +523,14 @@ def _taptap(ts):
     known = _known("taptap")
     ids = list(board)
     batch = []
+    plan = revisit.Plan(ts)
+    tried = 0
 
     def flush():
         if batch:
             _save("taptap", ts, batch)
             batch.clear()
+        plan.flush()
         r.update({"done": sorted(done), "ok": ok})
         _resume_put("taptap", r)
 
@@ -484,15 +540,22 @@ def _taptap(ts):
         activity.progress(i, len(ids), f"打开游戏详情 {i} / {len(ids)}")
         if i % 100 == 0:
             activity.say(f"TapTap 榜单：详情页 {i} / {len(ids)}，成功 {ok} 款")
-        _between()
         b = board[key]
-        app = taptap.detail(key)
-        _detail_pause()
+        member = "taptap:" + key
+        rank_m = {"rank_" + taptap.BOARD_RANK_KEYS[c]: p for c, p in b["lists"] if taptap.BOARD_RANK_KEYS.get(c)}
+        plan.signal(member, revisit.rank_value(rank_m))
+        app = None
+        if plan.due(member):
+            _between()
+            tried += 1
+            app = taptap.detail(key)
+            _detail_pause()
         prev = (known.get(key) or (None, 0, {}))[2]
         if app and app != taptap.GONE:
             ok += 1
             it = taptap.parse_app(app)
             it["extra"]["detail_at"] = ts
+            plan.done(member, it["metrics"], ts)
         else:
             x = dict(prev)
             x.setdefault("preorder", False)       # 在下载榜上的都已上线
@@ -509,9 +572,9 @@ def _taptap(ts):
             flush()
     flush()
     _resume_clear("taptap")
-    if ids and not ok:
-        raise RuntimeError(f"榜单拿到 {len(ids)} 款，但详情页一个都没打开（热度数据缺失）")
-    activity.say(f"TapTap 榜单：{len(ids)} 款，详情成功 {ok} 款")
+    if tried and not ok:
+        raise RuntimeError(f"榜单拿到 {len(ids)} 款，该打开的 {tried} 款详情页一个都没打开（热度数据缺失）")
+    activity.say(f"TapTap 榜单：{len(ids)} 款，详情成功 {ok} 款；" + plan.summary())
     return len(ids)
 
 
@@ -519,11 +582,14 @@ def _taptap(ts):
 def _tapmaker(ts):
     """照参考网站 taptap-maker-tracker：翻 TapTap制造 标签页 1–50 页拿游戏，再逐个打开详情页。
 
-    标签页上的（约 500 款）每小时都打开详情；以前发现、现在掉出标签页的老游戏（含以前的创意工坊游戏），
-    每 TAPMAKER_REFRESH_HOURS 小时补一次（上线 14 天内的 3 小时一次），每轮最多 TAPMAKER_DETAIL_PER_RUN 款。
+    标签页（约 500 款）每轮都翻；以前发现、现在掉出标签页的老游戏（含以前的创意工坊游戏），
+    按抓取调度（radar/revisit.py）到点的才补，上线 14 天内的优先，每轮最多 TAPMAKER_DETAIL_PER_RUN 款。
+    标签页上的也按调度：平稳的间隔翻倍，名次突升或增速异常的回到每轮都查。
     创意工坊没有标签页（TapTap 打开是 404），参考网站也没公开它的做法，所以不再找新的创意工坊游戏。
     """
     known = _known("tapmaker")
+    plan = revisit.Plan(ts)
+    watch = {str(e) for e in config.TAPTAP_WATCH_IDS}
     r = _resume_get("tapmaker")
     if r:
         ts, ids, done = r["ts"], r["ids"], set(r["done"])
@@ -541,8 +607,7 @@ def _tapmaker(ts):
             if e in listed or not x.get("track"):
                 continue                      # 热度一直不到 100 的老游戏不再补（只留名字给供给检查）
             fresh = ts - (x.get("released_time") or 0) < 14 * 86400
-            interval = (3 if fresh else config.TAPMAKER_REFRESH_HOURS) * 3600
-            if ts - (x.get("detail_at") or 0) >= interval - 600:
+            if plan.due("tapmaker:" + e):
                 old.append((0 if fresh else 1, x.get("detail_at") or 0, e))
         old.sort()
         ids = list(dict.fromkeys([str(e) for e in config.TAPTAP_WATCH_IDS] +
@@ -554,12 +619,14 @@ def _tapmaker(ts):
 
     six_hourly = (ts // 3600) % 6 == 0
     batch = []
+    tried = 0
 
     def flush():
         if batch:
             for item in batch:
                 _save("tapmaker", item.pop("_sampled_at"), [item])
             batch.clear()
+        plan.flush()
         r.update({"done": sorted(done), "ok": ok, "gone": gone, "tracked": tracked})
         _resume_put("tapmaker", r)
 
@@ -569,11 +636,17 @@ def _tapmaker(ts):
         activity.progress(i, len(ids), f"打开游戏详情 {i} / {len(ids)}")
         if i % 100 == 0:
             activity.say(f"TapTap制造：详情页 {i} / {len(ids)}，成功 {ok} 款")
-        _between()
         name, _, prev = known.get(e) or (listed.get(e, (0, e))[1], 0, {})
-        app = taptap.detail(e)
+        member = "tapmaker:" + e
+        if e in listed:
+            plan.signal(member, revisit.rank_value({"rank_page": listed[e][0]}))
+        app = None
+        if e in watch or plan.due(member):
+            _between()
+            tried += 1
+            app = taptap.detail(e)
+            _detail_pause()
         sampled_at = int(time.time())
-        _detail_pause()
         if app == taptap.GONE:
             gone += 1
             x = dict(prev, gone=True, detail_at=sampled_at)
@@ -588,6 +661,7 @@ def _tapmaker(ts):
             it = taptap.parse_app(app)
             it["extra"]["detail_at"] = sampled_at
             it["extra"]["gone"] = False
+            plan.done(member, it["metrics"], sampled_at)
         x = it["extra"]
         if e in listed:
             x["kind"] = "maker"
@@ -611,10 +685,10 @@ def _tapmaker(ts):
             flush()
     flush()
     _resume_clear("tapmaker")
-    if ids and not ok:
-        raise RuntimeError(f"标签页拿到 {len(listed)} 款，但详情页一个都没打开（热度数据缺失）")
+    if tried and not ok:
+        raise RuntimeError(f"标签页拿到 {len(listed)} 款，该打开的 {tried} 款详情页一个都没打开（热度数据缺失）")
     activity.say(f"TapTap制造：标签页 {len(listed)} 款，补抓老游戏 {len(ids) - len(listed)} 款，"
-                 f"详情成功 {ok} 款，已下线 {gone} 款，持续跟踪 {tracked} 款")
+                 f"详情成功 {ok} 款，已下线 {gone} 款，持续跟踪 {tracked} 款；" + plan.summary())
     return len(ids)
 
 
@@ -660,8 +734,7 @@ def collect_live(force=False):
     if skipped:
         activity.say("刚抓过，这次跳过：" + "、".join(skipped) + f"（每 {config.FAST_MINUTES} 分钟抓一次）")
     fns = {"huya": _huya, "douyu": _douyu, "bili": _bili, "twitch": _twitch, "kick": _kick}
-    for s in run:
-        _run(s, fns[s], ts)
+    _parallel(run, fns, ts)
     return len(run)
 
 
@@ -681,13 +754,6 @@ def collect_slow(between=None, middle=None, force=False):
         run, skipped = _skip_fresh(list(fns), config.SLOW_MINUTES, force)
         if skipped:
             activity.say("刚抓过，这次跳过：" + "、".join(skipped))
-        for s in run:
-            _between()
-            _run(s, fns[s], ts)
-        n += len(run)
-        if middle and run:
-            middle()
-
         tm_resume = _resume_get("tapmaker")
         tm_run, tm_skip = _skip_fresh(["tapmaker"], config.SLOW_MINUTES, force)
         tp_resume = _resume_get("taptap")
@@ -697,18 +763,20 @@ def collect_slow(between=None, middle=None, force=False):
             activity.say("开始抓 TapTap：要逐个打开几百个游戏详情页，一轮 30–60 分钟，进度在右上角；"
                          "这期间直播平台照常每 30 分钟抓一次；中途重启会接着抓")
         if tm_resume or tm_run:
-            _between()
-            _run("tapmaker", _tapmaker, ts)
-            n += 1
+            run.append("tapmaker")
+            fns["tapmaker"] = _tapmaker
         elif tm_skip:
             activity.say("刚抓过，这次跳过：" + "、".join(tm_skip))
         if tp_due:
-            _between()
-            _run("taptap", _taptap, ts)
-            n += 1
+            run.append("taptap")
+            fns["taptap"] = _taptap
         else:
             activity.say(f"TapTap 榜单每 {config.TAPTAP_BOARD_HOURS} 小时抓一次，"
                          f"下次约 {time.strftime('%H:%M', time.localtime(time.time() + config.TAPTAP_BOARD_HOURS * 3600 - tp_age))}")
+        _parallel(run, fns, ts)
+        n += len(run)
+        if middle and run:
+            middle()
     finally:
         _between_fn = None
     return n

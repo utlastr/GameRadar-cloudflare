@@ -1,7 +1,8 @@
 """从「每周必看」里把游戏挑出来，合并同名，生成历史候选。
 
 方案第一步（docs/HIT_SPEC.md）：
-  1.3 合并去重 —— 名字对不上的列成"待确认"，由用户合并
+  1.3 合并去重 —— 名字是 B站 话题成员（btopic:），和商店游戏是不是同一个由游戏档案决定；
+      档案自动判断（Fellegi–Sunter），没并进商店档案的标"未对上商店"
   3   按"起爆那一天"对齐 —— 起爆日 = 这个游戏第一次进必看的那一周
 """
 import json
@@ -10,11 +11,10 @@ import time
 
 from .. import db
 from ..opp import gamemap
+from ..sources import bili
 
-_BRACKET = re.compile(r"[《【\[]([^》】\]]{2,40})[》】\]]")
-_STEAM = re.compile(r"store\.steampowered\.com/app/(\d+)")
-
-GAME_TIDS = {4, 17, 65, 171, 172, 173, 121, 136, 19}
+_BRACKET = bili.BRACKET
+GAME_TIDS = bili.GAME_TIDS
 
 # 标题里不可能是游戏名的词
 _STOP = {"全网", "直播", "实况", "解说", "攻略", "合集", "教程", "更新", "视频", "动画", "整活",
@@ -51,7 +51,7 @@ def build(rebuild=False):
     """把 hit_videos 汇总成 hit_games。只认游戏分区的视频。"""
     from . import ensure
     ensure()
-    idx = gamemap.build_dict()
+    from .. import archive
     with db.session() as c:
         if rebuild:
             c.execute("DELETE FROM hit_games")
@@ -67,9 +67,10 @@ def build(rebuild=False):
             continue
         name = names[0]
         norm = gamemap.normalize(name)
-        if len(norm) < 2:
+        member = gamemap.topic_member(name)
+        if not member:
             continue
-        g = games.setdefault(norm, {"name": name, "first_week": 10 ** 9, "first_ts": 0,
+        g = games.setdefault(norm, {"name": name, "member": member, "first_week": 10 ** 9, "first_ts": 0,
                                     "n_video": 0, "mids": set(), "play": 0, "bvids": []})
         g["n_video"] += 1
         g["play"] += int(r["play"] or 0)
@@ -84,9 +85,8 @@ def build(rebuild=False):
     n = 0
     with db.session() as c:
         for norm, g in games.items():
-            known = idx.get(norm)
-            gid = known["gid"] if known else "name:%s" % norm
-            state = "已识别" if known else "待确认"
+            gid = g["member"]
+            state = "已识别" if archive.is_linked(g["member"]) else "未对上商店"
             c.execute("INSERT OR REPLACE INTO hit_games(gid, name, norm, first_ts, first_week, n_video, "
                       "n_up, play_sum, source, state, note) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                       (gid, g["name"], norm, g["first_ts"], g["first_week"], g["n_video"],

@@ -86,25 +86,7 @@ def budget_use(n=1):
     db.kv_set("opp_budget", b)
 
 
-def paused():
-    return float(db.kv_get("opp_pause_until", 0) or 0) > time.time()
-
-
-def note_risk(err):
-    """风控错误（-412 / -352）：暂停 30 分钟；连续 3 次停 2 小时。返回是否属于风控。"""
-    s = str(err)
-    if "412" not in s and "352" not in s:
-        return False
-    n = int(db.kv_get("opp_risk_hits", 0) or 0) + 1
-    db.kv_set("opp_risk_hits", n)
-    minutes = 120 if n >= 3 else 30
-    db.kv_set("opp_pause_until", time.time() + minutes * 60)
-    activity.say("机会雷达：B站风控（第 %d 次），暂停 %d 分钟" % (n, minutes))
-    return True
-
-
-def reset_risk():
-    db.kv_set("opp_risk_hits", 0)
+from ..sources.bili import note_risk, paused, reset_risk   # noqa: E402,F401  风控暂停全程序共用一份
 
 
 # ---------------- 启动 ----------------
@@ -126,14 +108,22 @@ def start(stop_event=None):
 
 
 def _loop(stop):
-    from . import bili_track
+    from . import bili_track, features
+    from ..social import settings as social_settings
     stop.wait(20)                     # 让主采集先起来，别抢带宽
-    last = {"discover": 0.0, "track": 0.0, "demand": 0.0, "map": 0.0}
+    last = {"discover": 0.0, "track": 0.0, "demand": 0.0, "map": 0.0, "feat": 0.0, "search": 0.0}
     while not stop.is_set():
         now = time.time()
         try:
+            halfday = social_settings.get("SOCIAL_SCHEDULE_MODE") == "halfday"
+            if not halfday and not paused() and now - last["search"] >= 10 * 60:
+                last["search"] = now
+                bili_track.search_games()
+        except Exception as e:                   # noqa: BLE001
+            activity.say("B站按名字搜出错：%s" % e)
+        try:
             if not paused():
-                if now - last["discover"] >= 20 * 60:
+                if not halfday and now - last["discover"] >= 20 * 60:
                     last["discover"] = now
                     bili_track.discover_once()
                 if now - last["track"] >= 10 * 60:
@@ -145,6 +135,9 @@ def _loop(stop):
                 if now - last["map"] >= 30 * 60:
                     last["map"] = now
                     bili_track.map_once()
+            if now - last["feat"] >= 30 * 60:
+                last["feat"] = now
+                features.refresh_games()
         except Exception as e:                   # noqa: BLE001
             activity.say("机会雷达循环出错：%s" % e)
         stop.wait(30)

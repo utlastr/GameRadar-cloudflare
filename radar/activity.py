@@ -7,6 +7,7 @@ import time
 _lock = threading.Lock()
 _lines = collections.deque(maxlen=1000)
 _seq = 0
+_tasks = {}
 _state = {"busy": False, "task": "启动中", "detail": "", "done": 0, "total": 0, "started": None,
           "next_live": None, "next_slow": None, "rev": 0}
 
@@ -30,11 +31,18 @@ def say(msg):
 
 def begin(task, detail=""):
     with _lock:
+        _tasks[threading.get_ident()] = {"task": task, "detail": detail, "done": 0,
+                                        "total": 0, "started": time.time()}
         _state.update(busy=True, task=task, detail=detail, done=0, total=0, started=time.time())
 
 
 def progress(done, total, detail=None):
     with _lock:
+        current = _tasks.get(threading.get_ident())
+        if current is not None:
+            current.update(done=done, total=total)
+            if detail is not None:
+                current["detail"] = detail
         _state["done"], _state["total"] = done, total
         if detail is not None:
             _state["detail"] = detail
@@ -42,7 +50,11 @@ def progress(done, total, detail=None):
 
 def end():
     with _lock:
-        _state.update(busy=False, done=0, total=0, detail="")
+        _tasks.pop(threading.get_ident(), None)
+        if _tasks:
+            _state.update(busy=True, **next(reversed(_tasks.values())))
+        else:
+            _state.update(busy=False, done=0, total=0, detail="")
         _state["rev"] += 1
 
 
@@ -63,7 +75,7 @@ def idle(next_live, next_slow):
 
 def state():
     with _lock:
-        return dict(_state)
+        return {**_state, "tasks": [dict(t) for t in _tasks.values()]}
 
 
 def snapshot(after=0):

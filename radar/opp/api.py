@@ -42,7 +42,7 @@ def api_list(state=""):
             "prob": None, "calibrated": CALIBRATED,
             "n_up": f.get("n_up"), "views_sum": f.get("views_sum"),
             "best_age_pct": f.get("best_age_pct"), "views_top1_share": f.get("views_top1_share"),
-            "demand_mobile": f.get("demand_mobile"), "low_conf_n": f.get("low_conf_n"),
+            "demand_mobile": f.get("demand_mobile"), "by_method": f.get("by_method"),
             "videos": f.get("videos"), "n_live": f.get("n_live"),
         }
         out.append(item)
@@ -52,7 +52,7 @@ def api_list(state=""):
 
 
 def api_game(gid):
-    """单个游戏：指标、相关视频（带对应方式和可信度）、曲线。"""
+    """单个 B站 话题 / Steam 成员：指标、相关视频（带对应方式）、曲线。"""
     if not gid:
         return {"error": "缺少 id"}
     with db.session() as c:
@@ -69,8 +69,7 @@ def api_game(gid):
         out_videos.append({
             "bvid": v["bvid"], "title": (row["title"] if row else "")[:60],
             "owner": row["owner"] if row else "", "pubdate": v.get("pubdate"),
-            "method": v.get("method"), "conf": v.get("conf"),
-            "low_conf": (v.get("conf") or 0) < 0.8,
+            "method": v.get("method"),
             "url": "https://www.bilibili.com/video/" + v["bvid"],
         })
     with db.session() as c:

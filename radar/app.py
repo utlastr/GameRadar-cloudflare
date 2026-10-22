@@ -240,7 +240,6 @@ def run():
     if not single.guard():
         _log("检测到非正式安装目录，已拒绝启动：", config.BASE_DIR)
         return
-    single.sweep_async()                       # 后台清掉别处的重复副本
     _log("启动（后台模式），版本", updater.local_version()[0])
     if config.SETTINGS_ERROR:
         _log(config.SETTINGS_ERROR)

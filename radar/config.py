@@ -132,7 +132,7 @@ TAPTAP_BOARD_HOURS = 6
 # TapTap 制造：每小时翻标签页 1–50 页（和参考网站一样），标签页上的游戏每小时都打开详情
 TAPTAP_TAG_HTML_PAGES = 50
 TAPMAKER_MIN_STORE = 100        # 热度到这个数才开始记每小时数据；不到的只记名字（供给检查用）
-TAPMAKER_REFRESH_HOURS = 20     # 掉出标签页的老游戏多久补抓一次详情（上线 14 天内的 3 小时一次）
+TAPMAKER_REFRESH_HOURS = 20     # v74 起不再使用（改由抓取调度 radar/revisit.py 决定），留着免得旧设置报错
 TAPMAKER_DETAIL_PER_RUN = 250   # 老游戏每轮最多补抓多少个
 TAPTAP_WATCH_IDS = []
 TAPTAP_PRIORITY_MINUTES = 15
@@ -408,6 +408,34 @@ OPP_STAGE_READY_P = 0.6          # 待校准默认值：概率到这个数提醒
 OPP_STAGE_GO_P = 0.8             # 待校准默认值：概率到这个数提醒"开工"
 OPP_DECLINE_RATIO = 0.5          # 待校准默认值：新增播放跌到这个比例算"回落"
 OPP_MIN_LIVE_CASES = 20          # 实时攒满这么多个有结果的游戏，才把小时级指标加进模型
+BILI_TOPIC_MIN_UP = 3            # 临时默认值，待校准：一个名字至少几个不同 UP 主在做，才登记成 B站 话题
+
+# ================= 评分（radar/heat.py）=================
+PENALTY_WORDS = {"剧情": ["剧情", "story rich"], "3A": ["3a", "aaa"]}   # 你给的词；减多少从数据算
+SCORE_REGION = "cn"              # 你定的：先只管中国。算哪些视频平台看地图里这个地区的视频平台
+NEW_MAX_DAYS = 180               # 临时默认值，待校准（沿用 OLD_STEAM_DAYS）：上线不超过几天算新游戏，只有新游戏进必看
+BILI_GAME_SEARCH_PER_RUN = 10    # 工程参数：每 10 分钟在 B站 按名字搜几款新游戏（每款一天一次，占 OPP_BILI_BUDGET 的 60/小时）
+
+# ================= 抓取调度（radar/revisit.py）=================
+REVISIT_ENABLED = True           # 关掉 = 回到以前：每轮每款都深查
+REVISIT_LEARN = 5                # 工程参数：一款游戏前几次深查每轮都查（攒它自己的正常波动）
+REVISIT_MAX_HOURS = 168          # 工程参数：平稳的游戏最长多久深查一次（间隔 1、2、4……小时翻倍到这里封顶）
+REVISIT_Z = 3.0                  # 统计惯例：比自己过去高出几个稳健标准差算突增
+
+# ================= 游戏档案（一个游戏 = 一份档案）=================
+ARCHIVE_BLOCK_MAX = 8            # 工程参数：同一个名字对上超过这么多款，整组不当候选（"麻将""斗地主"这种泛名）
+ARCHIVE_U_SAMPLE = 20000         # 工程参数：估"不是同一个时开发商一致 / 日期接近的概率"抽多少对随机配对
+ARCHIVE_GOLD = {}                # 标准答案：{"竞拍之王": ["steam:123", "taptap:456", "btopic:竞拍之王"], ...}
+
+# ================= 成功案例（hit）=================
+HIT_WINDOW_START_YEAR = 2018     # 历史从这年起二分找起点
+HIT_LEAD_MONTHS = 3              # 工程参数：找到第一条视频的月份后，再往前多取几个月
+HIT_DISCOVER_RULE = {}           # 临时默认值，待校准，留空用代码里的默认：min_recent 8 / min_speedup 5 /
+                                 # min_past 20 / zero_past 5 / zero_min_now 20 / min_title_hit 0.4 / min_title_n 5
+HIT_CLOSE_RULE = {}              # 临时默认值，待校准：结案 play_total 0.03 / new_up 0.10 / days 14
+HIT_REOPEN_RULE = {}             # 临时默认值，待校准：二次起爆 new_up 0.20 / play_total 0.10 / days 3
+HIT_BURST_RULE = {}              # 临时默认值，待校准：起爆 min_n 3 / mult 3 / lookback 30
+HIT_MIN_CASE_VIDEOS = 30         # 临时默认值，待校准：少于这么多条视频不做结案判定
 
 USER_SETTINGS = os.path.join(DATA_DIR, "settings.json")
 SETTINGS_ERROR = ""      # settings.json 读取失败的原因（格式错误时整个文件不生效）
@@ -416,7 +444,12 @@ _EDITABLE = ["PROXY", "BACKUP_DIR", "SERVER_PORT", "GITHUB_TOKEN", "AUTO_UPDATE"
              "AI_KEY", "AI_URL", "AI_DAILY_LIMIT_YUAN", "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET",
              "OPP_ENABLED", "BILI_COOKIE", "BAIDU_COOKIE", "OPP_BILI_BUDGET", "OPP_TRACK_MIN_VIEWS",
              "OPP_TRACK_MIN_MULT", "OPP_DEMAND_WORDS", "OPP_BIG_PUBLISHERS", "OPP_STAGE_READY_P",
-             "OPP_STAGE_GO_P", "OPP_DECLINE_RATIO", "OPP_MIN_LIVE_CASES"]
+             "OPP_STAGE_GO_P", "OPP_DECLINE_RATIO", "OPP_MIN_LIVE_CASES", "BILI_TOPIC_MIN_UP",
+             "ARCHIVE_BLOCK_MAX", "ARCHIVE_U_SAMPLE", "ARCHIVE_GOLD", "PENALTY_WORDS", "SCORE_REGION",
+             "NEW_MAX_DAYS", "BILI_GAME_SEARCH_PER_RUN",
+             "REVISIT_ENABLED", "REVISIT_LEARN", "REVISIT_MAX_HOURS", "REVISIT_Z",
+             "HIT_WINDOW_START_YEAR", "HIT_LEAD_MONTHS", "HIT_DISCOVER_RULE", "HIT_CLOSE_RULE",
+             "HIT_REOPEN_RULE", "HIT_BURST_RULE", "HIT_MIN_CASE_VIDEOS"]
 
 
 def _load_user_settings():

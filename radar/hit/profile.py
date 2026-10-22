@@ -7,7 +7,7 @@ import datetime
 import statistics
 import time
 
-from .. import db
+from .. import config, db
 
 TIERS = [(0, 10000, "1万以下"), (10000, 100000, "1-10万"),
          (100000, 1000000, "10-100万"), (1000000, 10 ** 12, "100万以上")]
@@ -95,16 +95,17 @@ def lifecycle(gid):
     if not rows:
         return {}
     s = _series(rows)
-    # 起爆日：第一次满足"当天 ≥3 条，且是此前 30 天日均的 3 倍以上"。
+    # 起爆日：第一次满足"当天 ≥min_n 条，且是此前 lookback 天日均的 mult 倍以上"（BURST_RULE，默认 3 / 3 / 30）。
     # 用补零后的日历序列 + 30 天回溯，是因为"此前"必须按日历算：赌石 2024-07 有
     # 一条、之后 21 个月一条都没有，它的起势日是从零到 3 条的那天，不是那条孤片。
     burst, best = None, 0
+    B = BURST_RULE
     for i, x in enumerate(s):
-        if x["n"] < 3:
+        if x["n"] < B["min_n"]:
             continue
-        lo = max(0, i - 30)
+        lo = max(0, i - B["lookback"])
         base = sum(y["n"] for y in s[lo:i]) / float(max(i - lo, 1))
-        if x["n"] >= max(3, base * 3):
+        if x["n"] >= max(B["min_n"], base * B["mult"]):
             burst, best = x["day"], i
             break
     peak = max(s, key=lambda x: x["n"])
@@ -147,8 +148,12 @@ def summary(gid):
 # 结案判定用"日总播放"而不是"单条播放中位"：一条视频只剩几只的时候，中位数
 # 剧烈抖动，会把已经死掉的游戏卡在门线上（竞拍之王就卡在 17.5% vs 15%）。
 # 日总播放 = 条数 × 单条播放，体量掉了就是掉了，不会被少数几条视频带偏。
-CLOSE_RULE = {"play_total": 0.03, "new_up": 0.10, "days": 14}
-REOPEN_RULE = {"new_up": 0.20, "play_total": 0.10, "days": 3}
+# 下面这些数字全部是临时默认值，待校准（用已结案的成功案例反推）；在 settings.json 里改：
+#   HIT_CLOSE_RULE / HIT_REOPEN_RULE / HIT_BURST_RULE / HIT_MIN_CASE_VIDEOS
+CLOSE_RULE = dict({"play_total": 0.03, "new_up": 0.10, "days": 14}, **(getattr(config, "HIT_CLOSE_RULE", None) or {}))
+REOPEN_RULE = dict({"new_up": 0.20, "play_total": 0.10, "days": 3}, **(getattr(config, "HIT_REOPEN_RULE", None) or {}))
+BURST_RULE = dict({"min_n": 3, "mult": 3, "lookback": 30}, **(getattr(config, "HIT_BURST_RULE", None) or {}))
+MIN_CASE_VIDEOS = int(getattr(config, "HIT_MIN_CASE_VIDEOS", 30) or 30)
 ROLL = 7                                     # 滚动窗口，单日数字太抖
 
 
@@ -222,8 +227,8 @@ def case_state(gid):
                 "peak": {}, "now": {}, "ratio": {},
                 "last_day": series[-1]["day"], "days_since_last": None,
                 "n_video": len(rows),
-                "note": "增长太平缓，没有满足起爆定义（≥3 条且超此前日均 3 倍）的那一天，"
-                        "不做结案判定",
+                "note": "增长太平缓，没有满足起爆定义（≥%d 条且超此前 %d 天日均 %s 倍）的那一天，"
+                        "不做结案判定" % (BURST_RULE["min_n"], BURST_RULE["lookback"], BURST_RULE["mult"]),
                 "rule": CLOSE_RULE}
     burst = lc["burst"]
     peak_day = lc.get("peak_day") or series[-1]["day"]
@@ -237,7 +242,7 @@ def case_state(gid):
 
     # 样本太薄就别下结论。峰值中位播放都取不到，说明这款游戏没有足够多的
     # 正常视频来建立基线，任何"结案/活体"判断都是噪声。
-    if not peak_med or not peak_total or len(rows) < 30 or max(x["n"] for x in series) < 3:
+    if not peak_med or not peak_total or len(rows) < MIN_CASE_VIDEOS or max(x["n"] for x in series) < BURST_RULE["min_n"]:
         return {"state": "样本不足", "closed_day": None, "reopen_day": None,
                 "peak": {"n": peak_n, "new_up": peak_new, "median_play": peak_med,
                          "top_play": peak_top, "total_play": peak_total},
