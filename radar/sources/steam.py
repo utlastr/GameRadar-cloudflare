@@ -1,6 +1,7 @@
 """Steam 数据源。全部是公开接口，不需要 API Key。"""
 import re
 import time
+from html.parser import HTMLParser
 from datetime import datetime
 
 from .. import config
@@ -39,7 +40,7 @@ def seed_recent_releases(now=None):
     return len(items)
 
 
-def scan_recent_releases():
+def scan_recent_releases(full=False):
     """Independently scan release-date pages; no popularity requirement."""
     from .. import history
     from .. import db
@@ -47,9 +48,10 @@ def scan_recent_releases():
         c.executescript(history.SCHEMA)
     total = 0
     cutoff = time.time() - config.STEAM_DISCOVERY_DAYS * 86400
-    cursor = int(db.kv_get("steam_release_cursor", 0) or 0)
-    for page in range(config.STEAM_DISCOVERY_PAGES):
-        start = 0 if page == 0 else cursor
+    cursor = 0 if full else int(db.kv_get("steam_release_cursor", 0) or 0)
+    seen = set()
+    for page in range(200 if full else config.STEAM_DISCOVERY_PAGES):
+        start = page * 50 if full else (0 if page == 0 else cursor)
         if page > 0 and start == 0:
             start = 50
         text = get_text(history.SEARCH_URL,
@@ -64,15 +66,28 @@ def scan_recent_releases():
         rows = history._parse_page(payload.get("results_html") or "")
         if not rows:
             raise RuntimeError("Steam 近期发行页没有解析到游戏，保留扫描进度等待重试")
+        signature = tuple(r["appid"] for r in rows)
+        if signature in seen:
+            raise RuntimeError("Steam 发行扫描返回重复分页，未当作完整覆盖")
+        seen.add(signature)
         history._upsert(rows)
         total += len(rows)
         dates = [r["released"] for r in rows if r.get("released")]
-        if not rows or (dates and min(dates) < cutoff):
+        db.kv_set("steam_release_coverage", {"pages": page + 1, "rows": total,
+                  "oldest": min(dates) if dates else None, "complete": False,
+                  "updated": int(time.time()), "days": config.STEAM_DISCOVERY_DAYS})
+        if (dates and min(dates) < cutoff) or len(rows) < 50:
             db.kv_set("steam_release_cursor", 0)
+            report = db.kv_get("steam_release_coverage")
+            report["complete"] = True
+            db.kv_set("steam_release_coverage", report)
             break
         if page > 0:
             cursor = start + len(rows)
             db.kv_set("steam_release_cursor", cursor)
+    else:
+        if full:
+            raise RuntimeError("Steam 发行扫描达到安全上限，未覆盖完整15天")
     return total
 
 
@@ -163,8 +178,120 @@ def featured_lists():
 _APPID_RE = re.compile(r"/apps/(\d+)/")
 
 
+class _StoreTabParser(HTMLParser):
+    def __init__(self, section):
+        super().__init__()
+        self.section, self.depth, self.start_depth = section, 0, None
+        self.rows, self.item, self.name_depth = [], None, None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "div":
+            self.depth += 1
+            if attrs.get("id") == self.section:
+                self.start_depth = self.depth
+            if self.item and "tab_item_name" in attrs.get("class", "").split():
+                self.name_depth = self.depth
+        if self.start_depth is not None and tag == "a":
+            appid = attrs.get("data-ds-appid", "")
+            if appid.isdecimal():
+                self.item = {"appid": int(appid), "name": ""}
+
+    def handle_data(self, data):
+        if self.item is not None and self.name_depth is not None:
+            self.item["name"] += data
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.item is not None:
+            self.item["name"] = self.item["name"].strip()
+            self.rows.append(self.item)
+            self.item, self.name_depth = None, None
+        if tag == "div":
+            if self.name_depth == self.depth:
+                self.name_depth = None
+            if self.start_depth == self.depth:
+                self.start_depth = None
+            self.depth -= 1
+
+
+def store_tab(filter_name):
+    """Read the actual discovery tab; search/results silently ignores popularnew."""
+    path, section = {
+        "popularnew": ("new", "tab_newreleases_content"),
+        "popularcomingsoon": ("upcoming", "tab_popular_comingsoon_content"),
+    }[filter_name]
+    parser = _StoreTabParser(section)
+    parser.feed(get_text(f"https://store.steampowered.com/explore/{path}/",
+                         {"cc": config.STEAM_CC, "l": "english"},
+                         retries=0, timeout=12))
+    rows = list({r["appid"]: r for r in parser.rows}.values())
+    if not rows:
+        raise RuntimeError(f"Steam {filter_name} discovery tab is empty or changed")
+    return rows
+
+
+class _TrendingParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.active, self.cell = False, None
+        self.cells, self.rows, self.appid = [], [], None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "table" and attrs.get("id") == "trending-recent":
+            self.active = True
+        if not self.active:
+            return
+        if tag == "tr":
+            self.cells, self.appid = [], None
+        if tag == "td":
+            self.cell = ""
+        if tag == "a":
+            # App IDs are read from links, never inferred from game names.
+            m = re.fullmatch(r"/app/(\d+)/?", attrs.get("href", ""))
+            if m:
+                self.appid = int(m[1])
+
+    def handle_data(self, data):
+        if self.active and self.cell is not None:
+            self.cell += data
+
+    def handle_endtag(self, tag):
+        if not self.active:
+            return
+        if tag == "td" and self.cell is not None:
+            self.cells.append(self.cell.strip())
+            self.cell = None
+        if tag == "tr" and self.appid and len(self.cells) == 4:
+            try:
+                change = float(self.cells[1].replace("%", "").replace(",", ""))
+                players = int(self.cells[3].replace(",", ""))
+            except ValueError:
+                return
+            if players >= 0 and change >= -100:
+                self.rows.append({"appid": self.appid, "name": self.cells[0],
+                                  "provider_players": players, "provider_g24": change / 100})
+        if tag == "table":
+            self.active = False
+
+
+def trending():
+    """SteamCharts' player-growth table, not SteamDB page-view popularity."""
+    html = get_text("https://steamcharts.com/", retries=0, timeout=12)
+    parser = _TrendingParser()
+    parser.feed(html)
+    if not parser.rows:
+        raise RuntimeError("SteamCharts Trending table is empty or changed")
+    dates = re.findall(r'var now = new Date\("([^"]+)"\)', html)
+    sampled = int(datetime.fromisoformat(dates[0].replace("Z", "+00:00")).timestamp()) if dates else None
+    return [dict(r, provider="SteamCharts", provider_url="https://steamcharts.com/",
+                 provider_sampled_at=sampled) for r in parser.rows]
+
+
 def search_list(filter_name, count=50):
     """商店搜索页榜单：popularnew（热门新品）/ topsellers（热销）/ popularcomingsoon（热门即将推出）"""
+    if filter_name in ("popularnew", "popularcomingsoon"):
+        return [r["appid"] for r in store_tab(filter_name)][:count]
     d = get_json("https://store.steampowered.com/search/results/",
                  {"filter": filter_name, "json": 1, "count": count,
                   "cc": config.STEAM_CC, "l": "english"}) or {}
@@ -176,10 +303,10 @@ def search_list(filter_name, count=50):
     return ids
 
 
-def current_players(appid):
+def current_players(appid, **request_options):
     """当前在线人数。未上线或查不到返回 None（缺失，不是 0）。"""
     d = get_json("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
-                 {"appid": appid}, retries=1)
+                 {"appid": appid}, **{"retries": 1, **request_options})
     r = (d or {}).get("response") or {}
     if r.get("result") == 1:
         return int(r.get("player_count") or 0)
@@ -215,6 +342,64 @@ def review_total(appid, language="all"):
                   "num_per_page": 0, "filter": "summary"})
     q = (d or {}).get("query_summary") or {}
     return q.get("total_reviews")
+
+
+class _StoreReviewsParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.metrics = {}
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "meta" and attrs.get("itemprop") == "reviewCount":
+            value = attrs.get("content", "").replace(",", "")
+            if value.isdecimal():
+                self.metrics["store_reviews"] = int(value)
+        if "user_reviews_summary_row" in attrs.get("class", "").split():
+            tip = attrs.get("data-tooltip-html", "")
+            match = re.search(r"(\d+)% of the ([\d,]+) user reviews", tip)
+            if match:
+                if "last 30 days" in tip:
+                    self.metrics["store_recent_reviews"] = int(match[2].replace(",", ""))
+                else:
+                    self.metrics["store_positive_pct"] = int(match[1])
+
+
+def store_review_summary(appid, **request_options):
+    """Store review counts have a different purchase/filter scope from appreviews."""
+    parser = _StoreReviewsParser()
+    parser.feed(get_text(f"https://store.steampowered.com/app/{appid}/",
+                         {"cc": config.STEAM_CC, "l": "english"},
+                         **request_options))
+    if "store_reviews" not in parser.metrics:
+        raise RuntimeError("Steam store page has no reviewCount; preserving previous sample")
+    return parser.metrics
+
+
+_reviews_api_retry_after = 0
+
+
+def review_summary(appid, **request_options):
+    global _reviews_api_retry_after
+    d = None
+    if time.time() >= _reviews_api_retry_after:
+        try:
+            d = get_json(f"https://store.steampowered.com/appreviews/{appid}",
+                         {"json": 1, "language": "all", "purchase_type": "all",
+                          "num_per_page": 0, "filter": "all"}, **request_options)
+        except Exception:
+            pass
+        if d is None:
+            _reviews_api_retry_after = time.time() + 3600
+    if d is None:
+        return store_review_summary(appid, **request_options)
+    q = d.get("query_summary") or {}
+    if d.get("success") != 1 or q.get("total_reviews") is None:
+        return {}
+    return {metric: q[field] for metric, field in
+            (("reviews", "total_reviews"), ("reviews_positive", "total_positive"),
+             ("reviews_negative", "total_negative"), ("review_score", "review_score"))
+            if q.get(field) is not None}
 
 
 def prices(appids):

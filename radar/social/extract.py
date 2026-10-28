@@ -9,7 +9,6 @@
 """
 import re
 import time
-from urllib.parse import urlparse
 
 TEXT_KEYS = ("word", "keyword", "key_word", "keywords", "query", "sentence", "hot_word", "show_word",
              "word_name", "keyword_name", "search_word", "hashtag_name", "hashtag", "topic", "topic_name",
@@ -19,7 +18,7 @@ ID_LIKE = re.compile(r"(^|_)(id|uid|mid|aid|cid|sec_uid|item_id|aweme_id|photo_i
 _NUM_CN = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([万wW亿kK千]?)\s*\+?\s*$")
 
 
-_JUNK_TEXT = re.compile(r"您|请输入|请选择|请填写|请问|满意|反馈|客服|二维码|联系方式|微信号|官网首页|登录|注册|下载APP|下载 APP|"
+_JUNK_TEXT = re.compile(r"^(?:middleware_|runtime_|perf_)|您|请输入|请选择|请填写|请问|满意|反馈|客服|二维码|联系方式|微信号|官网首页|登录|注册|下载APP|下载 APP|"
                         r"隐私|用户协议|关于我们|帮助中心|退出登录|上一页|下一页|查看更多|全部分类|^其他")
 _JUNK_SRC = re.compile(r"survey|questionnaire|feedback|wenjuan|nps|setting|config|i18n|locale|abtest|ab_test|slardar|"
                        r"monitor|/report|/track|menu|captcha|verify", re.I)
@@ -27,8 +26,7 @@ _JUNK_SRC = re.compile(r"survey|questionnaire|feedback|wenjuan|nps|setting|confi
 
 def junk_text(t):
     """问卷题目、菜单、按钮之类，不是热词。"""
-    return bool(_JUNK_TEXT.search(t or "") or re.search(
-        r"^middleware_|^@(?:douyinfe|ies)/|^webpack|^__|^https?://", t or "", re.I))
+    return bool(_JUNK_TEXT.search(t or ""))
 
 
 def junk_src(src):
@@ -196,7 +194,9 @@ def find(caps):
                 t, tk = _text_of(f)
                 if not t:
                     continue
-                items.append({"rank": i + 1, "text": t, "text_key": tk, "nums": _nums(f, tk), "ts": _ts_of(f),
+                rank = next((num(f[k]) for k in ("rank", "position", "ranking") if k in f), None)
+                items.append({"rank": rank, "position": i + 1,
+                              "text": t, "text_key": tk, "nums": _nums(f, tk), "ts": _ts_of(f),
                               "url": _url_of(f)})
             if len(items) >= 3 and len(items) >= 0.6 * len(flats):
                 sig = ("l", path, items[0]["text"], items[-1]["text"], len(items))
@@ -249,97 +249,6 @@ def best_video_list(found):
     return best if score >= 3 else None
 
 
-def video_items(caps, platform):
-    """Require content IDs; arbitrary numeric lists and albums are not videos."""
-    out = {}
-    keys = {"douyin": ("aweme_id",), "kuaishou": ("photo_id", "photoId"),
-            "xiaohongshu": ("note_id", "noteId")}.get(platform, ())
-
-    def visit(obj, depth=0):
-        if depth > 18:
-            return
-        if isinstance(obj, list):
-            for value in obj:
-                visit(value, depth + 1)
-        elif isinstance(obj, dict):
-            record = obj
-            if platform == "kuaishou" and isinstance(obj.get("photo"), dict):
-                record = dict(obj["photo"])
-                record["photo_id"] = record.get("id")
-                record["author"] = obj.get("author") or {}
-                record["cover"] = record.get("coverUrl")
-                record["publish_time"] = record.get("timestamp")
-            if platform == "xiaohongshu" and isinstance(obj.get("note_card"), dict):
-                record = dict(obj["note_card"])
-                record["note_id"] = obj.get("id") or obj.get("note_id")
-            vid = next((str(record[k]) for k in keys if record.get(k)), None)
-            if vid and re.fullmatch(r"[0-9A-Za-z_-]{5,80}", vid):
-                f = _flat(record)
-                title, tk = _text_of(f)
-                if title and any(record.get(k) for k in
-                                 ("statistics", "interact_info", "video", "images", "caption", "cover")):
-                    user = record.get("author") or record.get("user") or {}
-                    user = user if isinstance(user, dict) else {}
-                    roots = {"douyin": "https://www.douyin.com/video/",
-                             "kuaishou": "https://www.kuaishou.com/short-video/",
-                             "xiaohongshu": "https://www.xiaohongshu.com/explore/"}
-                    out[vid] = {"vid": vid, "text": title, "nums": _nums(f, tk),
-                                "ts": _publish_ts(record), "url": roots[platform] + vid,
-                                "author_id": str(user.get("uid") or user.get("user_id") or
-                                                 user.get("userId") or user.get("id") or ""),
-                                "description": str(record.get("desc") or record.get("caption") or title)}
-            for value in obj.values():
-                if isinstance(value, (dict, list)):
-                    visit(value, depth + 1)
-
-    for cap in caps:
-        if not junk_src(cap.get("src")):
-            visit(cap.get("obj"))
-    return list(out.values())
-
-
-def _publish_ts(record):
-    # Nested author dates and request timestamps are not publication dates.
-    for k in ("create_time", "publish_time", "pubdate"):
-        value = num(record.get(k))
-        if value is not None:
-            if 1.2e12 < value < 2.2e12:
-                value /= 1000
-            if 1.2e9 < value < 2.2e9:
-                return int(value)
-    return None
-
-
-def stable_video_id(platform, item):
-    """Reject albums, CDN images and unstable title-based identifiers."""
-    u = urlparse(item.get("url") or "")
-    rules = {"douyin": ("douyin.com", r"/video/(\d+)"),
-             "xiaohongshu": ("xiaohongshu.com", r"/explore/([0-9A-Za-z_-]+)"),
-             "kuaishou": ("kuaishou.com", r"/short-video/([0-9A-Za-z_-]+)")}
-    if platform not in rules:
-        return None
-    host, pattern = rules[platform]
-    if u.hostname != host and not (u.hostname or "").endswith("." + host):
-        return None
-    m = re.fullmatch(pattern + r"/?", u.path)
-    return m.group(1) if m else None
-
-
-def douyin_cards(cards):
-    """Rendered video links are usable evidence; rounded relative dates are not exact timestamps."""
-    out = {}
-    for card in cards:
-        vid = stable_video_id("douyin", card)
-        if not vid or not card.get("title"):
-            continue
-        value = num(card.get("likes"))
-        out[vid] = {"vid": vid, "url": card["url"].split("?")[0], "text": card["title"],
-                    "ts": None, "author_id": "", "author": card.get("author") or "",
-                    "publication_label": card.get("age"),
-                    "nums": {"digg_count": value} if value is not None else {}}
-    return list(out.values())
-
-
 def summarize_videos(L, now=None):
     """视频列表 → 一行摘要：条数、总点赞、最高点赞、7 天内发布条数、最新发布时间。"""
     now = now or time.time()
@@ -349,7 +258,7 @@ def summarize_videos(L, now=None):
         vids.append({"title": it["text"][:120], "ts": it.get("ts"), "url": it.get("url"), **st})
     likes = [v["likes"] for v in vids if v["likes"] is not None]
     plays = [v["plays"] for v in vids if v["plays"] is not None]
-    recent = [v for v in vids if v["ts"] and now - v["ts"] <= 7 * 86400]
+    recent = [v for v in vids if v["ts"] and 0 <= now - v["ts"] <= 7 * 86400]
     return {
         "n": len(vids),
         "likes_sum": sum(likes) if likes else None,

@@ -1,7 +1,9 @@
-"""地图（v69）：目标市场（settings.json 的 MARKETS，不填用 DEF_MARKETS）的省 / 州级口味。
+"""地图（v83）：全球国界 + 省 / 州边界，以及目标市场（settings.json 的 MARKETS，不填用 DEF_MARKETS）的省 / 州级口味。
 
-1. 边界：Natural Earth 10m 一级行政区（公有领域），后台下载一次，只留目标市场，简化后存 radar_data/regions.json，
-   同时算出每个行政区覆盖哪些人口格子（人口、县级收入按人口加权）
+1. 边界：Natural Earth 10m 国家级 + 一级行政区（同一套数据，公有领域），后台下载一次。
+   所有国家、省的边拆成共用的线段（arc），两边共用的线只存一份、只简化一次，所以国界和省界、填色和边线完全重合。
+   被国家用到的线 = 国界；只被同一国两个省共用的线 = 省界。存 radar_data/regions.json；
+   目标市场的省 / 州另外算出覆盖哪些人口格子（人口、县级收入按人口加权）
 2. 每个目标市场取本国榜单份额最高的 N_GAMES 款游戏 + 几个平台词，查各省 / 州最近 12 个月的搜索热度：
    Google Trends（游戏优先用"主题"，不同语言的名字能对上）；中国大陆用百度指数（settings.json 填 BAIDU_COOKIE）
 3. 偏好倍数 = 该省热度 / 全国按人口加权的平均热度。worldmap.compute 用它把国家份额拆到省 / 州
@@ -27,9 +29,16 @@ NE_URLS = [
     "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson",
     "https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_10m_admin_1_states_provinces.geojson",
 ]
+NE0_URLS = [
+    "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson",
+    "https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_10m_admin_0_countries.geojson",
+]
 GEO = os.path.join(config.DATA_DIR, "regions.json")
 NE_TMP = os.path.join(config.DATA_DIR, "ne_admin1.geojson")
-GEO_V = 1
+NE0_TMP = os.path.join(config.DATA_DIR, "ne_admin0.geojson")
+GEO_V = 2
+OUT_Q = 10000       # 工程参数：输出坐标精度 1/10000 度
+NEAR_CELL = 50      # 工程参数：判断一条省边是否贴着国界用的格子，1/50 度
 N_GAMES = 25
 PLATFORMS = ["Steam", "PlayStation", "Xbox", "Nintendo Switch"]
 PLAT_CN = {"Steam": "steam", "PlayStation": "ps5", "Xbox": "xbox", "Nintendo Switch": "switch"}
@@ -53,7 +62,7 @@ ENT = [
     ("Web novels", "小说", None, None),
 ]
 REFRESH = 14 * 86400
-TOL = 0.04
+TOL = 0.01          # 工程参数：边界简化容差（度，约 1 公里）
 PAUSE = (8, 14)
 SUB = 4
 MIN_COVER = 0.4
@@ -240,14 +249,14 @@ def _cells(rings, w, top, cell, h):
     return out
 
 
-def _download_ne(say):
+def _download(urls, path, what, say):
     from .incgrid import _fetch_file
     last = None
-    for u in NE_URLS:
+    for u in urls:
         try:
-            say("正在下载省 / 州边界（约 40MB，只下载一次）")
-            _fetch_file(u, NE_TMP)
-            with open(NE_TMP, "rb") as f:
+            say(f"正在下载{what}（只下载一次）")
+            _fetch_file(u, path)
+            with open(path, "rb") as f:
                 if f.read(1) == b"{":
                     return
             last = RuntimeError("下载到的不是 GeoJSON")
@@ -256,40 +265,182 @@ def _download_ne(say):
     raise last
 
 
+def _load_json(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except ValueError:
+        os.remove(path)
+        raise
+
+
+def _qkey(x, y):
+    return (int(round((x + 180) * 1e6)) << 29) | int(round((y + 90) * 1e6))
+
+
+def _qxy(k):
+    return (k >> 29) / 1e6 - 180, (k & 0x1FFFFFFF) / 1e6 - 90
+
+
+def _rings_of(g):
+    t = g.get("type")
+    polys = g["coordinates"] if t == "MultiPolygon" else [g["coordinates"]] if t == "Polygon" else []
+    out = []
+    for poly in polys:
+        rs = []
+        for ring in poly:
+            a, last = array("q"), None
+            for p in ring:
+                k = _qkey(p[0], p[1])
+                if k != last:
+                    a.append(k)
+                    last = k
+            if len(a) > 1 and a[0] == a[-1]:
+                a.pop()
+            if len(a) >= 3:
+                rs.append(a)
+            elif not rs:
+                break
+        if rs:
+            out.append(rs)
+    return out
+
+
+def _cc0(p):
+    for k in ("ISO_A2_EH", "ISO_A2", "WB_A2"):
+        v = str(p.get(k) or "")
+        if re.fullmatch(r"[A-Za-z]{2}", v):
+            return v.lower()
+    v = str(p.get("ADM0_A3") or "")
+    return v.lower() if re.fullmatch(r"[A-Za-z]{3}", v) else None
+
+
+def _topology(feats):
+    """feats: [(0 国家 / 1 省, cc, polys)] → (arcs, 每个 feat 的环 = arc 编号列表（~i 表示反向）, 每条 arc 的 [国家用了几次, 省用了几次, 省都属于哪国])"""
+    sig, junc = {}, set()
+    for _, _, polys in feats:
+        for poly in polys:
+            for r in poly:
+                n = len(r)
+                prev = r[n - 1]
+                for i in range(n):
+                    k = r[i]
+                    nxt = r[i + 1] if i + 1 < n else r[0]
+                    s = (prev << 60) | nxt if prev < nxt else (nxt << 60) | prev
+                    v = sig.get(k)
+                    if v is None:
+                        sig[k] = s
+                    elif v != s:
+                        junc.add(k)
+                    prev = k
+    sig = None
+    arcs, index, own = [], {}, []
+
+    def put(s, closed):
+        if closed:
+            m = min(range(len(s)), key=s.__getitem__)
+            fw = s[m:] + s[:m]
+            bw = fw[:1] + fw[:0:-1]
+            rev = bw[1] < fw[1]
+            s = bw if rev else fw
+            s.append(s[0])
+        else:
+            rev = (s[-1], s[-2]) < (s[0], s[1])
+            if rev:
+                s = s[::-1]
+        key = (s[0], s[1], s[-2], s[-1], len(s))
+        i = index.get(key)
+        if i is None:
+            i = index[key] = len(arcs)
+            arcs.append(s)
+            own.append([0, 0, ""])
+        return ~i if rev else i
+
+    refs = []
+    for kind, cc, polys in feats:
+        fr = []
+        for poly in polys:
+            pr = []
+            for r in poly:
+                n = len(r)
+                js = [i for i in range(n) if r[i] in junc]
+                if not js:
+                    rr = [put(r, True)]
+                else:
+                    j0 = js[0]
+                    ring = r[j0:] + r[:j0]
+                    ring.append(ring[0])
+                    pos = [i - j0 for i in js] + [n]
+                    rr = [put(ring[pos[t]:pos[t + 1] + 1], False) for t in range(len(pos) - 1)]
+                for a in rr:
+                    o = own[~a if a < 0 else a]
+                    if kind == 0:
+                        o[0] += 1
+                    else:
+                        o[2] = cc if o[1] == 0 else (cc if o[2] == cc else "")
+                        o[1] += 1
+                pr.append(rr)
+            fr.append(pr)
+        refs.append(fr)
+    return arcs, refs, own
+
+
+def _near_fn(country_polys):
+    """省的外边如果和国界的点没对齐（数据本身的小误差），用这个判断它是不是贴着国界，贴着就不当省界画。"""
+    cells = set()
+    for polys in country_polys:
+        for poly in polys:
+            for r in poly:
+                for k in r:
+                    x, y = _qxy(k)
+                    cells.add(int((x + 180) * NEAR_CELL) * 20000 + int((y + 90) * NEAR_CELL))
+
+    def near(arc):
+        hit = 0
+        for k in arc:
+            x, y = _qxy(k)
+            cx, cy = int((x + 180) * NEAR_CELL), int((y + 90) * NEAR_CELL)
+            if any((cx + i) * 20000 + cy + j in cells for i in (-1, 0, 1) for j in (-1, 0, 1)):
+                hit += 1
+        return hit * 2 >= len(arc)
+    return near
+
+
 def _build_geo(say):
     os.makedirs(config.DATA_DIR, exist_ok=True)
-    if not os.path.exists(NE_TMP):
-        _download_ne(say)
-    say("正在整理省 / 州边界")
-    with open(NE_TMP, encoding="utf-8") as f:
-        d = json.load(f)
+    for urls, path, what in ((NE0_URLS, NE0_TMP, "国界（约 25MB）"), (NE_URLS, NE_TMP, "省 / 州边界（约 40MB）")):
+        if not os.path.exists(path):
+            _download(urls, path, what, say)
+    say("正在整理国界和省 / 州边界")
+    d = _load_json(NE0_TMP)
+    by_cc, a3cc = {}, {}
+    for ft in d.get("features") or []:
+        p = ft.get("properties") or {}
+        cc = _cc0(p)
+        polys = _rings_of(ft.get("geometry") or {})
+        if not cc or not polys:
+            continue
+        a3cc[str(p.get("ADM0_A3") or "").upper()] = cc
+        if cc in by_cc:
+            by_cc[cc]["_p"] += polys
+        else:
+            by_cc[cc] = {"cc": cc, "name": p.get("NAME_EN") or p.get("NAME") or cc.upper(),
+                         "sub": p.get("SUBREGION") or "", "_p": polys}
+    countries = list(by_cc.values())
+    d = _load_json(NE_TMP)
     mk = set(markets())
     units = []
     for ft in d.get("features") or []:
         p = ft.get("properties") or {}
-        cc = (p.get("iso_a2") or "").lower()
-        g = ft.get("geometry") or {}
-        if cc not in mk or g.get("type") not in ("Polygon", "MultiPolygon"):
+        cc = a3cc.get(str(p.get("adm0_a3") or "").upper())
+        if not cc:
+            v = str(p.get("iso_a2") or "").lower()
+            cc = v if v in by_cc else None
+        if not cc:
             continue
-        polys = g["coordinates"] if g["type"] == "MultiPolygon" else [g["coordinates"]]
-        out, raw = [], []
-        for poly in polys:
-            rings = []
-            for k, ring in enumerate(poly):
-                raw.append(ring)
-                sr = _simplify(ring, TOL)
-                if len(sr) >= 4:
-                    rings.append([[round(x, 3), round(y, 3)] for x, y in ((q[0], q[1]) for q in sr)])
-                elif k == 0:
-                    break
-            if rings:
-                out.append(rings)
-        if not out:
-            big = max((poly[0] for poly in polys), key=len)
-            sr = _simplify(big, TOL / 8)
-            if len(sr) < 4:
-                continue
-            out = [[[[round(q[0], 3), round(q[1], 3)] for q in sr]]]
+        polys = _rings_of(ft.get("geometry") or {})
+        if not polys:
+            continue
         names = [p.get(k) for k in ("name", "name_en", "woe_name", "gn_name", "gns_name", "name_local")]
         names += (p.get("name_alt") or "").split("|")
         names = [re.sub(r",.*$", "", x) for x in names if x]
@@ -298,16 +449,47 @@ def _build_geo(say):
                       "loc": loc, "keys": sorted({_norm(x) for x in names if _norm(x)}),
                       "skeys": sorted({_strip(x) for x in names if _strip(x)}),
                       "grp": sorted({_norm(x) for x in (p.get("region"), p.get("geonunit")) if x and _norm(x)}),
-                      "g": out, "_raw": raw})
-    if not units:
-        raise RuntimeError("边界文件里没有目标市场")
-    say(f"正在把 {len(units)} 个省 / 州换算到人口格子")
+                      "_p": polys})
+    d = None
+    n_cc = defaultdict(int)
+    for u in units:
+        n_cc[u["cc"]] += 1
+    units = [u for u in units if n_cc[u["cc"]] >= 2]
+    if not countries:
+        raise RuntimeError("国界文件是空的")
+    say(f"正在对齐 {len(countries)} 个国家、{len(units)} 个省 / 州的边界")
+    arcs, refs, own = _topology([(0, c["cc"], c["_p"]) for c in countries] + [(1, u["cc"], u["_p"]) for u in units])
+    near = _near_fn([c["_p"] for c in countries])
+    lc, lp = [], []
+    for i, (n0, n1, cc1) in enumerate(own):
+        if n0:
+            lc.append(i)
+        elif n1 >= 2 and cc1:
+            lp.append(i)
+        elif n1 == 1 and not near(arcs[i]):
+            lp.append(i)
+    out = []
+    for a in arcs:
+        q, last, px, py = [], None, 0, 0
+        for x, y in _simplify([_qxy(k) for k in a], TOL):
+            X, Y = int(round(x * OUT_Q)), int(round(y * OUT_Q))
+            if (X, Y) != last:
+                q += (X - px, Y - py)
+                px, py, last = X, Y, (X, Y)
+        out.append(q)
+    arcs = None
+    for f, g in zip(countries + units, refs):
+        f["g"] = g
+    say("正在把目标市场的省 / 州换算到人口格子")
     w, top, cell, idx, pop = _popgrid()
     h = int(round((top + 90) / cell))
     pos = {ci: i for i, ci in enumerate(idx)}
     best_n, best_u = {}, {}
     for ui, u in enumerate(units):
-        for ci, n in _cells(u.pop("_raw"), w, top, cell, h).items():
+        if u["cc"] not in mk:
+            continue
+        raw = [[_qxy(k) for k in r] for poly in u["_p"] for r in poly]
+        for ci, n in _cells(raw, w, top, cell, h).items():
             if ci in pos and n > best_n.get(ci, 0):
                 best_n[ci], best_u[ci] = n, ui
     cells = [[] for _ in units]
@@ -316,14 +498,14 @@ def _build_geo(say):
     for ui, u in enumerate(units):
         u["cells"] = sorted(cells[ui])
         u["pop"] = sum(pop[i] for i in u["cells"])
-    data = {"v": GEO_V, "markets": sorted(mk), "units": units}
+        del u["_p"]
+    for c in countries:
+        del c["_p"]
+    data = {"v": GEO_V, "markets": sorted(mk), "q": OUT_Q, "arcs": out, "lc": lc, "lp": lp,
+            "countries": countries, "units": units}
     with open(GEO + ".tmp", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
     os.replace(GEO + ".tmp", GEO)
-    try:
-        os.remove(NE_TMP)
-    except OSError:
-        pass
     return len(units)
 
 
@@ -384,8 +566,10 @@ def load_geo():
         for u in d["units"]:
             a = nat.get(u["cc"])
             u["rf"] = round(u["ppp"] / (a[0] / a[1]), 3) if u["ppp"] and a and a[1] else None
-        pub = {"units": [{"cc": u["cc"], "en": u["en"], "loc": u["loc"], "pop": u["pop"], "rf": u["rf"], "g": u["g"]}
-                         for u in d["units"]]}
+        pub = {"v": d.get("v"), "units": [{"cc": u["cc"], "en": u["en"], "loc": u["loc"], "pop": u["pop"], "rf": u["rf"],
+                                           "g": u["g"]} for u in d["units"]]}
+        if d.get("v") == 2:
+            pub.update(q=d["q"], arcs=d["arcs"], lc=d["lc"], lp=d["lp"], countries=d["countries"])
         d["public"] = json.dumps(pub, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         _geo_cache = ((mt, mt2), d)
         return d
@@ -745,6 +929,7 @@ def status():
     st = dict(db.kv_get("region_status") or {})
     st["markets"] = markets()
     st["baidu"] = bool(_cookie())
+    st["geo_v"] = (load_geo() or {}).get("v")
     return st
 
 

@@ -9,7 +9,7 @@ import time
 import traceback
 import webbrowser
 
-from . import activity, analyze, collect, config, db, maintenance, server
+from . import activity, analyze, collect, config, db, maintenance, sampling, server
 
 # 正在抓取或分析时持有这个锁；自动更新重启前会等它释放，避免写数据写到一半
 BUSY = threading.Lock()
@@ -36,13 +36,8 @@ def _after_live(last):
 
 
 def _live_if_due(last):
-    """TapTap 等抓得久的时候中途调用：直播到点了就先抓一轮，直播数据不断档。"""
-    if time.time() - last["live"] < config.FAST_MINUTES * 60:
-        return
-    saved = activity.state()
-    _safe(collect.collect_live)
-    _after_live(last)
-    activity.restore(saved)
+    """Scheduled snapshots are not supplemented by the old interval loop."""
+    return
 
 
 def _tick(last):
@@ -51,41 +46,28 @@ def _tick(last):
     server.RUN_NOW.clear()
     if force:
         activity.say("收到“立即刷新”，开始抓取全部平台")
-    live_on = any(config.source_on(s) for s in collect.LIVE_SOURCES)
-    # 直播平台都关了：不再每 30 分钟空跑一次分析
-    live_due = live_on and (force or now - last["live"] >= config.FAST_MINUTES * 60)
-    slow_due = force or now - last["slow"] >= config.SLOW_MINUTES * 60
-    ran = 0
-    if live_due:
-        ran += _safe(collect.collect_live, force=force) or 0
-        _after_live(last)
-    if slow_due:
-        started = time.time()
-        # 先抓 Steam、App Store 等几分钟能抓完的平台，抓完分析一次（含 AI 读评论）；再抓 TapTap（30–60 分钟），抓完再分析一次
-        # 上次成功还没到间隔的平台跳过；TapTap 上次没抓完的接着抓
-        ran += _safe(collect.collect_slow, between=lambda: _live_if_due(last),
-                     middle=lambda: _safe(analyze.run), force=force) or 0
-        # 按开始时间和"最久没抓的主要平台"算下一轮，重启后不会马上从头重抓
-        last["slow"] = min(started, collect.oldest_ok(collect.SLOW_MAIN) or started)
-    if ran or ((live_due or slow_due) and not last.get("net_analyzed")):
-        _safe(analyze.run)            # 什么都没抓（全是刚抓过的）就不重复分析；启动后第一次照样分析一次，让 AI 能读
-        last["net_analyzed"] = True
-    elif server.REANALYZE.is_set():
-        server.REANALYZE.clear()
+        collect.request_sample()
+        from . import steamwatch
+        threading.Thread(target=lambda: _safe(sampling.run_due, "steam",
+                         lambda: steamwatch.run_once(full=True), force=True),
+                         name="steam-manual", daemon=True).start()
+    reanalyze = server.REANALYZE.is_set()
+    server.REANALYZE.clear()
+    if force or reanalyze or time.time() - last.get("analyze", 0) > 300:
         _safe(analyze.run, allow_network=False, send_notify=False)
+        last["analyze"] = time.time()
     if now - last["maint"] >= 86400:
         activity.begin("每日维护")
         _safe(maintenance.daily)
         activity.end()
         last["maint"] = time.time()
-    nxt_slow = last["slow"] + config.SLOW_MINUTES * 60
-    activity.idle(last["live"] + config.FAST_MINUTES * 60 if live_on else nxt_slow, nxt_slow)
+    nxt = sampling.next_slot()
+    activity.idle(nxt, nxt)
 
 
 def loop(stop_event=None):
     last = {"live": 0.0, "slow": 0.0, "maint": 0.0}
-    activity.say("雷达开始运行：上次抓过、还没到时间的平台直接跳过；TapTap 上次没抓完的接着抓。"
-                 "跨平台最多 10 路并行，同平台串行；抓完分析")
+    activity.say("平台数字每天北京时间 08:00、20:00 采样；错过的时段启动后立即补采，同一时段不重复。")
     with BUSY:
         # 启动（包括更新后重启）先用已有数据按新规则算一遍，面板马上是新结果，不用等抓完
         _safe(analyze.run, allow_network=False, send_notify=False)
@@ -94,8 +76,11 @@ def loop(stop_event=None):
     _safe(history.start)
     from . import video
     _safe(video.start, stop_event)
-    from . import tapwatch
-    _safe(tapwatch.start, stop_event)
+    from . import bili_growth
+    _safe(bili_growth.start, stop_event)
+    from . import steamwatch
+    _safe(steamwatch.start, stop_event)
+    _safe(collect.start_sampling, stop_event)
     # 地图（v54）：后台单独一个线程，每天抓一次各国 App Store 游戏榜，算各地口味相似度
     from . import worldmap
     _safe(worldmap.start)

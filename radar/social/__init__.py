@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """社交平台：抖音 / 抖音指数 / 哔哩指数 / 快手 / 小红书 / TikTok + 关键词漏斗。
 
-半日轮次跨平台最多 10 路并行，同平台串行。禁止自动关键词搜索。
+一个后台线程，一分钟看一次该干什么，一次只干一件（不同时开很多标签，免得被风控）：
+  热榜到点了 → 读一个热榜 → 漏斗重新分类；
+  否则 → 挑一个今天还没查满、离上次够久的平台，查漏斗队列里下一个没查过的词。
 面板：各平台 → 视频平台（点分组标题是"视频平台大厅"，下面每个平台一页），接口 /api/social/*。
 数据表都以 soc_ 开头（store.py）。
 """
@@ -9,8 +11,8 @@ import threading
 import time
 import traceback
 
-from .. import db
-from . import douyin, funnel, incremental, jobs, page, schedule, settings, store
+from .. import db, sampling
+from . import funnel, jobs, page, settings, store, validation
 
 SCHEMA = store.SCHEMA
 RUN_NOW = threading.Event()
@@ -44,12 +46,6 @@ def _loop(stop_event):
     if stop_event.wait(60):
         return
     while not stop_event.is_set():
-        force = RUN_NOW.is_set()
-        RUN_NOW.clear()
-        if force:
-            _state["poll_after"] = 0
-            if settings.get("SOCIAL_SCHEDULE_MODE") != "halfday":
-                _forced.update(job for job, *_ in jobs.HOT_JOBS)
         try:
             _tick()
             _state["err"] = ""
@@ -58,36 +54,21 @@ def _loop(stop_event):
             traceback.print_exc()
         finally:
             _state["busy"] = ""
-        # Drain runnable platform queues without an extra minute between tasks.
-        delay = 0 if _state.pop("drain", False) else 1
-        if stop_event.wait(delay):
-            return
-        if delay == 0:
-            continue
+        RUN_NOW.wait(60)
+        force = RUN_NOW.is_set()
+        RUN_NOW.clear()
+        if force:
+            for job, *_ in jobs.HOT_JOBS:
+                _forced.add(job)
 
 
 _forced = set()
 
 
 def _tick():
-    if (not RUN_NOW.is_set() and not _state.get("drain")
-            and time.time() < _state.get("poll_after", 0)):
-        return
     settings.load(fill_missing=False)
-    if settings.get("SOCIAL_SCHEDULE_MODE") == "halfday":
-        if not page.available() and settings.get("SOCIAL_AUTO_BROWSER"):
-            if time.time() - _state.get("launch_ts", 0) > 1800:
-                _state["launch_ts"] = time.time()
-                page.launch_browser(background=True)
-        _state["busy"] = schedule.tick()
-        _state["drain"] = _state["busy"].startswith("并发采集")
-        _state["poll_after"] = 0 if _state["drain"] else time.time() + 60
+    if not settings.get("SOCIAL_ENABLED"):
         return
-    _legacy_tick()
-
-
-def _legacy_tick():
-    settings.load(fill_missing=False)
     now = time.time()
     # 1. 漏斗：30 分钟重算一次（只是本地整理，不花钱）
     if now - _state["funnel_ts"] > 1800:
@@ -110,32 +91,55 @@ def _legacy_tick():
             store.status("funnel_ai", False, err=str(e))
 
     browser = page.available()
-    # 雷达专用浏览器没开就自己在后台开（最小化），不用你一直手动开着
-    if not browser and settings.get("SOCIAL_AUTO_BROWSER") and now - _state.get("launch_ts", 0) > 1800:
-        _state["launch_ts"] = now
-        _state["busy"] = "在后台打开雷达专用浏览器"
-        try:
-            page.launch_browser(background=True)
-        except Exception:                        # noqa: BLE001
-            pass
-        browser = page.available()
     # 2. 热榜
-    hot_gap = max(15, int(settings.get("SOCIAL_HOT_MINUTES") or 60)) * 60
     for job, plat, url_name, max_lists in jobs.HOT_JOBS:
         if not settings.platform_on(plat):
             continue
-        if job not in _forced and now - store.last_try(job) < hot_gap:
+        if not jobs.api_ready(job):
             continue
+        state = db.kv_get("sampling:social:" + job, {}) or {}
+        if job not in _forced and state.get("completed_slot", 0) >= sampling.latest_slot(now):
+            continue
+        force = job in _forced
         _forced.discard(job)
         if not browser:
-            store.status(job, False, err="雷达专用浏览器没开（各平台 → 视频平台大厅里点“打开雷达专用浏览器”）")
+            store.status(job, False, err="现有浏览器的 CDP 9222 未连接")
             continue
         _state["busy"] = store.JOB_NAMES.get(job, job)
-        jobs.run_hot(job, plat, url_name, max_lists)
+        sampling.run_due("social:" + job,
+                         lambda: jobs.run_hot(job, plat, url_name, max_lists), force=force)
         funnel.refresh()
         _state["funnel_ts"] = time.time()
         return
-    # No automatic keyword search, including the legacy scheduling mode.
+    # 3. 关键词
+    per_day = int(settings.get("SOCIAL_KW_PER_DAY") or 0)
+    gap = max(3, int(settings.get("SOCIAL_KW_GAP_MINUTES") or 12)) * 60
+    if per_day <= 0:
+        return
+    q = funnel.queue()
+    if not q:
+        return
+    for job, plat, kind in jobs.KW_JOBS:
+        if not settings.platform_on(plat):
+            continue
+        if not jobs.api_ready(job):
+            continue
+        if kind != "api" and not browser:
+            continue
+        if store.lookups_today(job) >= per_day:
+            continue
+        if now - store.last_lookup(job) < gap or now - store.last_try(job) < gap:
+            continue
+        term = None
+        for t in q:
+            if now - store.last_lookup(job, t) > 20 * 3600:
+                term = t
+                break
+        if not term:
+            continue
+        _state["busy"] = "%s：%s" % (store.JOB_NAMES.get(job, job), term)
+        jobs.run_kw(job, term)
+        return
 
 
 # ---------------- 给面板的接口 ----------------
@@ -143,18 +147,25 @@ def _legacy_tick():
 def api_state():
     ensure()
     s = settings.load(fill_missing=False)
-    st = store.status_all()
+    st = {k: dict(v) for k, v in store.status_all().items()}
+    for job, *_ in jobs.HOT_JOBS:
+        item = st.setdefault(job, {})
+        if item.get("validation_version") != validation.VERSION:
+            item.update(ok_ts=None, count=None, note="旧结果未校验，已隔离")
     hot = {}
     for job, plat, _, _ in jobs.HOT_JOBS:
-        h = store.latest_hot(job, 60)
+        h = store.latest_hot(job)
         h["name"] = store.JOB_NAMES[job]
         hot[job] = h
     return {
+        "validation_version": validation.VERSION,
+        "legacy_quarantined": store.legacy_counts(),
         "enabled": bool(s.get("SOCIAL_ENABLED")),
         "running": _state["started"], "busy": _state["busy"], "error": _state["err"],
         "browser": page.available(), "port": page.port(),
         "jobs": [{"job": j, "name": store.JOB_NAMES[j], "on": settings.platform_on(p),
-                  "ready": jobs.api_ready(j), **(st.get(j) or {})}
+                  **(st.get(j) or {}), "ready": jobs.api_ready(j),
+                  "ready_reason": validation.reason(j)}
                  for j, p, _ in [(a, b, c) for a, b, c, _ in jobs.HOT_JOBS] + list(jobs.KW_JOBS)],
         "ai": st.get("funnel_ai") or {},
         "settings": {"per_day": s.get("SOCIAL_KW_PER_DAY"), "gap": s.get("SOCIAL_KW_GAP_MINUTES"),
@@ -166,15 +177,13 @@ def api_state():
         "queue": funnel.queue()[:30],
         "hot": hot,
         "lookups": store.latest_lookups(80),
-        "publications": incremental.report(),
-        "douyin_games": douyin.report(include_growth=False),
-        "schedule": schedule.state(),
     }
 
 
 def api_term(term):
     ensure()
-    return {"term": term, "lookups": store.lookups_for(term), "series": store.series_for(term)}
+    return {"validation_version": validation.VERSION, "term": term,
+            "lookups": store.lookups_for(term), "series": store.series_for(term)}
 
 
 def api_label(term, label):
@@ -185,9 +194,6 @@ def api_label(term, label):
 
 
 def api_run():
-    if settings.get("SOCIAL_SCHEDULE_MODE") == "halfday":
-        RUN_NOW.set()
-        return {"ok": True, "note": "继续到期轮次；已成功任务不会重跑"}
     RUN_NOW.set()
     return {"ok": True, "note": "马上去读一遍热榜（一个一个来，几分钟内读完）"}
 

@@ -22,6 +22,9 @@ BACKUP_KEEP = 14                                  # 备份保留份数
 # 国内访问 Steam、苹果、Roblox 不稳定时填代理，例如 "http://127.0.0.1:7890"；不用就留空
 PROXY = ""
 STEAM_CC = "us"
+STEAM_PRIORITY_MINUTES = 720
+STEAM_PRIORITY_PER_RUN = 40
+STEAM_FULL_PER_RUN = 120
 
 # ================= 运行频率 =================
 FAST_MINUTES = 30        # 直播平台（虎牙、斗鱼）
@@ -40,7 +43,7 @@ SOURCES_ENABLED = {"steam": True, "roblox": True, "taptap": True, "tapmaker": Tr
                    # v30 新接的平台（来源名不能带下划线）
                    "haoyou": True, "mistore": True, "appcn": True, "appus": True, "itch": True, "poki": True,
                    "crazygames": True, "fortnite": True, "kick": True, "twitch": True, "bili": True, "bvideo": True,
-                   # v48：微信 / 抖音小游戏榜（数据来自引力引擎小游戏排行榜，见 sources/gravity.py）
+                   # Mini-games: WeChat via Gravity; Douyin via signed-in official CDP charts.
                    "wxmini": True, "dymini": True}
 
 # Twitch 要你自己免费申请的密钥（步骤见 sources/twitch.py 或运行情况页"没接上的平台"），不填就显示失败原因
@@ -68,7 +71,7 @@ RANK_BOARDS = {
     ("itch", "rank_web"): ("new", "itch.io 网页游戏新而热门"),
     ("poki", "rank_popular"): ("trend", "Poki 本周热门"),
     ("crazygames", "rank_hot"): ("new", "CrazyGames 24 小时热门"),
-    # v48 微信 / 抖音小游戏（引力引擎），各 100 名，按天出榜
+    # Daily charts: WeChat via Gravity; Douyin official charts retain ranks 1-200.
     ("wxmini", "rank_popular"): ("trend", "微信小游戏人气榜"),
     ("wxmini", "rank_played"): ("trend", "微信小游戏最多人玩榜"),
     ("wxmini", "rank_grossing"): ("trend", "微信小游戏畅销榜"),
@@ -83,6 +86,8 @@ for _g, _n in {"survival": "生存", "strategy": "策略", "sportsracing": "体�
     RANK_BOARDS[("fortnite", "rank_" + _g)] = ("trend", f"Fortnite {_n}榜")
 RANK_NEW_TOP = 0.9           # new 榜第 1 名给多少热度（往后按名次递减，大约前 25 名能进必看）
 RANK_RISE_MIN = 3            # trend 榜一天里至少往前冲几名才算
+DYMINI_MIN_RANK = 51         # Official charts retain 1-200; only new-chart ranks 51-200 are candidates.
+DYMINI_MAX_RANK = 200
 # 这些平台的游戏不在 App Store / Steam 上，不去那里搜上线时间（会搜错）
 NO_LAUNCH_LOOKUP = {"roblox", "fortnite", "itch", "poki", "crazygames", "wxmini", "dymini"}
 
@@ -131,26 +136,59 @@ DOUYU_MAX_PAGES = 60
 TAPTAP_BOARD_HOURS = 6
 # TapTap 制造：每小时翻标签页 1–50 页（和参考网站一样），标签页上的游戏每小时都打开详情
 TAPTAP_TAG_HTML_PAGES = 50
-TAPMAKER_MIN_STORE = 100        # 热度到这个数才开始记每小时数据；不到的只记名字（供给检查用）
+TAPMAKER_MIN_STORE = 0          # Preserve all observed counters, including valid zero.
 TAPMAKER_REFRESH_HOURS = 20     # v74 起不再使用（改由抓取调度 radar/revisit.py 决定），留着免得旧设置报错
 TAPMAKER_DETAIL_PER_RUN = 250   # 老游戏每轮最多补抓多少个
 TAPTAP_WATCH_IDS = []
-TAPTAP_PRIORITY_MINUTES = 15
+TAPTAP_PRIORITY_MINUTES = 720
 TAPTAP_PRIORITY_PER_RUN = 12
 
 MAX_STEAM_DETAILS_PER_RUN = 40   # 每次最多新抓多少个 Steam 游戏详情
 STEAM_REVIEWS_TOP_N = 40         # 在线人数前多少的游戏抓评论数（含中文评论数）
-STEAM_DISCOVERY_DAYS = 30
-STEAM_DISCOVERY_PER_RUN = 80
+STEAM_DISCOVERY_DAYS = 15
+STEAM_DISCOVERY_PER_RUN = 10000
 STEAM_DISCOVERY_PAGES = 3
 STEAM_DISCOVERY_METRICS_PER_RUN = 20
+RISING_DAYS = 15
 BVIDEO_MINUTES = 30
+BVIDEO_NEWLIST_PAGES = 3
 BVIDEO_SEARCH_TERMS = []
 BVIDEO_WATCH_IDS = []
 BVIDEO_TRACK_PER_RUN = 30
 BVIDEO_DETAIL_PER_RUN = 12
 BVIDEO_EARLY_VIEWS = 50000
 BVIDEO_FAST_VIEWS_PER_HOUR = 10000
+BVIDEO_STREAM_ENABLED = True
+BVIDEO_STREAM_SECONDS = 60
+BVIDEO_STREAM_PAGE_SIZE = 100
+BVIDEO_LATEST_SECONDS = 10
+BILI_REQUESTS_PER_MINUTE = 180
+BILI_MAX_INFLIGHT = 4
+BVIDEO_TAG_WORKERS = 4
+BVIDEO_BACKLOG_HIGH_WATER = 20000
+BVIDEO_BACKLOG_LOW_WATER = 10000
+BVIDEO_DAILY_ENABLED = True
+BVIDEO_DAILY_HOUR = 0
+BVIDEO_DAILY_MINUTE = 5
+BVIDEO_DAILY_TIDS = [17, 65, 171, 172, 173, 121, 136, 19,
+                    21, 138, 27, 184, 183, 31, 243, 242]
+BVIDEO_DAILY_PAGE_SIZE = 100
+BVIDEO_DAILY_REQUESTS_PER_RUN = 200
+BVIDEO_DAILY_SECONDS_PER_RUN = 300
+BVIDEO_DAILY_RETRY_SECONDS = 3600
+BVIDEO_CANDIDATE_MIN_VIDEOS = 3
+BVIDEO_CANDIDATE_MIN_AUTHORS = 2
+BVIDEO_TITLE_KEEP_DAYS = 90
+BVIDEO_WORD_BLACKLIST = []
+BVIDEO_PERSON_NAMES = []
+BVIDEO_NAME_ALIASES = {}
+BVIDEO_GROWTH_ENABLED = True
+BVIDEO_GROWTH_CANDIDATES = 300
+BVIDEO_GROWTH_SMOOTHING = 100.0
+BVIDEO_GROWTH_SAMPLE_HOURS = 6
+BVIDEO_GROWTH_REQUEST_SECONDS = 10
+BVIDEO_GROWTH_MAX_GAP_HOURS = 30
+BVIDEO_GROWTH_TRACK_DAYS = 30
 
 # 直播平台里不是游戏的分区（不参与游戏判断）
 NON_GAME_CATEGORIES = {
@@ -219,6 +257,8 @@ KW_BIG_GAMES = [
     "cs2", "csgo", "反恐精英", "dota", "刀塔", "原神", "崩坏", "星穹", "绝区零", "鸣潮", "永劫", "三角洲", "穿越火线",
     "dnf", "地下城", "魔兽", "炉石", "守望先锋", "我的世界", "minecraft", "蛋仔", "第五人格", "光遇", "火影",
     "逆水寒", "梦幻西游", "apex", "堡垒之夜", "fortnite", "暗区", "无限暖暖", "燕云",
+    "使命召唤", "call of duty", "qq飞车", "qq炫舞", "明日方舟", "部落冲突", "荒野乱斗",
+    "clash of clans", "brawl stars",
 ]
 KW_STOP_SUBSTRINGS += KW_BIG_GAMES
 
@@ -450,6 +490,21 @@ _EDITABLE = ["PROXY", "BACKUP_DIR", "SERVER_PORT", "GITHUB_TOKEN", "AUTO_UPDATE"
              "REVISIT_ENABLED", "REVISIT_LEARN", "REVISIT_MAX_HOURS", "REVISIT_Z",
              "HIT_WINDOW_START_YEAR", "HIT_LEAD_MONTHS", "HIT_DISCOVER_RULE", "HIT_CLOSE_RULE",
              "HIT_REOPEN_RULE", "HIT_BURST_RULE", "HIT_MIN_CASE_VIDEOS"]
+
+
+_EDITABLE += ["BVIDEO_DAILY_ENABLED", "BVIDEO_DAILY_HOUR", "BVIDEO_DAILY_MINUTE",
+              "BVIDEO_DAILY_TIDS", "BVIDEO_DAILY_PAGE_SIZE", "BVIDEO_DAILY_REQUESTS_PER_RUN",
+              "BVIDEO_DAILY_SECONDS_PER_RUN", "BVIDEO_DAILY_RETRY_SECONDS",
+              "BVIDEO_CANDIDATE_MIN_VIDEOS", "BVIDEO_CANDIDATE_MIN_AUTHORS",
+              "BVIDEO_TITLE_KEEP_DAYS", "BVIDEO_WORD_BLACKLIST", "BVIDEO_PERSON_NAMES",
+              "BVIDEO_NAME_ALIASES"]
+_EDITABLE += ["BVIDEO_STREAM_ENABLED", "BVIDEO_STREAM_SECONDS", "BVIDEO_STREAM_PAGE_SIZE",
+              "BVIDEO_LATEST_SECONDS", "BILI_REQUESTS_PER_MINUTE", "BILI_MAX_INFLIGHT",
+              "BVIDEO_TAG_WORKERS", "BVIDEO_BACKLOG_HIGH_WATER", "BVIDEO_BACKLOG_LOW_WATER"]
+_EDITABLE += ["BVIDEO_GROWTH_ENABLED", "BVIDEO_GROWTH_CANDIDATES",
+              "BVIDEO_GROWTH_SMOOTHING", "BVIDEO_GROWTH_SAMPLE_HOURS",
+              "BVIDEO_GROWTH_REQUEST_SECONDS", "BVIDEO_GROWTH_MAX_GAP_HOURS",
+              "BVIDEO_GROWTH_TRACK_DAYS"]
 
 
 def _load_user_settings():

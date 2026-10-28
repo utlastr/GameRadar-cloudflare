@@ -8,11 +8,14 @@ import os
 import sqlite3
 import threading
 import time
+from collections import deque
 from contextlib import contextmanager
 
 from . import config
 
 _lock = threading.RLock()
+_session_metrics_lock = threading.Lock()
+_session_events = deque(maxlen=20000)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS entities (
@@ -98,13 +101,32 @@ def _retry_missing(fn):
 @contextmanager
 def session():
     """用法：with db.session() as c: c.execute(...)  结束时自动保存并关闭。"""
+    queued = time.monotonic()
     with _lock:
-        conn = _connect()
+        acquired = time.monotonic()
         try:
-            yield conn
-            conn.commit()
+            conn = _connect()
+            try:
+                yield conn
+                conn.commit()
+            finally:
+                conn.close()
         finally:
-            conn.close()
+            with _session_metrics_lock:
+                _session_events.append((time.monotonic(), acquired - queued,
+                                        time.monotonic() - acquired,
+                                        threading.current_thread().name))
+
+
+def session_metrics():
+    now = time.monotonic()
+    with _session_metrics_lock:
+        events = [event for event in _session_events if event[0] >= now - 60]
+    count = len(events)
+    return {"sessions_last_minute": count,
+            "mean_wait_seconds": round(sum(e[1] for e in events) / count, 4) if count else 0,
+            "max_hold_seconds": round(max((e[2] for e in events), default=0), 4),
+            "slowest_thread": max(events, key=lambda e: e[2])[3] if events else None}
 
 
 def init():

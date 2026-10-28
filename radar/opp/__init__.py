@@ -109,21 +109,19 @@ def start(stop_event=None):
 
 def _loop(stop):
     from . import bili_track, features
-    from ..social import settings as social_settings
     stop.wait(20)                     # 让主采集先起来，别抢带宽
     last = {"discover": 0.0, "track": 0.0, "demand": 0.0, "map": 0.0, "feat": 0.0, "search": 0.0}
     while not stop.is_set():
         now = time.time()
         try:
-            halfday = social_settings.get("SOCIAL_SCHEDULE_MODE") == "halfday"
-            if not halfday and not paused() and now - last["search"] >= 10 * 60:
+            if not paused() and now - last["search"] >= 10 * 60:
                 last["search"] = now
                 bili_track.search_games()
         except Exception as e:                   # noqa: BLE001
             activity.say("B站按名字搜出错：%s" % e)
         try:
             if not paused():
-                if not halfday and now - last["discover"] >= 20 * 60:
+                if now - last["discover"] >= 20 * 60:
                     last["discover"] = now
                     bili_track.discover_once()
                 if now - last["track"] >= 10 * 60:

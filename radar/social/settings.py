@@ -14,20 +14,14 @@ from .. import config
 DEFAULTS = {
     # 总开关
     "SOCIAL_ENABLED": True,
-    "SOCIAL_SCHEDULE_MODE": "halfday",
-    "SOCIAL_MAX_WORKERS": 10,
-    "SOCIAL_DISCOVERY_TERMS": [],
     # 你登录各平台用的浏览器的调试端口（"打开雷达专用浏览器"按钮开的就是这个端口）
     "SOCIAL_CDP_PORT": 9222,
     # 热榜多久读一次（分钟）
     "SOCIAL_HOT_MINUTES": 60,
     # 每个平台每天最多查几个关键词（查得越多越容易被风控）
-    "SOCIAL_KW_PER_DAY": 10,
+    "SOCIAL_KW_PER_DAY": 0,
     # 同一个平台两次关键词查询至少隔几分钟
     "SOCIAL_KW_GAP_MINUTES": 12,
-    "SOCIAL_KW_REFRESH_MINUTES": 360,
-    "SOCIAL_SIGNAL_REFRESH_MINUTES": 15,
-    "SOCIAL_REQUESTS_PER_DAY": 40,
     # 不管漏斗怎么判，每天都要查的词（游戏名）
     "SOCIAL_WATCH_TERMS": [],
     # 各平台开关：false 就不读
@@ -37,7 +31,7 @@ DEFAULTS = {
     # 一次最多问几批（每批 40 个词）
     "SOCIAL_AI_BATCHES": 20,
     # 雷达专用浏览器没开时，雷达自己在后台（最小化）把它打开
-    "SOCIAL_AUTO_BROWSER": True,
+    "SOCIAL_AUTO_BROWSER": False,
     # TikTok 创意中心看哪个国家
     "SOCIAL_TIKTOK_REGION": "US",
     # 网址模板（平台改版时可以在 settings.json 里改，{kw} 会替换成关键词）
@@ -53,7 +47,6 @@ DEFAULTS = {
 
 URLS = {
     # 抖音
-    "douyin_hot": "https://www.douyin.com/hot",
     "douyin_kw": "https://www.douyin.com/search/{kw}?type=video",
     # 抖音指数（原巨量算数）
     "douyin_index_hot": "https://trendinsight.oceanengine.com/arithmetic-index/hot",
@@ -122,6 +115,8 @@ def platform_on(p):
 
 
 def url(name, **kw):
+    if name == "douyin_hot":
+        return ""
     over = get("SOCIAL_URLS") or {}
     tpl = over.get(name) if isinstance(over, dict) and over.get(name) is not None else URLS.get(name, "")
     if not tpl:

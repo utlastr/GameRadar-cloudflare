@@ -3,38 +3,107 @@ import gzip
 import json
 import os
 import random
+import threading
 import time
 import traceback
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
 from . import activity, config, db, revisit
-from .sources import (appstore_rank, bili, crazygames, douyu, fortnite, gravity, haoyou, huya, itch, kick, mistore,
+from .sources import (appstore_rank, bili, crazygames, douyu, dymini, fortnite, gravity, haoyou, huya, itch, kick, mistore,
                       poki, roblox, steam, taptap, twitch)
 
-_status_lock = threading.Lock()
+_status_lock = threading.RLock()
 _platform_locks = {}
 _platform_guard = threading.Lock()
-_between_lock = threading.Lock()
+_sampling_started = False
+_force_generation = 0
 
 
 def platform_lock(source):
-    key = {"tapmaker": "taptap", "appcn": "appstore", "appus": "appstore",
-           "bvideo": "bili"}.get(source, source)
+    key = "taptap" if source in ("tapmaker", "taptap") else (
+        "appstore" if source in ("appcn", "appus") else source)
     with _platform_guard:
         return _platform_locks.setdefault(key, threading.RLock())
 
 
-def _parallel(run, fns, ts):
-    # Each lane drains one platform; workers do not wait behind same-platform work.
-    lanes = {}
-    for source in run:
-        lanes.setdefault(id(platform_lock(source)), []).append(source)
-    def lane(sources):
-        for source in sources:
-            _run(source, fns[source], ts)
-    with ThreadPoolExecutor(max_workers=10, thread_name_prefix="collector") as pool:
-        list(pool.map(lane, lanes.values()))
+def _collect_one(source, fn, ts, scheduled=False, force=False):
+    from . import sampling
+    def sample():
+        if _run(source, fn, int(time.time()) if scheduled else ts) is False:
+            error = ((db.kv_get("source_status", {}) or {}).get(source) or {}).get("error")
+            raise RuntimeError(error or source + " sampling failed")
+    try:
+        if scheduled:
+            return sampling.run_due("platform:" + source, sample, force=force)
+        return sample()
+    except Exception as e:
+        activity.say(f"{NAMES.get(source, source)} 本时段采样失败：{e}")
+
+
+def _parallel(sources, fns, ts, scheduled=False, force=False):
+    from concurrent.futures import ThreadPoolExecutor
+    groups = {}
+    for source in sources:
+        groups.setdefault(platform_lock(source), []).append(source)
+
+    def work(lock, group):
+        with lock:
+            for source in group:
+                _collect_one(source, fns[source], ts, scheduled, force)
+    if groups:
+        with ThreadPoolExecutor(max_workers=min(12, len(groups)), thread_name_prefix="platform") as pool:
+            futures = [pool.submit(work, lock, group) for lock, group in groups.items()]
+            for future in futures:
+                future.result()
+
+
+def _platform_functions():
+    return {"taptap": _taptap, "tapmaker": _tapmaker, "haoyou": _haoyou, "dymini": _dymini,
+           "roblox": _roblox, "appcn": _appcn, "appus": _appus, "mistore": _mistore,
+           "fortnite": _fortnite, "crazygames": _crazygames, "poki": _poki, "itch": _itch,
+           "wxmini": _wxmini, "huya": _huya, "douyu": _douyu, "bili": _bili,
+            "twitch": _twitch, "kick": _kick}
+
+
+def sample_platforms(force=False):
+    """Independent persistent slots; a slow live source cannot block game charts."""
+    fns = _platform_functions()
+    sources = [s for s in fns if config.source_on(s)]
+    _parallel(sources, fns, int(time.time()), scheduled=True, force=force)
+    return len(sources)
+
+
+def request_sample():
+    global _force_generation
+    with _platform_guard:
+        _force_generation += 1
+
+
+def start_sampling(stop_event=None):
+    global _sampling_started
+    if _sampling_started:
+        return
+    _sampling_started = True
+    stop = stop_event or threading.Event()
+    fns = _platform_functions()
+    groups = {}
+    for source in fns:
+        groups.setdefault(platform_lock(source), []).append(source)
+
+    def loop(lock, group):
+        from . import sampling
+        generation = _force_generation
+        while not stop.is_set():
+            requested = _force_generation
+            force = requested != generation
+            for source in group:
+                if config.source_on(source):
+                    with lock:
+                        _collect_one(source, fns[source], 0, scheduled=True, force=force)
+            generation = requested
+            stop.wait(max(.5, min(30, sampling.next_slot() - time.time())))
+    for lock, group in groups.items():
+        threading.Thread(target=loop, args=(lock, group), daemon=True,
+                         name="sampling-" + group[0]).start()
 
 
 def _align(ts, minutes):
@@ -66,10 +135,10 @@ def _save(source, ts, items):
 
 def _status(source, ok, count=0, err="", warn=""):
     with _status_lock:
-        _status_update(source, ok, count, err, warn)
+        _write_status(source, ok, count, err, warn)
 
 
-def _status_update(source, ok, count=0, err="", warn=""):
+def _write_status(source, ok, count=0, err="", warn=""):
     st = db.kv_get("source_status", {}) or {}
     s = st.get(source, {})
     now = int(time.time())
@@ -93,11 +162,6 @@ SLOW_EVERY_HOURS = {"haoyou": 2, "mistore": 3, "appcn": 2, "appus": 2, "itch": 2
 
 
 def _run(source, fn, ts):
-    with platform_lock(source):
-        return _run_locked(source, fn, ts)
-
-
-def _run_locked(source, fn, ts):
     if not config.SOURCES_ENABLED.get(source, True):
         return
     name = NAMES.get(source, source)
@@ -112,11 +176,13 @@ def _run_locked(source, fn, ts):
         _status(source, True, n, warn=warn)
         db.log_run("collect:" + source, time.time() - t0, True, f"{n} 条" + (f"；部分失败：{warn}" if warn else ""))
         activity.say(f"{name} 完成：{n} 条，用时 {time.time() - t0:.0f} 秒" + (f"（部分失败：{warn}）" if warn else ""))
+        return True
     except Exception as e:
         _status(source, False, err=str(e))
         # 错误原因放最前面，后面才是详细的出错位置（面板上只显示前几百个字）
         db.log_run("collect:" + source, time.time() - t0, False, f"{e}\n\n{traceback.format_exc()}")
         activity.say(f"{name} 失败：{e}")
+        return False
     finally:
         activity.end()
 
@@ -266,7 +332,7 @@ def _wxmini(ts):
 
 
 def _dymini(ts):
-    items, errors = gravity.boards("dymini", progress=lambda d, n: activity.progress(d, n, f"榜单 第 {d} / {n} 页"))
+    items, errors = dymini.boards(progress=lambda d, n: activity.progress(d, n, f"官方榜单 {d} / {n}"))
     return _board("dymini", items, errors, ts)
 
 
@@ -284,6 +350,20 @@ def _fortnite(ts):
 
 
 def _bvideo(ts):
+    if (db.kv_get("bili_collection_reset", {}) or {}).get("mode") == "realtime_only":
+        from . import bili_latest
+        result = bili_latest.poll_once(force=True)
+        if result.get("status") in ("paused", "error"):
+            raise RuntimeError("B站最新投稿：" + (result.get("error") or result["status"]))
+        return result.get("new", 0), ""
+    if config.BVIDEO_DAILY_ENABLED:
+        from . import bili_daily
+        result = bili_daily.run_once()
+        state = result["status"]
+        error = result.get("error") or ""
+        if state in ("paused", "error", "waiting_index"):
+            raise RuntimeError("B站按日采集：" + (error or state))
+        return result.get("videos", 0), error
     from . import video
     return video.collect()
 
@@ -352,8 +432,10 @@ def _steam(ts):
     plan = revisit.Plan(ts)
     deep = set()
     # New releases need their details before already-known chart entries.
-    ids.sort(key=lambda appid: (bool((known.get(str(appid)) or {}).get("fetched_at")),
+    ids.sort(key=lambda appid: ((known.get(str(appid)) or {}).get("steam_full_at", 0),
+                               bool((known.get(str(appid)) or {}).get("fetched_at")),
                                -((known.get(str(appid)) or {}).get("release_ts") or 0)))
+    ids = ids[:config.STEAM_FULL_PER_RUN]
     for i, appid in enumerate(ids, 1):
         activity.progress(i, len(ids), f"游戏详情和在线人数 {i} / {len(ids)}")
         key = str(appid)
@@ -362,7 +444,7 @@ def _steam(ts):
         stale = ts - (extra.get("fetched_at") or 0) > 7 * 86400
         if plan.skipped(member) and extra.get("fetched_at"):
             stale = False
-        if stale and fetched < config.MAX_STEAM_DETAILS_PER_RUN:
+        if stale and fetched < min(10, config.MAX_STEAM_DETAILS_PER_RUN):
             fetched += 1
             try:
                 info = steam.detail(appid)
@@ -391,8 +473,10 @@ def _steam(ts):
         if metrics:
             extra.pop("metrics_pending", None)
         extra["lists"] = lists.get(appid, [])
+        extra["steam_full_at"] = int(time.time())
         items.append({"entity": key, "name": extra.get("name") or key,
                       "metrics": metrics, "extra": extra})
+        _save("steam", int(time.time()), [items[-1]])
 
     # 折扣：打折带来的热度不等于玩法火了，卡片上要标出来
     activity.progress(0, 0, "价格和折扣")
@@ -415,7 +499,7 @@ def _steam(ts):
         if it not in top and it["entity"] in deep and rel and not it["extra"].get("coming_soon") \
                 and ts - rel < config.LAUNCH_TRACK_DAYS * 86400:
             top.append(it)
-    activity.say(f"Steam：榜单 {len(ids) - kept} 款，另有上线不久继续跟踪 {kept} 款，查评论数 {len(top)} 款")
+    activity.say(f"Steam：本轮限额采样 {len(ids)} 款，近期跟踪池 {kept} 款，查评论数 {len(top)} 款")
     for j, it in enumerate(top, 1):
         activity.progress(j, len(top), f"评论数 {j} / {len(top)}")
         try:
@@ -425,16 +509,21 @@ def _steam(ts):
             time.sleep(0.4)
         except Exception:
             continue
-        if total:
+        if total is not None:
             it["metrics"]["reviews"] = total
-            it["metrics"]["reviews_cn"] = cn or 0
-            it["extra"]["cn_share"] = round((cn or 0) / total, 3)
+            review_metrics = {"reviews": total}
+            if cn is not None:
+                it["metrics"]["reviews_cn"] = cn
+                review_metrics["reviews_cn"] = cn
+                if total:
+                    it["extra"]["cn_share"] = round(cn / total, 3)
+            _save("steam", int(time.time()), [dict(it, metrics=review_metrics)])
     for it in items:
         if it["entity"] in deep:
             plan.done("steam:" + it["entity"], it["metrics"], ts)
     plan.flush()
     activity.say("Steam：" + plan.summary())
-    _save("steam", ts, items)
+    _save("steam", int(time.time()), [dict(it, metrics={}) for it in items])
     return len(items)
 
 
@@ -455,17 +544,12 @@ _between_last = 0.0
 def _between():
     """TapTap 详情一抓就是几十分钟；中途到点了先抓一轮虎牙斗鱼，直播数据不断档。"""
     global _between_last
-    if not _between_lock.acquire(blocking=False):
-        return
-    try:
-        if _between_fn and time.time() - _between_last >= 60:
-            _between_last = time.time()
-            try:
-                _between_fn()
-            except Exception:
-                traceback.print_exc()
-    finally:
-        _between_lock.release()
+    if _between_fn and time.time() - _between_last >= 60:
+        _between_last = time.time()
+        try:
+            _between_fn()
+        except Exception:
+            traceback.print_exc()
 
 
 def _known(source):
@@ -493,8 +577,10 @@ RESUME_MAX_AGE = 2 * 3600
 
 
 def _resume_get(source):
+    from . import sampling
     r = db.kv_get("resume:" + source)
-    if r and time.time() - (r.get("started") or 0) < RESUME_MAX_AGE:
+    if r and time.time() - (r.get("started") or 0) < RESUME_MAX_AGE and (
+            sampling.latest_slot(r.get("ts") or 0) == sampling.latest_slot()):
         return r
     return None
 
@@ -509,26 +595,38 @@ def _resume_clear(source):
 
 # ---------------- TapTap 榜单 ----------------
 def _taptap(ts):
-    """照参考网站 TapTrack：先翻全部榜单网页拿游戏，再逐个打开详情页。中途重启会接着上次的进度。"""
+    """Discover the complete new-release chart, then persist each game's details."""
     r = _resume_get("taptap")
-    if r:
+    if r and r.get("scope") == "new-v2":
         ts, board, done, ok = r["ts"], r["board"], set(r["done"]), r["ok"]
         activity.say(f"TapTap 榜单：接着上次的进度抓（{len(done)} / {len(board)} 款已打开过）")
     else:
         raw = taptap.board_lists(progress=lambda d, n: activity.progress(d, n, f"榜单网页 第 {d} / {n} 页"))
         board = {str(a): {"name": b["name"], "lists": [list(x) for x in b["lists"]]} for a, b in raw.items()}
         done, ok = set(), 0
-        r = {"ts": ts, "started": int(time.time()), "board": board, "done": [], "ok": 0}
+        r = {"scope": "new-v2", "ts": ts, "started": int(time.time()), "board": board, "done": [], "ok": 0}
         _resume_put("taptap", r)
     known = _known("taptap")
     ids = list(board)
+    discovered_at = int(time.time())
+    seeds = []
+    for key, entry in board.items():
+        extra = dict((known.get(key) or (None, 0, {}))[2])
+        extra.update(lists=[f"{c}第{p}" for c, p in entry["lists"]],
+                     new_candidate=True, preorder=False,
+                     url=f"{taptap.BASE_URL}/app/{key}")
+        seeds.append({"entity": key, "name": entry["name"], "extra": extra,
+                      "metrics": {"rank_" + taptap.BOARD_RANK_KEYS[c]: p
+                                  for c, p in entry["lists"] if c in taptap.BOARD_RANK_KEYS}})
+    _save("taptap", discovered_at, seeds)
     batch = []
     plan = revisit.Plan(ts)
     tried = 0
 
     def flush():
         if batch:
-            _save("taptap", ts, batch)
+            for item in batch:
+                _save("taptap", item.pop("_sampled_at"), [item])
             batch.clear()
         plan.flush()
         r.update({"done": sorted(done), "ok": ok})
@@ -545,27 +643,37 @@ def _taptap(ts):
         rank_m = {"rank_" + taptap.BOARD_RANK_KEYS[c]: p for c, p in b["lists"] if taptap.BOARD_RANK_KEYS.get(c)}
         plan.signal(member, revisit.rank_value(rank_m))
         app = None
-        if plan.due(member):
-            _between()
-            tried += 1
-            app = taptap.detail(key)
-            _detail_pause()
+        error = ""
+        _between()
+        tried += 1
+        try:
+            app = taptap.detail(key, strict=True)
+        except Exception as e:
+            error = str(e)[:400]
+        _detail_pause()
+        sampled_at = int(time.time())
         prev = (known.get(key) or (None, 0, {}))[2]
         if app and app != taptap.GONE:
             ok += 1
             it = taptap.parse_app(app)
-            it["extra"]["detail_at"] = ts
-            plan.done(member, it["metrics"], ts)
+            it["extra"]["detail_at"] = sampled_at
+            it["extra"]["fetch_error"] = ""
+            it["extra"]["preorder"] = False
+            plan.done(member, it["metrics"], sampled_at)
         else:
             x = dict(prev)
             x.setdefault("preorder", False)       # 在下载榜上的都已上线
             it = {"entity": key, "name": (known.get(key) or (b["name"],))[0] or b["name"], "metrics": {}, "extra": x}
+            x.update(fetch_error=error or ("已下线" if app == taptap.GONE else "详情未返回"),
+                     detail_attempt_at=sampled_at, gone=app == taptap.GONE)
+        it["extra"]["new_candidate"] = True
         it["extra"]["lists"] = [f"{c}第{p}" for c, p in b["lists"]]
         for c, p in b["lists"]:
             k = taptap.BOARD_RANK_KEYS.get(c)
             if k:
                 it["metrics"]["rank_" + k] = p
         it["metrics"] = {k: v for k, v in it["metrics"].items() if v is not None}
+        it["_sampled_at"] = sampled_at
         batch.append(it)
         done.add(key)
         if len(batch) >= RESUME_EVERY:
@@ -580,18 +688,12 @@ def _taptap(ts):
 
 # ---------------- TapTap 制造 / 创意工坊 ----------------
 def _tapmaker(ts):
-    """照参考网站 taptap-maker-tracker：翻 TapTap制造 标签页 1–50 页拿游戏，再逐个打开详情页。
-
-    标签页（约 500 款）每轮都翻；以前发现、现在掉出标签页的老游戏（含以前的创意工坊游戏），
-    按抓取调度（radar/revisit.py）到点的才补，上线 14 天内的优先，每轮最多 TAPMAKER_DETAIL_PER_RUN 款。
-    标签页上的也按调度：平稳的间隔翻倍，名次突升或增速异常的回到每轮都查。
-    创意工坊没有标签页（TapTap 打开是 404），参考网站也没公开它的做法，所以不再找新的创意工坊游戏。
-    """
+    """Follow the reference's paginated discovery and full per-game detail sampling."""
     known = _known("tapmaker")
     plan = revisit.Plan(ts)
     watch = {str(e) for e in config.TAPTAP_WATCH_IDS}
     r = _resume_get("tapmaker")
-    if r:
+    if r and r.get("scope") == "all-counters-v2":
         ts, ids, done = r["ts"], r["ids"], set(r["done"])
         listed = {e: tuple(v) for e, v in r["listed"].items()}
         ok, gone, tracked = r["ok"], r["gone"], r["tracked"]
@@ -604,20 +706,18 @@ def _tapmaker(ts):
 
         old = []
         for e, (name, last_seen, x) in known.items():
-            if e in listed or not x.get("track"):
-                continue                      # 热度一直不到 100 的老游戏不再补（只留名字给供给检查）
+            if e in listed or x.get("gone"):
+                continue
             fresh = ts - (x.get("released_time") or 0) < 14 * 86400
-            if plan.due("tapmaker:" + e):
-                old.append((0 if fresh else 1, x.get("detail_at") or 0, e))
+            old.append((0 if fresh else 1, x.get("detail_at") or 0, e))
         old.sort()
         ids = list(dict.fromkeys([str(e) for e in config.TAPTAP_WATCH_IDS] +
-                                 list(listed) + [e for _, _, e in old[:config.TAPMAKER_DETAIL_PER_RUN]]))
+                                 list(listed) + [e for _, _, e in old]))
         done, ok, gone, tracked = set(), 0, 0, 0
-        r = {"ts": ts, "started": int(time.time()), "ids": ids, "listed": {e: list(v) for e, v in listed.items()},
+        r = {"scope": "all-counters-v2", "ts": ts, "started": int(time.time()), "ids": ids, "listed": {e: list(v) for e, v in listed.items()},
              "done": [], "ok": 0, "gone": 0, "tracked": 0}
         _resume_put("tapmaker", r)
 
-    six_hourly = (ts // 3600) % 6 == 0
     batch = []
     tried = 0
 
@@ -641,11 +741,14 @@ def _tapmaker(ts):
         if e in listed:
             plan.signal(member, revisit.rank_value({"rank_page": listed[e][0]}))
         app = None
-        if e in watch or plan.due(member):
-            _between()
-            tried += 1
-            app = taptap.detail(e)
-            _detail_pause()
+        error = ""
+        _between()
+        tried += 1
+        try:
+            app = taptap.detail(e, strict=True)
+        except Exception as exc:
+            error = str(exc)[:400]
+        _detail_pause()
         sampled_at = int(time.time())
         if app == taptap.GONE:
             gone += 1
@@ -653,6 +756,7 @@ def _tapmaker(ts):
             it = {"entity": e, "name": name, "metrics": {}, "extra": x}
         elif not app:
             x = dict(prev)
+            x.update(fetch_error=error or "详情未返回", detail_attempt_at=sampled_at)
             if not prev:
                 x.update({"preorder": False, "tags": [], "lists": []})   # 能出现在标签页的都已上线
             it = {"entity": e, "name": listed.get(e, (0, name))[1] or name, "metrics": {}, "extra": x}
@@ -661,6 +765,7 @@ def _tapmaker(ts):
             it = taptap.parse_app(app)
             it["extra"]["detail_at"] = sampled_at
             it["extra"]["gone"] = False
+            it["extra"]["fetch_error"] = ""
             plan.done(member, it["metrics"], sampled_at)
         x = it["extra"]
         if e in listed:
@@ -669,15 +774,9 @@ def _tapmaker(ts):
         else:
             x["kind"] = x.get("kind") or prev.get("kind") or ""
             x["lists"] = []
-        dl = it["metrics"].get("downloads") or 0
-        x["track"] = bool(prev.get("track") or dl >= config.TAPMAKER_MIN_STORE)
+        x["track"] = True
         it["metrics"] = {k: v for k, v in it["metrics"].items() if v is not None}
-        if not x["track"]:
-            it["metrics"] = {}            # 热度太低的只记名字，不记每小时数据
-        else:
-            tracked += 1
-            if not six_hourly:
-                it["metrics"].pop("reviews", None)   # 评价数 6 小时记一次就够
+        tracked += 1
         it["_sampled_at"] = sampled_at
         batch.append(it)
         done.add(e)
@@ -734,7 +833,8 @@ def collect_live(force=False):
     if skipped:
         activity.say("刚抓过，这次跳过：" + "、".join(skipped) + f"（每 {config.FAST_MINUTES} 分钟抓一次）")
     fns = {"huya": _huya, "douyu": _douyu, "bili": _bili, "twitch": _twitch, "kick": _kick}
-    _parallel(run, fns, ts)
+    for s in run:
+        _run(s, fns[s], ts)
     return len(run)
 
 
@@ -746,7 +846,7 @@ def collect_slow(between=None, middle=None, force=False):
     global _between_fn
     _between_fn = between
     ts = _align(time.time(), config.SLOW_MINUTES)
-    fns = {"steam": _steam, "roblox": _roblox, "appcn": _appcn, "appus": _appus, "haoyou": _haoyou,
+    fns = {"roblox": _roblox, "appcn": _appcn, "appus": _appus, "haoyou": _haoyou,
            "mistore": _mistore, "fortnite": _fortnite, "crazygames": _crazygames, "poki": _poki, "itch": _itch,
            "wxmini": _wxmini, "dymini": _dymini}
     n = 0
@@ -754,29 +854,34 @@ def collect_slow(between=None, middle=None, force=False):
         run, skipped = _skip_fresh(list(fns), config.SLOW_MINUTES, force)
         if skipped:
             activity.say("刚抓过，这次跳过：" + "、".join(skipped))
+        for s in run:
+            _between()
+            _run(s, fns[s], ts)
+        n += len(run)
+        if middle and run:
+            middle()
+
         tm_resume = _resume_get("tapmaker")
         tm_run, tm_skip = _skip_fresh(["tapmaker"], config.SLOW_MINUTES, force)
         tp_resume = _resume_get("taptap")
         tp_age = time.time() - _ok_ts("taptap")
-        tp_due = tp_resume or tp_age >= config.TAPTAP_BOARD_HOURS * 3600 - 600
+        tp_due = force or tp_resume or tp_age >= config.TAPTAP_BOARD_HOURS * 3600 - 600
         if (tm_resume or tm_run) or (tp_due and config.SOURCES_ENABLED.get("taptap", True)):
             activity.say("开始抓 TapTap：要逐个打开几百个游戏详情页，一轮 30–60 分钟，进度在右上角；"
-                         "这期间直播平台照常每 30 分钟抓一次；中途重启会接着抓")
+                         "平台数字每天 08:00、20:00 采样；中途重启会接着抓")
+        if tp_due:
+            _between()
+            _run("taptap", _taptap, ts)
+            n += 1
         if tm_resume or tm_run:
-            run.append("tapmaker")
-            fns["tapmaker"] = _tapmaker
+            _between()
+            _run("tapmaker", _tapmaker, ts)
+            n += 1
         elif tm_skip:
             activity.say("刚抓过，这次跳过：" + "、".join(tm_skip))
-        if tp_due:
-            run.append("taptap")
-            fns["taptap"] = _taptap
-        else:
+        if not tp_due:
             activity.say(f"TapTap 榜单每 {config.TAPTAP_BOARD_HOURS} 小时抓一次，"
                          f"下次约 {time.strftime('%H:%M', time.localtime(time.time() + config.TAPTAP_BOARD_HOURS * 3600 - tp_age))}")
-        _parallel(run, fns, ts)
-        n += len(run)
-        if middle and run:
-            middle()
     finally:
         _between_fn = None
     return n

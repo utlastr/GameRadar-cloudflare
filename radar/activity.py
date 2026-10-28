@@ -31,30 +31,29 @@ def say(msg):
 
 def begin(task, detail=""):
     with _lock:
-        _tasks[threading.get_ident()] = {"task": task, "detail": detail, "done": 0,
-                                        "total": 0, "started": time.time()}
         _state.update(busy=True, task=task, detail=detail, done=0, total=0, started=time.time())
+        _tasks[threading.get_ident()] = {k: _state[k] for k in
+                                        ("task", "detail", "done", "total", "started")}
 
 
 def progress(done, total, detail=None):
     with _lock:
-        current = _tasks.get(threading.get_ident())
-        if current is not None:
-            current.update(done=done, total=total)
-            if detail is not None:
-                current["detail"] = detail
         _state["done"], _state["total"] = done, total
         if detail is not None:
             _state["detail"] = detail
+        task = _tasks.get(threading.get_ident())
+        if task is not None:
+            task.update(done=done, total=total)
+            if detail is not None:
+                task["detail"] = detail
 
 
 def end():
     with _lock:
+        _state.update(busy=False, done=0, total=0, detail="")
         _tasks.pop(threading.get_ident(), None)
         if _tasks:
-            _state.update(busy=True, **next(reversed(_tasks.values())))
-        else:
-            _state.update(busy=False, done=0, total=0, detail="")
+            _state.update(next(reversed(_tasks.values())), busy=True)
         _state["rev"] += 1
 
 
@@ -69,18 +68,22 @@ def restore(saved):
 
 def idle(next_live, next_slow):
     with _lock:
+        if _tasks:
+            _state.update(next(reversed(_tasks.values())), busy=True,
+                          next_live=next_live, next_slow=next_slow)
+            return
         _state.update(busy=False, task="空闲", detail="", done=0, total=0,
                       next_live=next_live, next_slow=next_slow)
 
 
 def state():
     with _lock:
-        return {**_state, "tasks": [dict(t) for t in _tasks.values()]}
+        return dict(_state, tasks=list(_tasks.values()))
 
 
 def snapshot(after=0):
     with _lock:
-        return {"state": dict(_state), "seq": _seq,
+        return {"state": dict(_state, tasks=list(_tasks.values())), "seq": _seq,
                 "lines": [l for l in _lines if l["seq"] > after][-500:]}
 
 

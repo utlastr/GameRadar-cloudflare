@@ -1,0 +1,54 @@
+test_counter_reset_inside_window_and_new_video_zero (test_bili_growth.FormulaTests) ... ok
+test_interpolation_no_extrapolation_and_reset (test_bili_growth.FormulaTests) ... ok
+test_recent_average_preserves_short_pullback_and_seven_day_median (test_bili_growth.FormulaTests) ... ok
+test_remove_entire_top_author_not_top_video (test_bili_growth.FormulaTests) ... ok
+test_backfill_catches_concurrent_old_bv_below_saved_cursor (test_bili_growth.GrowthStoreTests) ... ok
+test_cannot_link_applies_to_transitive_path (test_bili_growth.GrowthStoreTests) ... ok
+test_growth_detected_even_without_new_uploads (test_bili_growth.GrowthStoreTests) ... ok
+test_historical_cache_survives_a_later_default_rebuild (test_bili_growth.GrowthStoreTests) ... ok
+test_http_rebuild_persists_c_and_rejects_bad_body_before_writing (test_bili_growth.GrowthStoreTests) ... ok
+test_initial_observation_does_not_create_ten_days_of_zero_baseline (test_bili_growth.GrowthStoreTests) ... ok
+test_missing_snapshot_not_zero_and_backfill_preserves_observation_date (test_bili_growth.GrowthStoreTests) ... ok
+test_pause_stops_refresh_and_request_is_anonymous (test_bili_growth.GrowthStoreTests) ... ok
+test_refresh_error_backoff_and_wrong_bv_not_saved (test_bili_growth.GrowthStoreTests) ... ok
+test_reject_edge_splits_and_undo_survives_rebuild (test_bili_growth.GrowthStoreTests) ... ok
+test_route_and_invalid_parameters (test_bili_growth.GrowthStoreTests) ... ok
+test_three_videos_by_one_author_are_not_three_independent_votes (test_bili_growth.GrowthStoreTests) ... ok
+test_transitive_group_and_bv_dedup_without_title_or_alias_dictionary (test_bili_growth.GrowthStoreTests) ... ok
+test_warmup_pairs_are_evidence_not_false_automatic_merges (test_bili_growth.GrowthStoreTests) ... ok
+test_parent_latest_request_stays_anonymous_and_uses_actual_size (test_bili_latest.LatestClientTests) ... ok
+test_stale_wrong_category_and_unsorted_cards_are_rejected (test_bili_latest.LatestClientTests) ... ok
+test_active_latest_lease_blocks_duplicate_source_worker (test_bili_latest.LatestTests) ... ok
+test_backward_head_does_not_replace_checkpoint (test_bili_latest.LatestTests) ... ok
+test_checkpoint_and_inbox_are_atomic_on_storage_error (test_bili_latest.LatestTests) ... ok
+test_daily_completion_is_counted_once_in_realtime_metrics (test_bili_latest.LatestTests) ... ok
+test_detail_scoped_pause_does_not_stop_latest_status (test_bili_latest.LatestTests) ... ok
+test_disabled_collector_is_not_reported_as_stale (test_bili_latest.LatestTests) ... ok
+test_due_head_no_longer_starves_details (test_bili_latest.LatestTests) ... ok
+test_equal_arrival_and_completion_is_balanced_not_stalled (test_bili_latest.LatestTests) ... ok
+test_failed_partition_save_stays_queued_for_retry (test_bili_latest.LatestTests) ... ok
+test_first_head_is_bootstrap_not_historical_completion (test_bili_latest.LatestTests) ... ok
+test_four_tag_workers_fetch_distinct_jobs_concurrently (test_bili_latest.LatestTests) ... ok
+test_live_pause_overrides_thread_liveness_without_modifying_checkpoint (test_bili_latest.LatestTests) ... ok
+test_missing_overlap_is_recorded_and_not_cleared_by_next_success (test_bili_latest.LatestTests) ... ok
+test_overlap_deduplication_and_restart_checkpoint (test_bili_latest.LatestTests) ... ok
+test_partition_workers_only_drain_their_own_fifo_queue (test_bili_latest.LatestTests) ... ok
+test_persisted_gap_registers_closed_day_for_backfill_but_stays_unresolved (test_bili_latest.LatestTests) ... ok
+test_poll_interval_tracks_window_not_a_fixed_minute (test_bili_latest.LatestTests) ... ok
+test_recent_tags_take_three_slots_and_old_fifo_keeps_one (test_bili_latest.LatestTests) ... ok
+test_repeated_head_does_not_queue_duplicate_details (test_bili_latest.LatestTests) ... ok
+test_request_error_keeps_saved_queue_and_previous_head (test_bili_latest.LatestTests) ... ok
+test_restart_throughput_excludes_the_previous_process_events (test_bili_latest.LatestTests) ... ok
+test_risk_pause_preserves_queue_and_avoids_immediate_retry (test_bili_latest.LatestTests) ... ok
+test_summary_does_not_present_storage_threads_as_network_partition_workers (test_bili_latest.LatestTests) ... ok
+test_summary_exposes_age_overlap_and_source_specific_counts (test_bili_latest.LatestTests) ... ok
+test_tag_queue_continues_fifo_with_a_bounded_timeout (test_bili_latest.LatestTests) ... ok
+test_throughput_reports_growing_queue_without_catchup_promise (test_bili_latest.LatestTests) ... ok
+test_capacity_includes_forty_list_requests_as_well_as_full_details (test_bili_pipeline.PipelineTests) ... ok
+test_http_polling_details_daily_retry_and_restart_share_saved_progress (test_bili_pipeline.PipelineTests) ... ok
+test_old_links_and_bili_keyword_visibility (test_web_routes.WebRouteTests) ... ok
+
+----------------------------------------------------------------------
+Ran 49 tests in 28.887s
+
+OK

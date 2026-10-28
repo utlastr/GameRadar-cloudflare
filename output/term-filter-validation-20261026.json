@@ -1,0 +1,1025 @@
+{
+  "version": 1,
+  "generated": "2026-10-26T18:14:45.770467+08:00",
+  "before": {
+    "videos": 367753,
+    "terms": 90166,
+    "status": {
+      "blocked": 206,
+      "candidate": 8606,
+      "known": 492,
+      "pending": 80862
+    }
+  },
+  "after": {
+    "videos": 367753,
+    "terms": 90166,
+    "status": {
+      "blocked": 223,
+      "candidate": 8592,
+      "known": 492,
+      "pending": 80859
+    }
+  },
+  "rebuilt_videos": 0,
+  "filter": {
+    "version": 1,
+    "kinds": {
+      "common": 55,
+      "content_form": 39,
+      "event": 20,
+      "game": 504,
+      "genre": 60,
+      "person": 5,
+      "platform": 23,
+      "theme": 21,
+      "unknown": 84963
+    },
+    "excluded": 223,
+    "review": 84963,
+    "games": 504,
+    "last_round": {
+      "status": "ok",
+      "judged": 20,
+      "kinds": {
+        "event": 4,
+        "unknown": 3,
+        "game": 6,
+        "common": 5,
+        "person": 1,
+        "genre": 1
+      },
+      "estimated_cost_yuan": 0.022249,
+      "ts": 1793009644.4273298,
+      "pid": 7192
+    },
+    "runtime_pid": 7192
+  },
+  "ai_batches": [
+    {
+      "status": "ok",
+      "judged": 20,
+      "kinds": {
+        "unknown": 5,
+        "event": 3,
+        "game": 9,
+        "common": 3
+      },
+      "estimated_cost_yuan": 0.018315,
+      "ts": 1793009612.9464202,
+      "pid": 7192
+    },
+    {
+      "status": "ok",
+      "judged": 20,
+      "kinds": {
+        "event": 4,
+        "unknown": 3,
+        "game": 6,
+        "common": 5,
+        "person": 1,
+        "genre": 1
+      },
+      "estimated_cost_yuan": 0.022249,
+      "ts": 1793009644.4273298,
+      "pid": 7192
+    }
+  ],
+  "game_examples": [
+    {
+      "norm": "三角洲行动",
+      "name": "三角洲行动",
+      "status": "known",
+      "known_ids": "[\"appcn:1642894547\", \"steam:2507950\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 1228,
+      "authors": 884,
+      "tagged": 905,
+      "views": 133716258,
+      "likes": 4421940,
+      "coins": 150380,
+      "favorites": 1281191,
+      "shares": 443181,
+      "replies": 227845
+    },
+    {
+      "norm": "暗区突围",
+      "name": "暗区突围",
+      "status": "known",
+      "known_ids": "[\"appcn:1505445106\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 726,
+      "authors": 581,
+      "tagged": 639,
+      "views": 9370312,
+      "likes": 459789,
+      "coins": 19928,
+      "favorites": 111513,
+      "shares": 15680,
+      "replies": 17428
+    },
+    {
+      "norm": "明日方舟",
+      "name": "明日方舟",
+      "status": "known",
+      "known_ids": "[\"appcn:1454663939\", \"appcn:6753859465\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 672,
+      "authors": 495,
+      "tagged": 351,
+      "views": 8423639,
+      "likes": 629763,
+      "coins": 47882,
+      "favorites": 147353,
+      "shares": 57587,
+      "replies": 32980
+    },
+    {
+      "norm": "终末地",
+      "name": "终末地",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "“终末地”是《明日方舟：终末地》的简称，视频内容为流程实况",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 466,
+      "authors": 349,
+      "tagged": 147,
+      "views": 4509203,
+      "likes": 326662,
+      "coins": 47196,
+      "favorites": 95401,
+      "shares": 28398,
+      "replies": 15533
+    },
+    {
+      "norm": "kards",
+      "name": "KARDS",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "KARDS是具体卡牌游戏作品",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 422,
+      "authors": 313,
+      "tagged": 314,
+      "views": 3317861,
+      "likes": 191352,
+      "coins": 9878,
+      "favorites": 48571,
+      "shares": 4407,
+      "replies": 12739
+    },
+    {
+      "norm": "phigros",
+      "name": "Phigros",
+      "status": "known",
+      "known_ids": "[\"appcn:1454809109\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 391,
+      "authors": 326,
+      "tagged": 340,
+      "views": 1405941,
+      "likes": 88883,
+      "coins": 7089,
+      "favorites": 17014,
+      "shares": 7447,
+      "replies": 8687
+    },
+    {
+      "norm": "火影忍者手游",
+      "name": "火影忍者手游",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "这是具体游戏作品的名称",
+      "kind_source": "ai",
+      "first_day": "2026-10-18",
+      "last_day": "2026-10-25",
+      "videos": 352,
+      "authors": 293,
+      "tagged": 350,
+      "views": 11268372,
+      "likes": 515693,
+      "coins": 27774,
+      "favorites": 70070,
+      "shares": 15191,
+      "replies": 19681
+    },
+    {
+      "norm": "影之刃零",
+      "name": "影之刃零",
+      "status": "known",
+      "known_ids": "[\"steam:4115450\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-19",
+      "last_day": "2026-10-26",
+      "videos": 337,
+      "authors": 173,
+      "tagged": 37,
+      "views": 9204840,
+      "likes": 201611,
+      "coins": 100399,
+      "favorites": 38771,
+      "shares": 97512,
+      "replies": 36115
+    },
+    {
+      "norm": "植物大战僵尸",
+      "name": "植物大战僵尸",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "植物大战僵尸是具体游戏作品",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 321,
+      "authors": 274,
+      "tagged": 284,
+      "views": 23846320,
+      "likes": 764412,
+      "coins": 46839,
+      "favorites": 178839,
+      "shares": 15132,
+      "replies": 31354
+    },
+    {
+      "norm": "蛋仔派对",
+      "name": "蛋仔派对",
+      "status": "known",
+      "known_ids": "[\"appcn:1544884479\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-18",
+      "last_day": "2026-10-26",
+      "videos": 311,
+      "authors": 266,
+      "tagged": 191,
+      "views": 14672267,
+      "likes": 139775,
+      "coins": 7757,
+      "favorites": 108230,
+      "shares": 429,
+      "replies": 3972
+    },
+    {
+      "norm": "三国杀",
+      "name": "三国杀",
+      "status": "known",
+      "known_ids": "[\"appcn:1389650592\", \"appcn:407413403\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 310,
+      "authors": 166,
+      "tagged": 284,
+      "views": 6191834,
+      "likes": 183909,
+      "coins": 11270,
+      "favorites": 15582,
+      "shares": 7853,
+      "replies": 18032
+    },
+    {
+      "norm": "燕云十六声",
+      "name": "燕云十六声",
+      "status": "known",
+      "known_ids": "[\"appcn:6475668638\", \"steam:3564740\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 305,
+      "authors": 197,
+      "tagged": 125,
+      "views": 834030,
+      "likes": 61110,
+      "coins": 9024,
+      "favorites": 12136,
+      "shares": 2923,
+      "replies": 7152
+    },
+    {
+      "norm": "赛博朋克2077",
+      "name": "赛博朋克 2077",
+      "status": "known",
+      "known_ids": "[\"steam:1091500\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-18",
+      "last_day": "2026-10-26",
+      "videos": 304,
+      "authors": 247,
+      "tagged": 65,
+      "views": 5034636,
+      "likes": 221076,
+      "coins": 11762,
+      "favorites": 43697,
+      "shares": 42860,
+      "replies": 29800
+    },
+    {
+      "norm": "maimai",
+      "name": "MAIMAI",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "maimai是具体音乐游戏作品",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 293,
+      "authors": 248,
+      "tagged": 268,
+      "views": 729782,
+      "likes": 50434,
+      "coins": 3311,
+      "favorites": 8205,
+      "shares": 8511,
+      "replies": 6096
+    },
+    {
+      "norm": "lol",
+      "name": "lol",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "lol是英雄联盟的常用简称",
+      "kind_source": "ai",
+      "first_day": "2026-10-18",
+      "last_day": "2026-10-26",
+      "videos": 291,
+      "authors": 170,
+      "tagged": 272,
+      "views": 31114134,
+      "likes": 651126,
+      "coins": 148970,
+      "favorites": 110680,
+      "shares": 155241,
+      "replies": 136878
+    },
+    {
+      "norm": "战争雷霆",
+      "name": "战争雷霆",
+      "status": "known",
+      "known_ids": "[\"steam:236390\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 273,
+      "authors": 244,
+      "tagged": 158,
+      "views": 1197579,
+      "likes": 70777,
+      "coins": 5253,
+      "favorites": 10668,
+      "shares": 5213,
+      "replies": 10164
+    },
+    {
+      "norm": "崩坏星穹铁道",
+      "name": "崩坏：星穹铁道",
+      "status": "known",
+      "known_ids": "[\"appcn:1523037824\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 270,
+      "authors": 211,
+      "tagged": 196,
+      "views": 6823629,
+      "likes": 408923,
+      "coins": 20856,
+      "favorites": 72299,
+      "shares": 19213,
+      "replies": 26660
+    },
+    {
+      "norm": "最终幻想共鸣",
+      "name": "最终幻想共鸣",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "最终幻想：共鸣是具体游戏作品",
+      "kind_source": "ai",
+      "first_day": "2026-10-22",
+      "last_day": "2026-10-26",
+      "videos": 256,
+      "authors": 181,
+      "tagged": 10,
+      "views": 100065,
+      "likes": 1162,
+      "coins": 244,
+      "favorites": 608,
+      "shares": 401,
+      "replies": 578
+    },
+    {
+      "norm": "勇闯死人谷2",
+      "name": "勇闯死人谷2",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "勇闯死人谷2是具体游戏作品",
+      "kind_source": "ai",
+      "first_day": "2026-10-23",
+      "last_day": "2026-10-26",
+      "videos": 254,
+      "authors": 6,
+      "tagged": 1,
+      "views": 24,
+      "likes": 1,
+      "coins": 0,
+      "favorites": 0,
+      "shares": 0,
+      "replies": 0
+    },
+    {
+      "norm": "明日方舟终末地",
+      "name": "明日方舟终末地",
+      "status": "known",
+      "known_ids": "[\"appcn:6753859465\", \"steam:4732690\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 248,
+      "authors": 186,
+      "tagged": 136,
+      "views": 7890760,
+      "likes": 635832,
+      "coins": 67844,
+      "favorites": 155116,
+      "shares": 46146,
+      "replies": 37238
+    },
+    {
+      "norm": "三国杀移动版",
+      "name": "三国杀移动版",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "这是具体游戏作品的移动版名称",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-25",
+      "videos": 235,
+      "authors": 115,
+      "tagged": 234,
+      "views": 5780116,
+      "likes": 170662,
+      "coins": 10518,
+      "favorites": 13595,
+      "shares": 7052,
+      "replies": 15293
+    },
+    {
+      "norm": "炉石传说",
+      "name": "炉石传说",
+      "status": "known",
+      "known_ids": "[\"appcn:841140063\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 232,
+      "authors": 133,
+      "tagged": 213,
+      "views": 7224072,
+      "likes": 189898,
+      "coins": 38317,
+      "favorites": 25654,
+      "shares": 34211,
+      "replies": 37888
+    },
+    {
+      "norm": "fridaynightfunkin",
+      "name": "Friday Night Funkin'",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "是具体音乐游戏作品名",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-25",
+      "videos": 212,
+      "authors": 166,
+      "tagged": 211,
+      "views": 306684,
+      "likes": 13571,
+      "coins": 1521,
+      "favorites": 12038,
+      "shares": 995,
+      "replies": 2339
+    },
+    {
+      "norm": "街霸6",
+      "name": "街霸6",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "是《街头霸王6》的简称/正式名",
+      "kind_source": "ai",
+      "first_day": "2026-10-18",
+      "last_day": "2026-10-26",
+      "videos": 206,
+      "authors": 111,
+      "tagged": 74,
+      "views": 2308033,
+      "likes": 142835,
+      "coins": 9930,
+      "favorites": 14023,
+      "shares": 14881,
+      "replies": 6651
+    },
+    {
+      "norm": "异环",
+      "name": "异环",
+      "status": "known",
+      "known_ids": "[\"appcn:6514281568\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 200,
+      "authors": 166,
+      "tagged": 59,
+      "views": 1500764,
+      "likes": 110993,
+      "coins": 9718,
+      "favorites": 23525,
+      "shares": 3779,
+      "replies": 5614
+    },
+    {
+      "norm": "冰与火之舞",
+      "name": "冰与火之舞",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "是具体音乐游戏作品名",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 192,
+      "authors": 138,
+      "tagged": 106,
+      "views": 115979,
+      "likes": 6797,
+      "coins": 800,
+      "favorites": 2018,
+      "shares": 585,
+      "replies": 1678
+    },
+    {
+      "norm": "使命召唤",
+      "name": "使命召唤",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "是具体游戏系列/作品名",
+      "kind_source": "ai",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 190,
+      "authors": 145,
+      "tagged": 162,
+      "views": 5967888,
+      "likes": 261566,
+      "coins": 8810,
+      "favorites": 54088,
+      "shares": 21187,
+      "replies": 18843
+    },
+    {
+      "norm": "洛克王国世界",
+      "name": "洛克王国世界",
+      "status": "known",
+      "known_ids": "[\"appcn:6478654994\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-21",
+      "last_day": "2026-10-26",
+      "videos": 183,
+      "authors": 130,
+      "tagged": 74,
+      "views": 4917460,
+      "likes": 160461,
+      "coins": 10715,
+      "favorites": 21276,
+      "shares": 22127,
+      "replies": 20155
+    },
+    {
+      "norm": "求生之路2",
+      "name": "求生之路2",
+      "status": "candidate",
+      "known_ids": "[]",
+      "kind": "game",
+      "kind_reason": "是具体游戏作品名",
+      "kind_source": "ai",
+      "first_day": "2026-10-19",
+      "last_day": "2026-10-26",
+      "videos": 181,
+      "authors": 111,
+      "tagged": 34,
+      "views": 65576,
+      "likes": 3938,
+      "coins": 898,
+      "favorites": 1068,
+      "shares": 622,
+      "replies": 521
+    },
+    {
+      "norm": "植物大战僵尸2",
+      "name": "植物大战僵尸2",
+      "status": "known",
+      "known_ids": "[\"appcn:639516529\"]",
+      "kind": "game",
+      "kind_reason": "匹配已有游戏作品",
+      "kind_source": "catalog",
+      "first_day": "2026-10-17",
+      "last_day": "2026-10-26",
+      "videos": 177,
+      "authors": 161,
+      "tagged": 156,
+      "views": 5728534,
+      "likes": 203475,
+      "coins": 6168,
+      "favorites": 35661,
+      "shares": 3171,
+      "replies": 11509
+    }
+  ],
+  "excluded_examples": [
+    {
+      "name": "王者荣耀UP主激励计划",
+      "kind": "event",
+      "kind_reason": "这是平台创作激励活动，不是游戏本体",
+      "seed_videos": 585
+    },
+    {
+      "name": "绝区零UP主激励计划",
+      "kind": "event",
+      "kind_reason": "这是游戏相关的创作激励活动，不是游戏本体",
+      "seed_videos": 405
+    },
+    {
+      "name": "直播切片",
+      "kind": "common",
+      "kind_reason": "直播切片是通用内容描述词",
+      "seed_videos": 352
+    },
+    {
+      "name": "崩坏：星穹铁道创作者激励计划",
+      "kind": "event",
+      "kind_reason": "这是创作者激励活动，不是游戏本体",
+      "seed_videos": 336
+    },
+    {
+      "name": "怀旧",
+      "kind": "common",
+      "kind_reason": "怀旧是普通描述词，不是具体游戏名",
+      "seed_videos": 329
+    },
+    {
+      "name": "学习",
+      "kind": "common",
+      "kind_reason": "学习是普通表达词",
+      "seed_videos": 239
+    },
+    {
+      "name": "明日方舟终末地创作者应援计划",
+      "kind": "event",
+      "kind_reason": "是创作者应援活动名称，并非游戏本体",
+      "seed_videos": 231
+    },
+    {
+      "name": "明日方舟创作者应援计划",
+      "kind": "event",
+      "kind_reason": "是创作者激励活动名称",
+      "seed_videos": 226
+    },
+    {
+      "name": "鸣潮创作激励计划",
+      "kind": "event",
+      "kind_reason": "是创作激励活动名称，不是具体游戏名",
+      "seed_videos": 219
+    },
+    {
+      "name": "bug",
+      "kind": "common",
+      "kind_reason": "是普通描述词，表示程序错误",
+      "seed_videos": 199
+    },
+    {
+      "name": "手游情报",
+      "kind": "common",
+      "kind_reason": "是栏目/描述性短语，不是具体游戏",
+      "seed_videos": 193
+    },
+    {
+      "name": "超自然行动组创作激励计划",
+      "kind": "event",
+      "kind_reason": "是创作激励活动名称，不是游戏本体",
+      "seed_videos": 171
+    },
+    {
+      "name": "夏天y",
+      "kind": "person",
+      "kind_reason": "视频标题中作为创作者/主播名出现",
+      "seed_videos": 168
+    },
+    {
+      "name": "菜鸡",
+      "kind": "common",
+      "kind_reason": "是普通自嘲/描述词，不是具体实体",
+      "seed_videos": 166
+    },
+    {
+      "name": "赛车游戏",
+      "kind": "genre",
+      "kind_reason": "是游戏玩法/类型描述",
+      "seed_videos": 165
+    },
+    {
+      "name": "熟肉",
+      "kind": "common",
+      "kind_reason": "是“翻译/字幕内容”的普通描述词",
+      "seed_videos": 164
+    },
+    {
+      "name": "回忆",
+      "kind": "common",
+      "kind_reason": "是普通表达词，表示回忆/怀旧",
+      "seed_videos": 158
+    },
+    {
+      "name": "roblox",
+      "kind": "platform",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "中配",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "SLG",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "实况",
+      "kind": "content_form",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "4K",
+      "kind": "content_form",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "格斗游戏",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "中字",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "完整版",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "古风",
+      "kind": "theme",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "音乐游戏",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "手游",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "沙雕",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "卡牌游戏",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "休闲益智",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "谱面",
+      "kind": "content_form",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "FPS",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "战争",
+      "kind": "theme",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "游戏视频",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "#asmr",
+      "kind": "content_form",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "游戏集锦",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "音乐",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "音游",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "可爱",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "OST",
+      "kind": "content_form",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "快乐",
+      "kind": "common",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "LPL",
+      "kind": "event",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "MOBA",
+      "kind": "genre",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    },
+    {
+      "name": "二次元",
+      "kind": "theme",
+      "kind_reason": "完整词过滤",
+      "seed_videos": 0
+    }
+  ],
+  "exact_examples": [
+    {
+      "name": "DLC",
+      "status": "blocked",
+      "kind": "content_form",
+      "seed_videos": 0
+    },
+    {
+      "name": "MMORPG",
+      "status": "blocked",
+      "kind": "genre",
+      "seed_videos": 0
+    },
+    {
+      "name": "roblox",
+      "status": "blocked",
+      "kind": "platform",
+      "seed_videos": 0
+    },
+    {
+      "name": "三国",
+      "status": "blocked",
+      "kind": "theme",
+      "seed_videos": 0
+    },
+    {
+      "name": "传说",
+      "status": "candidate",
+      "kind": "unknown",
+      "seed_videos": 6
+    },
+    {
+      "name": "剧情",
+      "status": "blocked",
+      "kind": "common",
+      "seed_videos": 0
+    },
+    {
+      "name": "手机",
+      "status": "blocked",
+      "kind": "common",
+      "seed_videos": 0
+    },
+    {
+      "name": "真的！",
+      "status": "blocked",
+      "kind": "common",
+      "seed_videos": 0
+    },
+    {
+      "name": "突围",
+      "status": "pending",
+      "kind": "unknown",
+      "seed_videos": 0
+    },
+    {
+      "name": "铁道",
+      "status": "candidate",
+      "kind": "unknown",
+      "seed_videos": 3
+    }
+  ],
+  "seconds": 75.02
+}

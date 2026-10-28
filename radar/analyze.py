@@ -269,6 +269,10 @@ def _rank_scores(entities):
                 n = max(len(ranks), max(ranks.values()), 10)
                 had_prev = bool(prev.get(m))
                 for e, r in ranks.items():
+                    if s == "dymini":
+                        from .sources.dymini import candidate
+                        if not candidate(cur.get("rank_new", {}).get(e)):
+                            continue
                     r = int(r)
                     pos = 1 - math.log(r) / math.log(n + 1)          # 第 1 名 = 1，最后一名接近 0
                     hot, text = 0.0, ""
@@ -722,16 +726,28 @@ def _new_games(groups, entities, now):
         if any(((entities.get(tuple(m.split(":", 1))) or {}).get("extra") or {}).get("generic") for m in ms):
             continue
         days, how = _game_age(ms, entities, src_first, first_run, now)
+        # The current new-game chart is launch evidence, not an exact date.
+        on_new_chart = any(
+            m.startswith("dymini:")
+            and ((entities.get(tuple(m.split(":", 1))) or {}).get("extra") or {}).get("new_candidate")
+            and now - ((entities.get(tuple(m.split(":", 1))) or {}).get("last_seen") or 0) <= 32 * 3600
+            for m in ms)
+        discovery_sources = {m.split(":", 1)[0] for m in ms
+                             if m.split(":", 1)[0] in config.DISCOVERY_SOURCES}
+        if discovery_sources == {"dymini"} and not on_new_chart:
+            continue
+        if days is None and on_new_chart:
+            days, how = 0, "new_chart"
         if days is None or days > config.NEW_MAX_DAYS:
             continue
         nm, ncn, nen = _display(ms, entities)
         if _big_game({"name": nm, "name_cn": ncn, "name_en": nen, "members": ms}):
             continue
-        out[g] = {"days": round(days, 1), "how": how}
+        out[g] = {"days": None if how == "new_chart" else round(days, 1), "how": how}
     return out
 
 
-def _plat_diag(groups, hs, elig, now_ts):
+def _plat_diag(groups, hs, elig, now_ts, revenues=None):
     """每个发现平台：32 小时内抓到几款、几款有分数、几款是大作 / 大厂、两种排名下最好第几。"""
     from .heat import rank_key
     with db.session() as c:
@@ -747,7 +763,10 @@ def _plat_diag(groups, hs, elig, now_ts):
             continue
         p = s + ":"
         mine = [g for g in elig if any(m.startswith(p) for m in groups[g])]
+        revenue_count = sum(any(r.get("source") == s and r.get("daily_cny") is not None
+                                for r in (revenues or {}).get(g, {}).get("channels", [])) for g in mine)
         out.append({"src": s, "seen": seen.get(s, 0), "scored": sum(1 for g in mine if hs[g]["raw"] is not None),
+                    "revenue_scored": revenue_count, "revenue_missing": len(mine) - revenue_count,
                     "zero": sum(1 for g in mine if hs[g]["big"]),
                     "best": min((pos_f[g] for g in mine if g in pos_f), default=None),
                     "best_raw": min((pos_r[g] for g in mine if g in pos_r), default=None)})
@@ -821,7 +840,7 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     live_new, live_day1 = _live_new_categories(entities, sig_by_key)
     stars, star_by_cat, star_titles = _star_rooms(established)
     rank_sc = _rank_scores(entities)
-    # v50 刚起势（浮萍）：还小、但连着几天按比例往上涨的
+    # Use the same observed-growth definition as the platform views.
     try:
         from . import sprouts as _sp
         sprout_rows = _sp.compute(entities)
@@ -832,14 +851,23 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         sprout_rows = {}
     sprout_sc = {r["key"]: r for rows in sprout_rows.values() for r in rows if r["hot"] > 0}
 
-    # v81 评分（radar/heat.py）：异常值。先给所有档案算分，两种排名各取前 400 做卡片
-    from . import heat
+    # Monetary ranking is computed before any legacy heat shortlist.
+    from . import heat, revenue
     hs, heat_meta = heat.score_groups(groups, entities)
+    rs, revenue_meta = revenue.score_groups(groups, entities, now_ts)
     # v82：必看只有新游戏：上线不超过 NEW_MAX_DAYS 天；老牌大游戏、判断不了上线时间的不进
     ages = _new_games(groups, entities, now_ts)
-    elig = [g for g in ages if g in hs]
+    elig = [g for g in ages if g in hs or rs[g]["daily_cny"] is not None
+            or any(m.startswith("dymini:") and
+                   ((entities.get(tuple(m.split(":", 1))) or {}).get("extra") or {}).get("new_candidate")
+                   for m in groups[g])]
+    for g in elig:
+        hs.setdefault(g, {"raw": None, "final": None, "videos": [], "counters": [],
+                          "down": None, "big": None, "cut": [], "scale": [],
+                          "trend": {"state": "insufficient", "ratio": None}})
     by_r = sorted(elig, key=lambda g: heat.rank_key(hs[g], "raw"))
-    pick = set(by_r[:400]) | set(sorted(elig, key=lambda g: heat.rank_key(hs[g], "final"))[:400])
+    # Calculate monetary candidates independently of the legacy heat shortlist.
+    pick = set(elig)
     _social_terms(by_r, groups, entities)
     _bili_terms(by_r + [g for g in ages if g not in hs], groups, entities)
 
@@ -981,6 +1009,7 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
             "label": label, "hot": round(hot, 3), "market_hot": {k: round(v, 3) for k, v in mh.items()},
             "flags": flags, "factor": round(factor, 3), "factor_why": factor_why,
             "heat": hs[gid], "raw": hs[gid]["raw"], "final": hs[gid]["final"], "age": ages.get(gid),
+            "revenue": rs[gid],
             "launch": best_l[1] if best_l else None,
             "fast": any(s["fast"] for s in sigs),
             "first_seen": min(entities[tuple(m.split(":", 1))]["first_seen"] or 0 for m in members),
@@ -1026,7 +1055,7 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     # 同类检查：只当参考写在卡片上，不进分数（按名字搜，搜到的不一定是同玩法）
     st_all = db.kv_get("source_status", {}) or {}
     tap_ok = any((st_all.get(s) or {}).get("ok_ts", 0) > time.time() - 6 * 3600 for s in ("tapmaker", "taptap"))
-    cards.sort(key=lambda c: heat.rank_key(c["heat"], "final"))
+    cards.sort(key=lambda c: (*revenue.rank_key(c["revenue"]), c["gid"]))
     checked = 0
     for i, card in enumerate(cards):
         card["markets"] = {}
@@ -1069,12 +1098,13 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
                     card["flags"].append({"t": f"{config.MARKETS[a]}火、{config.MARKETS[b]}没热度", "c": "blue"})
 
     # v76：必看 = 全部游戏按分数排名，没有分数门槛、没有分栏
-    must = sorted(cards, key=lambda c: heat.rank_key(c["heat"], "final"))
+    must = sorted(cards, key=lambda c: (*revenue.rank_key(c["revenue"]), c["gid"]))
     dismissed, blocked, old = [], [], []
-    by_raw = sorted(cards, key=lambda c: heat.rank_key(c["heat"], "raw"))
-    seen = {c["gid"] for c in must[:400]}
-    cards_out = must[:400] + [c for c in by_raw[:400] if c["gid"] not in seen]
-    plat_diag = _plat_diag(groups, hs, elig, now_ts)
+    cards_out = must
+    revenue_meta["eligible"] = len(cards)
+    revenue_meta["estimated"] = sum(c["revenue"]["daily_cny"] is not None for c in cards)
+    revenue_meta["missing"] = len(cards) - revenue_meta["estimated"]
+    plat_diag = _plat_diag(groups, hs, elig, now_ts, rs)
     gid_of = {m: c["gid"] for c in cards for m in c["members"]}
     star_out = [{**{k: v for k, v in s.items() if not k.startswith("_")}, "gid": gid_of.get(s["cat_key"])}
                 for s in stars[:80]]
@@ -1130,9 +1160,8 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         "stars": star_out, "old": old[:300],
         "totals": {"cards": len(elig), "dismissed": 0, "blocked": 0, "old": 0},
         "heat_meta": heat_meta,
-        "sprouts": {s: [{k: r[k] for k in ("key", "id", "name", "url", "label", "kind", "streak", "daily", "total",
-                                           "pos", "now", "then", "gap", "days", "series", "hot")}
-                        for r in rows[:60]] for s, rows in sprout_rows.items()},
+        "revenue_meta": revenue_meta,
+        "sprouts": sprout_rows,
         "todo": [{"name": n, "why": w, "need": need} for n, w, need in config.PLATFORM_TODO
                  if not (n == "Twitch" and config.TWITCH_CLIENT_ID and config.TWITCH_CLIENT_SECRET)],
         "movers": movers, "keywords": keywords, "candidates": candidates[:40],

@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from radar import analyze, collect, config, db, history, video
-from radar.sources import steam
+from radar.sources import bili, steam
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -64,6 +64,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_unfamiliar_video_is_saved_without_a_known_game_name(self):
         with patch.object(video.bili, "game_videos", return_value=([self.record()], [])), \
+                patch.object(video.bili, "newlist", return_value=[]), \
                 patch.object(video.bili, "video_detail", return_value=self.record()), \
                 patch.object(video.time, "sleep"):
             video.collect()
@@ -71,10 +72,41 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(video.summary()["status"], "已采样")
 
     def test_collection_failure_does_not_report_normal(self):
-        with patch.object(video.bili, "game_videos", side_effect=RuntimeError("blocked")):
+        with patch.object(video.bili, "game_videos", side_effect=RuntimeError("blocked")), \
+                patch.object(video.bili, "newlist", return_value=[]):
             with self.assertRaises(RuntimeError):
                 video.collect()
         self.assertEqual(video.summary()["status"], "失败")
+
+    def test_partition_records_survive_ranking_and_search_risk(self):
+        raw = {"bvid": "BV19gpw6XE95", "title": "New game", "pubdate": self.now,
+               "stat": {"view": 42}, "owner": {"mid": 7, "name": "Author"}}
+        with patch.object(video.bili, "newlist", side_effect=[[raw], [raw], []]), \
+                patch.object(video.bili, "game_videos", side_effect=bili.RiskError("ranking blocked")), \
+                patch.object(video.bili, "search_videos", side_effect=bili.RiskError("search blocked")) as search, \
+                patch.object(video.bili, "video_detail", return_value=self.record()), \
+                patch.object(config, "BVIDEO_SEARCH_TERMS", ["first", "second"]), \
+                patch.object(video.time, "sleep"):
+            count, _ = video.collect()
+        self.assertEqual(count, 1)
+        self.assertEqual(search.call_count, 1)
+        report = db.kv_get("video_collection")
+        self.assertFalse(report["failed"])
+        self.assertEqual(report["partition"]["count"], 1)
+        self.assertFalse(report["partition"]["complete"])
+        self.assertIn("游戏分区最新", video.summary()["rows"][0]["origins"])
+
+    def test_global_pause_reports_once_without_requests(self):
+        db.kv_set("bili_pause_until", self.now + 3600)
+        with patch.object(video.bili, "newlist") as latest, \
+                patch.object(video.bili, "game_videos") as ranking, \
+                patch.object(video.bili, "search_videos") as search, \
+                patch.object(video.bili, "video_detail") as detail:
+            with self.assertRaises(RuntimeError):
+                video.collect()
+        for request in (latest, ranking, search, detail):
+            request.assert_not_called()
+        self.assertEqual(len(db.kv_get("video_collection")["errors"]), 1)
 
     def test_historical_release_enters_live_pool_by_id(self):
         with db.session() as c:

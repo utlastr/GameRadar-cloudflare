@@ -75,7 +75,7 @@ def process(cards):
         todo.append((i, card))
     for i, card in todo:
         level = "第 %d 名" % i
-        popup(f"热度雷达 [{level}] {card['name']}", f"综合互动 {card['final']:.2f} 倍正常水平", sound=i == 1)
+        popup(f"热度雷达 [{level}] {card['name']}", f"异常值 {card['final']:.2f}", sound=i == 1)
         with db.session() as c:
             c.execute("INSERT INTO alerts(akey, ts, score, level) VALUES (?, ?, ?, ?)",
                       (card["akey"], now, card["final"], level))

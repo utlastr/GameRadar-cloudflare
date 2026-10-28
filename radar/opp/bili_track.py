@@ -27,30 +27,15 @@ def _budget_ok():
 
 
 # ---------------- 发现新视频 ----------------
-def discover_once(pages=20, window=None):
-    """Scan the newest feed to the persisted overlap boundary, with explicit gaps."""
-    from ..social import incremental
+def discover_once(pages=3):
+    """rid=4 是游戏大类，每页 50 条，取前 pages 页。"""
     ensure()
     if budget_left() < 20 or bili.paused():
-        return None
+        return 0
     bili.warmup()
-    started = int(time.time())
-    progress = db.kv_get("publication_bili_discovery", {}) or {}
-    boundary = int(progress.get("watermark") or started - 86400) - 3600
-    if window:
-        boundary = window[0]
-        if progress.get("window") != list(window):
-            progress = {}
-    pass_started = int(progress.get("pass_started") or started)
-    resume = max(1, int(progress.get("next_page") or 1) - 1)
-    page_numbers = list(dict.fromkeys([1] + list(range(resume, resume + pages))))[:pages]
     seen, new, err = {}, 0, ""
-    reached = False
-    continuation = False
-    next_page = resume
-    for pn in page_numbers:
+    for pn in range(1, pages + 1):
         if not _budget_ok():
-            err = "请求预算不足，本轮时间区间未扫完"
             break
         try:
             arr = bili.newlist(pn)
@@ -59,53 +44,23 @@ def discover_once(pages=20, window=None):
             break
         except Exception as e:                   # noqa: BLE001
             err = str(e)
-            next_page = pn
-            break
+            continue
         if not arr:
-            reached = True
             break
         for a in arr:
             seen[a.get("bvid")] = a
-        next_page = pn + 1
-        dates = [int(a.get("pubdate") or 0) for a in arr]
-        if dates and all(0 < t <= boundary for t in dates):
-            reached = True
-            break
         _sleep()
     for bvid, a in seen.items():
         if bvid and _upsert_video(a):
             new += 1
     total = _count_videos()
-    if not reached and not err:
-        continuation = True
-        err = "达到每轮页数上限，存在未覆盖区间"
-    items = [{"vid": b, "text": bili.video_record(a)["title"], "ts": a.get("pubdate"),
-              "author_id": str((a.get("owner") or {}).get("mid") or ""),
-              "url": "https://www.bilibili.com/video/" + b} for b, a in seen.items() if b]
-    added = incremental.ingest("bilibili", items)
-    with db.session() as c:
-        for it in items:
-            a = seen[it["vid"]]
-            for member, name, method in gamemap.match(it["text"], a.get("desc") or ""):
-                c.execute("INSERT OR IGNORE INTO pub_topics VALUES (?,?,?,?)",
-                          ("bilibili", it["vid"], name, method))
-    incremental.record_run("bilibili_newlist", started, items, added,
-                           "feed_overlap" if reached and not err else "feed_gap", err)
-    # A capped or failed scan must not advance past content we have not read.
-    if reached and not err:
-        db.kv_set("publication_bili_discovery", {"watermark": pass_started, "completed": int(time.time())})
-    else:
-        db.kv_set("publication_bili_discovery", dict(progress, next_page=next_page,
-                                                     pass_started=pass_started, continuation=continuation,
-                                                     window=list(window) if window else None))
     if err and not seen:
         status("bili_track", False, total, err)
     else:
-        status("bili_track", True, total, "", "本轮新增 %d 条 / 抓到 %d 条；%s" %
-               (new, len(seen), err or "已到达上次采集的重叠边界（非全站覆盖保证）"))
+        status("bili_track", True, total, "", "本轮新增 %d 条 / 抓到 %d 条" % (new, len(seen)))
     if new:
         activity.say("B站：分区新增 %d 条视频（库里共 %d 条）" % (new, total))
-    return None if window and err else new
+    return new
 
 
 def _upsert_video(a):

@@ -12,11 +12,9 @@
 需要浏览器开着调试端口（默认 9222）。没开的话，面板上有"打开雷达专用浏览器"按钮。
 """
 import json
-import os
-import subprocess
 import time
 
-from .. import cdp, config
+from .. import cdp
 
 HOOK = r"""
 (function(){
@@ -27,7 +25,6 @@ HOOK = r"""
   // 以前记满 300 份就把最早的挤掉，抖音页面 JSON.parse 太多，热榜数据被挤掉了。
   function hasList(o, d){
     if (!o || typeof o !== 'object' || d > 7) return false;
-    if (o.aweme_id && (o.video || o.statistics || o.cha_list || o.text_extra)) return true;
     if (Array.isArray(o)) {
       if (o.length >= 3 && o[0] && typeof o[0] === 'object') return true;
       for (var i = 0; i < Math.min(o.length, 5); i++) if (hasList(o[i], d + 1)) return true;
@@ -65,7 +62,6 @@ HOOK = r"""
     if (typeof t === 'string' && t.length >= 120 && !arguments[1]) keep(o, 'parse', t);
     return o;
   };
-  try { JSON.parse.toString = function(){ return 'function parse() { [native code] }'; }; } catch (e) {}
   if (window.Response && Response.prototype.json) {
     var RJ = Response.prototype.json;
     Response.prototype.json = function(){
@@ -95,14 +91,6 @@ READ = r"""
   return JSON.stringify({
     url: location.href, title: document.title,
     text: (document.body ? document.body.innerText : '').slice(0, 20000),
-    video_cards: Array.from(document.querySelectorAll('.search-result-card a[href*="/video/"]')).map(function(a){
-      var title = a.querySelector('.VDYK8Xd7');
-      var likes = a.querySelector('.cIiU4Muu');
-      var age = a.querySelector('.faDtinfi');
-      var author = a.querySelector('.MZNczJmS');
-      return {url:a.href,title:title?title.innerText:'',likes:likes?likes.innerText:null,
-              age:age?age.innerText:null,author:author?author.innerText:''};
-    }),
     caps: out
   });
 })()
@@ -155,7 +143,7 @@ def open_capture(url, wait=6.0, after=None, scroll=1):
     """
     p = port()
     if not cdp.available(p):
-        raise NoBrowser("浏览器没开调试端口 %d：在各平台 → 视频平台大厅里点“打开雷达专用浏览器”，在里面登录一次各平台" % p)
+        raise NoBrowser("现有浏览器的 CDP %d 未连接，采集未执行" % p)
     tab = cdp.open_tab("about:blank", p, wait=0.5, background=True)
     try:
         tab.call("Page.enable")
@@ -190,7 +178,9 @@ def open_capture(url, wait=6.0, after=None, scroll=1):
 
 def type_search(kw):
     def go(tab):
-        tab.js(TYPE % json.dumps(kw, ensure_ascii=False))
+        result = tab.js(TYPE % json.dumps(kw, ensure_ascii=False))
+        if result != "ok":
+            raise RuntimeError("页面没有可用的搜索框，未提交查询词")
     return go
 
 
@@ -201,11 +191,11 @@ def problem(d):
     title = d.get("title") or ""
     if any(w in head or w in title for w in ("验证码", "安全验证", "人机验证", "拖动滑块", "滑块验证", "请完成验证",
                                              "Verify", "verify you are human", "captcha")):
-        return "平台弹了人机验证：在雷达专用浏览器里打开这个平台，手动过一次验证"
+        return "平台要求人机验证，采集已停止；请在现有浏览器中处理"
     if len(text.strip()) < 40:
         return "页面是空的（可能没打开：网络不通、TikTok 要能上外网，或者页面还没加载完）"
     if login_hint(text):
-        return "页面要登录：在雷达专用浏览器里登录这个平台"
+        return "页面要求登录；请在现有浏览器中登录这个平台"
     return ""
 
 
@@ -235,41 +225,12 @@ def show(url):
         cdp.create_target(url, p, background=False).close()     # 只断开连接，页面留着
     except Exception as e:                       # noqa: BLE001
         return {"ok": False, "note": "打开失败：%s" % e}
-    return {"ok": True, "note": "已在雷达专用浏览器里打开，过完验证把这个标签关掉就行"}
+    return {"ok": True, "note": "已在现有浏览器中打开页面"}
 
 
 def launch_browser(background=False):
-    """开一个带调试端口的 Edge / Chrome（独立的资料夹，不碰你平时用的那个）。
-
-    Chrome / Edge 新版本不允许在平时用的资料夹上开调试端口，所以单独一个：radar_data/browser。
-    第一次打开后在里面登录 抖音、抖音指数（用抖音号）、快手、小红书、B站；以后雷达就用这里的登录状态。
-    """
+    """Compatibility endpoint: inspect the existing browser, never start a profile."""
     p = port()
     if cdp.available(p):
-        return {"ok": True, "note": "已经开着（端口 %d）" % p}
-    exe = _browser_exe()
-    if not exe:
-        return {"ok": False, "note": "找不到 Edge 或 Chrome"}
-    prof = os.path.join(config.DATA_DIR, "browser")
-    os.makedirs(prof, exist_ok=True)
-    args = [exe, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=%d" % p,
-            "--user-data-dir=%s" % prof, "--no-first-run", "--no-default-browser-check",
-            "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
-            "--disable-backgrounding-occluded-windows"]
-    if background:
-        # 雷达自己在后台开：最小化，只开一个空白页，登录状态在资料夹里，之前登录过就还在
-        args += ["--start-minimized", "about:blank"]
-    else:
-        args += ["https://www.douyin.com/", "https://trendinsight.oceanengine.com/",
-                 "https://www.kuaishou.com/", "https://www.xiaohongshu.com/", "https://www.bilibili.com/",
-                 "https://trends.bilibili.com/", "https://ads.tiktok.com/business/creativecenter/"]
-    kw = {}
-    if os.name == "nt":
-        kw["creationflags"] = 0x00000008      # DETACHED_PROCESS：雷达退出不带走浏览器
-    subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, **kw)
-    deadline = time.time() + 20
-    while time.time() < deadline:
-        if cdp.available(p):
-            return {"ok": True, "note": "已打开。在打开的几个页面里分别登录一次，以后不用再登录"}
-        time.sleep(0.5)
-    return {"ok": False, "note": "浏览器起来了但调试端口 %d 没开。可能已经有一个同资料夹的浏览器开着，关掉再点一次" % p}
+        return {"ok": True, "note": "已连接现有浏览器（端口 %d）" % p}
+    return {"ok": False, "note": "现有浏览器的 CDP %d 未连接；未启动新浏览器或修改浏览器设置" % p}

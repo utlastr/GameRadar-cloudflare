@@ -1,0 +1,30 @@
+{
+  "navigationMs": 55,
+  "singleFlight": true,
+  "timings": {
+    "steam": 19,
+    "tapmaker": 3,
+    "taptap": 5,
+    "haoyou": 3
+  },
+  "steam": {
+    "total": 4131,
+    "returned": 4131,
+    "header": "在线人数、评论数、上线日期、价格和折扣最近成功 3 分钟前 · 正在扫描近15天发行游戏",
+    "visibleRows": 300
+  },
+  "stateResource": [
+    {
+      "milliseconds": 2646,
+      "transferred": 1000933,
+      "decoded": 8645328
+    },
+    {
+      "milliseconds": 2357,
+      "transferred": 1000933,
+      "decoded": 8645316
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

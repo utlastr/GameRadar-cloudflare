@@ -1,0 +1,36 @@
+{
+  "results": [
+    {
+      "group": "store",
+      "platforms": 8,
+      "destination": "appcn"
+    },
+    {
+      "group": "mini",
+      "platforms": 13,
+      "destination": "taptap"
+    },
+    {
+      "group": "live",
+      "platforms": 7,
+      "destination": "huya"
+    },
+    {
+      "group": "video",
+      "platforms": 6,
+      "destination": "bvideo"
+    },
+    {
+      "group": "index",
+      "platforms": 2,
+      "destination": "soc:douyin_index"
+    }
+  ],
+  "mobile": {
+    "width": 390,
+    "scrollWidth": 390,
+    "visible": true
+  },
+  "errors": [],
+  "verified": "2026-10-28T03:35:15.709Z"
+}

@@ -1,0 +1,38 @@
+{
+  "checked_at": 1793103539.5273693,
+  "focused_tests": 49,
+  "focused_failures": 0,
+  "focused_errors": 0,
+  "runtime_revision": "2026-10-27-tag-growth-v1",
+  "day": "2026-10-26",
+  "selected_tags": 300,
+  "indexed_raw_tags": 73636,
+  "ready_groups": 0,
+  "pending_groups": 300,
+  "deferred_connections": 4605,
+  "keyword_catalogue_saved": 136480,
+  "sampling": {
+    "n": 98573,
+    "first": 1792985021,
+    "last": 1793103538,
+    "due": 40477,
+    "tracked": 47188,
+    "minimum_sweep_hours": 131.07777777777778,
+    "pause_seconds": 0,
+    "interval_hours": 6,
+    "last_success": 1793103530.5768285,
+    "error": ""
+  },
+  "browser_visual_check": "Not completed: the existing CDP browser timed out during Playwright attachment.",
+  "full_suite_attempt": {
+    "tests": 318,
+    "errors": 17,
+    "failures": 1,
+    "notes": [
+      "Unrelated component update tests reference missing config.UPDATE_SCOPE.",
+      "Legacy social tests import removed douyin/incremental/growth/schedule modules.",
+      "Existing daily migration test expects in_progress while the summary exposes the effective risk pause.",
+      "No unrelated modules or pause-status behavior were restored or changed to satisfy these tests."
+    ]
+  }
+}

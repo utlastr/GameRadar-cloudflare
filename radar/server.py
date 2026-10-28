@@ -1,4 +1,5 @@
 """本地看板网页服务（只在自己电脑上打开，不联网发布）。地址默认 http://127.0.0.1:8765"""
+import gzip
 import json
 import os
 import threading
@@ -112,8 +113,16 @@ class Handler(BaseHTTPRequestHandler):
     def _send(self, body, ctype="application/json; charset=utf-8", code=200, cache="no-store"):
         if isinstance(body, str):
             body = body.encode("utf-8")
+        compressed = (ctype.startswith("application/json") and len(body) >= 4096
+                      and "gzip" in self.headers.get("Accept-Encoding", ""))
+        if compressed:
+            body = gzip.compress(body, compresslevel=1)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        if compressed:
+            self.send_header("Content-Encoding", "gzip")
+        if ctype.startswith("application/json"):
+            self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
         self.end_headers()
@@ -192,10 +201,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             from . import video
-            d["video_hotspots"] = video.summary()
+            # The live/daily screen does not render the legacy 1,000-video list.
+            d["video_hotspots"] = video.summary(
+                include_legacy=not (config.BVIDEO_STREAM_ENABLED or config.BVIDEO_DAILY_ENABLED))
             d["sources"] = db.kv_get("source_status", {}) or {}
             d["release_discovery"] = db.kv_get("release_discovery", {}) or {}
             d["tap_priority"] = db.kv_get("tap_priority", {}) or {}
+            from . import steamwatch
+            d["steam_priority"] = steamwatch.summary()
+            from . import sampling
+            d["sampling"] = sampling.summary()
             from .sources import steam
             d["release_pool"] = steam.release_pool()
             try:
@@ -207,6 +222,34 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/video-hotspots":
             from . import video
             self._json(video.summary())
+        elif u.path == "/api/bili-daily":
+            from . import bili_daily
+            self._json(bili_daily.summary(q.get("day", [None])[0]))
+        elif u.path == "/api/bili-terms":
+            from . import bili_terms
+            try:
+                result = bili_terms.matched_catalogue() if q.get("matched") == ["1"] else bili_terms.catalogue(
+                    q.get("q", [""])[0], q.get("status", ["all"])[0],
+                    _int(q, "page", 1, 1, 10000000),
+                    _int(q, "page_size", 100, 1, 100))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+            else:
+                self._json(result)
+        elif u.path == "/api/bili-stream":
+            from . import bili_stream
+            self._json(bili_stream.summary())
+        elif u.path == "/api/bili-growth":
+            from . import bili_growth, bili_terms
+            try:
+                result = bili_growth.payload(q.get("day", [None])[0])
+                result = {**result, "groups": [dict(r) for r in result.get("groups", [])],
+                          "tags": [dict(r) for r in result.get("tags", [])]}
+                with db.session() as c:
+                    bili_terms.archive_links(c, result["groups"] + result["tags"])
+                self._json(result)
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
         elif u.path == "/api/series":
             keys = (q.get("keys", [""])[0]).split(",")
             days = _int(q, "days", 7, 1, 90)
@@ -257,6 +300,9 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/fresh":
             from . import charts
             self._json(charts.fresh())
+        elif u.path == "/api/rising":
+            from . import charts
+            self._json(charts.rising(q.get("source", ["steam"])[0]))
         elif u.path == "/api/raw":
             from . import charts
             self._json(charts.raw(q.get("source", ["tapmaker"])[0]))
@@ -308,6 +354,9 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             body = {}
         p = urlparse(self.path).path
+        if p.startswith("/api/bili-growth/") and not isinstance(body, dict):
+            self._json({"error": "请求内容必须是对象"}, 400)
+            return
         if p == "/api/label":
             db.save_label(body["member"], stars=body.get("stars"), blocked=body.get("blocked"),
                           note=body.get("note"), aliases=body.get("aliases"), keywords=body.get("keywords"),
@@ -340,6 +389,30 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/api/run":
             RUN_NOW.set()
             self._json({"ok": True})
+        elif p == "/api/bili-growth/edge":
+            from . import bili_growth
+            try:
+                self._json(bili_growth.edge_decision(body.get("a"), body.get("b"),
+                                                    body.get("blocked", True), body.get("day")))
+            except (ValueError, TypeError) as e:
+                self._json({"error": str(e)}, 400)
+        elif p == "/api/bili-growth/rebuild":
+            from . import bili_growth
+            try:
+                day = body.get("day")
+                if day is not None:
+                    from datetime import date, datetime
+                    from .sources import bili
+                    if date.fromisoformat(day) >= datetime.now(bili.BEIJING).date():
+                        raise ValueError("增长榜只比较已结束的北京时间日期")
+                if "smoothing" in body:
+                    smoothing = float(body["smoothing"])
+                    if not 0.001 <= smoothing <= 1000000:
+                        raise ValueError("c 必须在0.001至1000000之间")
+                    db.kv_set("bili_growth_smoothing", smoothing)
+                self._json(bili_growth.build(day))
+            except (ValueError, TypeError) as e:
+                self._json({"error": str(e)}, 400)
         elif p == "/api/world/run":
             from . import worldmap
             worldmap.RUN_NOW.set()

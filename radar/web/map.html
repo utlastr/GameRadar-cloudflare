@@ -42,7 +42,8 @@ body.sel #panel{display:block}
 #panel .bdg{margin:10px 0 4px}
 #panel .emb{width:56px;height:64px}
 #panel .emb img{left:6px;top:6px;width:44px;height:44px}
-#panel h2{font-size:18px;margin:0 0 2px}
+#panel h2{font-size:28px;line-height:1.15;margin:0 0 6px;font-weight:700;letter-spacing:-.01em}
+#panel h2+.m{font-size:13px}
 #panel h3{font-size:12px;color:#8a90a0;margin:18px 0 6px;font-weight:600;letter-spacing:.04em}
 .m{color:#8a90a0;font-size:12px}
 .x{float:right;cursor:pointer;color:#8a90a0;font-size:20px;line-height:1}
@@ -82,7 +83,7 @@ details{color:#8a90a0;font-size:12px;margin-top:10px}
 <body>
 <div id="globeViz"></div><canvas id="flat"></canvas><canvas id="warp"></canvas><div id="sol"></div>
 <div class="bar"><a class="b" href="/">← Radar</a><button class="b" id="mode">Flat</button><button class="b on" id="pop">Population</button><button class="b" id="inc">Income</button><span id="incw" style="display:none"><input type="range" id="incr" min="0" max="1000"><span id="incv"></span></span><button class="b on" id="bd">Borders</button><span id="st">Loading</span></div>
-<div class="legend">Income per person<div class="g" id="lg"></div><div class="t" id="lgt"></div></div>
+<div class="legend">PCI<div class="g" id="lg"></div><div class="t" id="lgt"></div></div>
 <div id="tip"></div>
 <div id="panel"></div>
 <script type="module">
@@ -104,7 +105,35 @@ let W = null, R = null, IDX = {}, RG = null, NEAR = {}, PINC = {}, UP = [], CL =
 let selCC = null, selCl = null, showPop = true, showBd = true;
 let selU = -1, selUCC = null;      /* 选中的省 / 州（单元）及其所属国家 */
 const geo = await (await fetch("/map/countries.geojson")).json();
-const FEATS = geo.features;
+/* v83：国界、省界、国家和省的填色都来自同一套数据（/api/regions v2）。
+   每段边（arc）只存一份，国家 / 省的环 = arc 编号列表（~i 表示反着走），所以线和线、线和填色完全重合。
+   这份数据还没准备好时，临时用旧的国家轮廓。 */
+const RG0 = await getJSON("/api/regions");
+const TOPO = RG0 && RG0.v === 2 && RG0.arcs ? RG0 : null;
+if (TOPO) try { sessionStorage.removeItem("rg2"); } catch {}
+const ARCS = TOPO ? TOPO.arcs.map(a => { const o = []; let x = 0, y = 0; for (let i = 0; i + 1 < a.length; i += 2) { x += a[i]; y += a[i + 1]; o.push([x / TOPO.q, y / TOPO.q]); } return o; }) : [];
+function topoPolys(g) {
+  const out = [];
+  for (const poly of g) {
+    const rings = [];
+    for (const refs of poly) {
+      const ring = [];
+      for (const r of refs) {
+        const a = r < 0 ? ARCS[~r].slice().reverse() : ARCS[r];
+        for (let i = ring.length ? 1 : 0; i < a.length; i++) ring.push(a[i]);
+      }
+      if (new Set(ring.map(p => p[0] + "," + p[1])).size >= 3) rings.push(ring);
+      else if (!rings.length) break;
+    }
+    if (rings.length) out.push(rings);
+  }
+  return out;
+}
+const PROPS = Object.fromEntries(geo.features.map(f => [f.properties.cc, f.properties]));
+const FEATS = TOPO
+  ? TOPO.countries.map(c => ({ type: "Feature", properties: { cc: c.cc, name: c.name, sub: c.sub || (PROPS[c.cc] || {}).sub, gdppc: (PROPS[c.cc] || {}).gdppc },
+      geometry: { type: "MultiPolygon", coordinates: topoPolys(c.g) } })).filter(f => f.geometry.coordinates.length)
+  : geo.features;
 /* three-globe 用 d3-geo 判断面在球上的内外：环向决定"哪边是里面"。
    外环必须是顺时针（面积 < 0），洞必须是逆时针；个别 Natural Earth 小岛是反的，
    会被当成"整个球面减去这个小岛"，于是铺满全地球（绿色 + 极卡）。这里统一环向。 */
@@ -131,17 +160,49 @@ for (const f of FEATS) {
 const FEAT_NAME = Object.fromEntries(FEATS.map(f => [f.properties.cc, f.properties.name]));
 const FEAT_GDP = Object.fromEntries(FEATS.map(f => [f.properties.cc, f.properties.gdppc]));
 const FEAT_SUB = Object.fromEntries(FEATS.map(f => [f.properties.cc, f.properties.sub]));
-let UNITS = [], COVER = new Set(), SHAPES = FEATS;
+let UNITS = [], COVER = new Set(), UBY = {}, UMAP = {}, LS = null;
 function setRegions(rg) {
-  RG = rg; UNITS = []; COVER = new Set();
+  RG = rg; UNITS = []; COVER = new Set(); UBY = {}; UMAP = {}; LS = null;
   if (rg) rg.units.forEach((u, i) => {
-    fixWinding(u.g);
+    const polys = fixWinding(rg.v === 2 ? topoPolys(u.g) : u.g);
+    if (!polys.length) return;
     let a = 180, b = 90, c = -180, d = -90;
-    for (const p of u.g) for (const [x, y] of p[0]) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); }
-    UNITS.push({ cc: u.cc, u: i, en: u.en, loc: u.loc, rf: u.rf, pop: u.pop, polys: u.g, bb: [a, b, c, d], geometry: { type: "MultiPolygon", coordinates: u.g } });
+    for (const p of polys) for (const [x, y] of p[0]) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); }
+    const s = { cc: u.cc, u: i, en: u.en, loc: u.loc, rf: u.rf, pop: u.pop, polys, bb: [a, b, c, d], geometry: { type: "MultiPolygon", coordinates: polys } };
+    UNITS.push(s); UMAP[i] = s; (UBY[u.cc] = UBY[u.cc] || []).push(s);
     COVER.add(u.cc);
   });
-  SHAPES = FEATS.filter(f => !COVER.has(f.cc)).concat(UNITS);
+}
+if (TOPO) setRegions(TOPO);
+/* 线：国界 = 被国家用到的边；省界 = 同一国两个省共用的边。±180° 经线上的接缝不画，长段按 1° 补点（免得在球面上穿进地球） */
+const seam = (a, b) => (Math.abs(a[0]) > 179.999 && Math.abs(b[0]) > 179.999) || Math.abs(a[0] - b[0]) > 180;
+function dense(l) {
+  const o = [l[0]];
+  for (let i = 1; i < l.length; i++) {
+    const a = l[i - 1], b = l[i], n = Math.ceil(Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])));
+    for (let k = 1; k < n; k++) o.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+    o.push(b);
+  }
+  return o;
+}
+function pieces(ls) {
+  const out = [];
+  for (const l of ls) {
+    let cur = [];
+    for (let i = 0; i < l.length; i++) {
+      if (i && seam(l[i - 1], l[i])) { if (cur.length > 1) out.push(dense(cur)); cur = []; }
+      cur.push(l[i]);
+    }
+    if (cur.length > 1) out.push(dense(cur));
+  }
+  return out;
+}
+const ringsOf = shapes => shapes.flatMap(f => f.polys.flatMap(p => p));
+function lines() {
+  if (LS) return LS;
+  LS = TOPO ? { c: pieces(TOPO.lc.map(i => ARCS[i])), p: pieces(TOPO.lp.map(i => ARCS[i])) }
+    : { c: pieces(ringsOf(FEATS)), p: pieces(ringsOf(UNITS)) };
+  return LS;
 }
 
 const DN = {};
@@ -213,7 +274,7 @@ let HOVSET = null, hovCl = null;
 /* 亮度的最终裁决：选中省 > 同国其他省 > 别国；没有选中省时走原来的规则 */
 function brightOf(s) {
   if (selU < 0) return bright(keyOf(s), s.cc);
-  if (s.u === selU) return 1;
+  if (s.u === selU || (s.u >= 0 && isPl(selCC) && keyOf(s) === selCC)) return 1;
   if (s.cc === selUCC) return .4;
   return .13;
 }
@@ -243,15 +304,21 @@ function inRing(x, y, r) {
   }
   return c;
 }
-function shapeAt(lat, lng, smallDeg) {
-  for (const s of SMALL) if (!COVER.has(s.cc) && Math.hypot(s.lat - lat, s.lng - lng) < smallDeg) return FEATS.find(f => f.cc === s.cc) || { cc: s.cc, u: -1 };
-  for (const f of SHAPES) {
+function hitIn(list, lat, lng) {
+  for (const f of list) {
     const [a, b, c, d] = f.bb;
     if (lng < a || lng > c || lat < b || lat > d) continue;
     for (const p of f.polys) if (inRing(lng, lat, p[0]) && !p.slice(1).some(h => inRing(lng, lat, h))) return f;
   }
   return null;
 }
+function countryAt(lat, lng, smallDeg) {
+  const f = hitIn(FEATS, lat, lng);
+  if (f) return f;
+  for (const s of SMALL) if (Math.hypot(s.lat - lat, s.lng - lng) < smallDeg) return FEATS.find(x => x.cc === s.cc) || { cc: s.cc, u: -1 };
+  return null;
+}
+const unitAt = (lat, lng, cc) => hitIn(UBY[cc] || [], lat, lng);
 
 /* ---------- 人口点（和「人口地球」同一套） ---------- */
 function decodeGrid(buf) {
@@ -455,7 +522,12 @@ world.controls().autoRotate = false;
 world.controls().maxDistance = world.getGlobeRadius() * 400;
 world.pointOfView({ lat: 25, lng: 105, altitude: 2.2 }, 0);
 
+/* 地球上的人口点和平铺模式画成同一个颜色：以前地球用贴图上色，贴图没标 sRGB，输出时又转了一次 sRGB，
+   点被洗亮发白；小点用的是缩小的贴图，边上的透明黑色混进去又变暗。现在跟平铺一样：圆形裁切 + 固定颜色 DOT。 */
+const DOTLIN = DOT.slice(1).match(/../g).map(h => { const c = parseInt(h, 16) / 255; return (c < .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4)).toFixed(6); });
 const subPixel = shader => {
+  shader.fragmentShader = shader.fragmentShader.replace("#include <map_particle_fragment>",
+    `{ vec2 dq = gl_PointCoord - .5; if (dot(dq, dq) > .25) discard; } diffuseColor.rgb = vec3(${DOTLIN.join(", ")});`);
   shader.vertexShader = shader.vertexShader.replace("#include <logdepthbuf_vertex>", `
     if (gl_PointSize < 1.0) {
       float h = fract(sin(dot(position, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
@@ -479,7 +551,7 @@ function patchParts() {
 let dotTex = null;
 world.onGlobeReady(() => {
   const sc = world.scene(), prev0 = sc.onBeforeRender;
-  sc.onBeforeRender = function (...a) { if (prev0) prev0.apply(this, a); patchParts(); };
+  sc.onBeforeRender = function (...a) { if (prev0) prev0.apply(this, a); patchParts(); RIBPX.value = pxWorld(); };
   const m = world.globeMaterial();
   const Tex = (m.map || m.bumpMap || world.scene().background).constructor;
   dotTex = new Tex(dotCanvas);
@@ -531,20 +603,14 @@ function sph(lng, lat, r) {
   const t = (90 - lat) * D2R, p = (90 - lng) * D2R;
   return [r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p)];
 }
-function ringSegments(shapes, radius) {
-  const pos = [];
-  for (const f of shapes) for (const poly of f.polys) for (const ring of poly) {
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i], b = ring[(i + 1) % ring.length];
-      pos.push(...sph(a[0], a[1], radius), ...sph(b[0], b[1], radius));
-    }
-  }
-  return pos;
-}
-function makeLines(shapes, radius, opacity) {
+function makeLines(ls, radius, opacity) {
   const mk = lineCtor();
   if (!mk) return null;
-  const pos = ringSegments(shapes, radius);
+  const pos = [];
+  for (const l of ls) for (let i = 1; i < l.length; i++) {
+    const a = l[i - 1], b = l[i];
+    pos.push(...sph(a[0], a[1], radius), ...sph(b[0], b[1], radius));
+  }
   if (!pos.length) return null;
   const g = lineGeometry(mk, pos);
   const o = new mk.Seg(g, new mk.Mat({ color: 0xffffff, transparent: true, opacity, depthWrite: false }));
@@ -552,75 +618,90 @@ function makeLines(shapes, radius, opacity) {
   return o;
 }
 function dropLines(o) { if (!o) return; o.parent && o.parent.remove(o); o.geometry && o.geometry.dispose(); }
-/* 把一圈经纬度做成连续的"带"：每个顶点用相邻两条边做斜接（miter），
-   转角处补满，所以不会出现一段一段的断口；颜色是白的，不再是一层黑线。 */
-function makeRibbons(shapes, radius, halfW, opacity) {
+/* 把线做成连续的"带"：每个顶点用相邻两条边做斜接（miter）。
+   宽度按屏幕像素算（每帧按相机离地面的距离换算 RIBPX），放大缩小都一样细，不会越放大越粗。 */
+const RIBPX = { value: 0 };
+function ribbonShader(sh) {
+  sh.uniforms.uPx = RIBPX;
+  sh.vertexShader = "attribute vec3 off;\nuniform float uPx;\n" + sh.vertexShader.replace("#include <begin_vertex>", "vec3 transformed = vec3(position) + off * uPx;");
+}
+function pxWorld() {
+  const cam = world.camera(), Rg = world.getGlobeRadius();
+  const d = Math.max(Rg * 1e-4, cam.position.length() - Rg);
+  return 2 * d * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, gEl.clientHeight);
+}
+function makeRibbons(ls, radius, hwPx, opacity) {
   const mk = lineCtor();
   if (!mk || !mk.Mesh || !mk.MMat || MATBAD) return null;
-  const pos = [];
-  for (const f of shapes) for (const poly of f.polys) for (const ring of poly) {
-    const n = ring.length;
-    if (n < 3) continue;
-    const P = ring.map(([lng, lat]) => sph(lng, lat, radius));
+  const pos = [], off = [];
+  for (const l of ls) {
+    const n = l.length;
+    if (n < 2) continue;
+    const P = l.map(([lng, lat]) => sph(lng, lat, radius));
     const E = [];
-    for (let i = 0; i < n; i++) {
-      const a = P[i], b = P[(i + 1) % n];
+    for (let i = 0; i + 1 < n; i++) {
+      const a = P[i], b = P[i + 1];
       const nx = a[1]*b[2] - a[2]*b[1], ny = a[2]*b[0] - a[0]*b[2], nz = a[0]*b[1] - a[1]*b[0];
-      const l = Math.hypot(nx, ny, nz);
-      E.push(l < 1e-12 ? null : [nx / l, ny / l, nz / l]);
+      const q = Math.hypot(nx, ny, nz);
+      E.push(q < 1e-12 ? null : [nx / q, ny / q, nz / q]);
     }
+    const closed = n > 2 && l[0][0] === l[n - 1][0] && l[0][1] === l[n - 1][1];
     const V = [];
     for (let i = 0; i < n; i++) {
-      const e0 = E[(i + n - 1) % n], e1 = E[i], ref = e1 || e0;
+      const e0 = i > 0 ? E[i - 1] : closed ? E[n - 2] : null, e1 = i < n - 1 ? E[i] : closed ? E[0] : null, ref = e1 || e0;
       if (!ref) { V.push([0, 0, 0]); continue; }
       let nx = ref[0], ny = ref[1], nz = ref[2];
       if (e0 && e1) { nx = e0[0] + e1[0]; ny = e0[1] + e1[1]; nz = e0[2] + e1[2]; }
-      const l = Math.hypot(nx, ny, nz) || 1;
-      nx /= l; ny /= l; nz /= l;
-      const s = halfW / Math.max(.45, Math.abs(nx * ref[0] + ny * ref[1] + nz * ref[2]));
+      const q = Math.hypot(nx, ny, nz) || 1;
+      nx /= q; ny /= q; nz /= q;
+      const s = hwPx / Math.max(.45, Math.abs(nx * ref[0] + ny * ref[1] + nz * ref[2]));
       V.push([nx * s, ny * s, nz * s]);
     }
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
+    for (let i = 0; i + 1 < n; i++) {
       if (!E[i]) continue;
-      const a = P[i], b = P[j], va = V[i], vb = V[j];
-      pos.push(a[0]-va[0], a[1]-va[1], a[2]-va[2], b[0]-vb[0], b[1]-vb[1], b[2]-vb[2], b[0]+vb[0], b[1]+vb[1], b[2]+vb[2]);
-      pos.push(a[0]-va[0], a[1]-va[1], a[2]-va[2], b[0]+vb[0], b[1]+vb[1], b[2]+vb[2], a[0]+va[0], a[1]+va[1], a[2]+va[2]);
+      const a = P[i], b = P[i + 1], va = V[i], vb = V[i + 1];
+      pos.push(...a, ...b, ...b, ...a, ...b, ...a);
+      off.push(-va[0], -va[1], -va[2], -vb[0], -vb[1], -vb[2], vb[0], vb[1], vb[2], -va[0], -va[1], -va[2], vb[0], vb[1], vb[2], va[0], va[1], va[2]);
     }
   }
   if (!pos.length) return null;
   const g = lineGeometry(mk, pos);
+  g.setAttribute("off", new mk.Attr(new Float32Array(off), 3));
   const mat = mk.MBasic
     ? new mk.MMat({ color: 0xffffff, transparent: true, opacity, depthWrite: false, side: 2, toneMapped: false })
     : new mk.MMat({ color: 0x000000, emissive: 0xffffff, transparent: true, opacity, depthWrite: false, side: 2 });
+  mat.onBeforeCompile = ribbonShader;
   const o = new mk.Mesh(g, mat);
   o.frustumCulled = false;
   world.scene().add(o);
   return o;
 }
+/* 粗细（工程参数，像素）：省界 1px、国界 1.5px 且稍亮、选中轮廓 2.4px */
+const LW = { p: .3, c: .75, cA: .5, sel: 1.2 };
 function buildBorders() {
   dropLines(BORD); BORD = null;
   dropLines(BRD); BRD = null;
-  if (!UNITS.length) return;
-  const R = world.getGlobeRadius();
+  const R = world.getGlobeRadius(), L = lines();
   /* 光点在 1.006，边界必须画在它上面，否则被密集光点盖住就是"断断续续" */
-  BORD = makeLines(UNITS, R * 1.0072, .13);             /* 省界：1px 细线，淡一点 */
-  BRD = makeRibbons(FEATS, R * 1.0080, R * .0015, .5);  /* 国界：连续白带，略粗一点 */
+  BORD = makeLines(L.p, R * 1.0072, LW.p);
+  BRD = makeRibbons(L.c, R * 1.0076, LW.c, LW.cA) || makeLines(L.c, R * 1.0076, LW.cA);
   if (BORD) BORD.renderOrder = 4;
   if (BRD) BRD.renderOrder = 5;
   SELKEY = ""; syncBorders();
 }
+/* 选中国家 → 整个国家的轮廓；选中省 / 地区 → 这个地区（可能是几个省一起）的轮廓 */
 function selList() {
-  if (selU >= 0) return UNITS.filter(u => u.u === selU);
   if (!selCC) return [];
-  return SHAPES.filter(f => keyOf(f) === selCC || (f.cc === selCC && !NEAR[selCC]));
+  if (selU >= 0 || isPl(selCC)) return UNITS.filter(u => u.u === selU || (isPl(selCC) && keyOf(u) === selCC));
+  return FEATS.filter(f => f.cc === selCC);
 }
 function buildSelOutline() {
   dropLines(BORDSEL); BORDSEL = null;
   const list = selList();
   if (!list.length) return;
-  BORDSEL = makeRibbons(list, world.getGlobeRadius() * 1.006, world.getGlobeRadius() * .0022, 1);
-  if (BORDSEL) BORDSEL.renderOrder = 3;
+  const ls = pieces(ringsOf(list)), R = world.getGlobeRadius();
+  BORDSEL = makeRibbons(ls, R * 1.008, LW.sel, .95) || makeLines(ls, R * 1.008, .95);
+  if (BORDSEL) BORDSEL.renderOrder = 6;
 }
 function syncBorders() {
   const on = showBd && mode === "globe";
@@ -969,39 +1050,52 @@ function glProg(vs, fs) {
   return { p, u };
 }
 const VHEAD = "uniform vec2 c; uniform vec2 s; uniform float o; vec4 at(vec2 q){ return vec4((q.x + o - c.x) * s.x, -(q.y - c.y) * s.y, 0., 1.); }\n";
-let PB, PP, PD, BFan, BLn, NLn = 0, BBd = null, NBd = 0, NCn = 0, BDot = null, NDot = 0, BSm, nightTex = null;
+let PB, PP, PD, PR, BFan, BCL = null, NCL = 0, BPL = null, NPL = 0, BSL = null, NSL = 0, FSEL = null, BDot = null, NDot = 0, BSm, nightTex = null;
 const mkBuf = arr => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); return b; };
+function segArr(ls) {
+  const a = [];
+  for (const l of ls) for (let i = 1; i < l.length; i++) a.push(mX(l[i - 1][0]), mY(l[i - 1][1]), mX(l[i][0]), mY(l[i][1]));
+  return new Float32Array(a);
+}
+/* 平铺模式的"带"：每个顶点带上法线方向，着色器里按屏幕像素往两边推，放大缩小粗细不变 */
+function ribArr(ls) {
+  const a = [];
+  for (const l of ls) for (let i = 1; i < l.length; i++) {
+    const x1 = mX(l[i - 1][0]), y1 = mY(l[i - 1][1]), x2 = mX(l[i][0]), y2 = mY(l[i][1]);
+    const dx = x2 - x1, dy = y2 - y1, q = Math.hypot(dx, dy);
+    if (!q) continue;
+    const nx = -dy / q, ny = dx / q;
+    a.push(x1, y1, -nx, -ny, x2, y2, -nx, -ny, x2, y2, nx, ny, x1, y1, -nx, -ny, x2, y2, nx, ny, x1, y1, nx, ny);
+  }
+  return new Float32Array(a);
+}
 function buildFlatGeo() {
   if (!gl) return;
-  const fanArr = [0, 0, 1, 0, 0, 1, 1, 1], lnArr = [], bdArr = [];
+  const fanArr = [0, 0, 1, 0, 0, 1, 1, 1];
   for (const f of FEATS.concat(UNITS)) {
-    const s = fanArr.length / 2, ls = lnArr.length / 2;
-    const country = f.u < 0;
+    const s = fanArr.length / 2;
     let a = 9, b = 9, c = -9, d = -9;
     for (const poly of f.polys) for (const ring of poly) {
       const q = ring.map(([x, y]) => [mX(x), mY(y)]);
       for (const [x, y] of q) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); }
       for (let i = 1; i + 1 < q.length; i++) fanArr.push(q[0][0], q[0][1], q[i][0], q[i][1], q[i + 1][0], q[i + 1][1]);
-      for (let i = 0; i < q.length; i++) { const j = (i + 1) % q.length; lnArr.push(q[i][0], q[i][1], q[j][0], q[j][1]); }
-      /* 国界单独做成"三角带"，平铺模式里也能画粗、画清楚 */
-      if (country) {
-        const hw = .00055;
-        for (let i = 0; i < q.length; i++) {
-          const x1 = q[i][0], y1 = q[i][1], x2 = q[(i + 1) % q.length][0], y2 = q[(i + 1) % q.length][1];
-          const dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy) || 1;
-          const ox = -dy / l * hw, oy = dx / l * hw;
-          bdArr.push(x1 - ox, y1 - oy, x2 - ox, y2 - oy, x2 + ox, y2 + oy);
-          bdArr.push(x1 - ox, y1 - oy, x2 + ox, y2 + oy, x1 + ox, y1 + oy);
-        }
-      }
     }
-    f.fan = [s, fanArr.length / 2 - s]; f.ln = [ls, lnArr.length / 2 - ls]; f.mb = [a, b, c - a, d - b];
-    if (country) NCn = lnArr.length / 2;      /* 国界线在先、省界线在后，边界处正好是 NCn */
+    f.fan = [s, fanArr.length / 2 - s]; f.mb = [a, b, c - a, d - b];
   }
-  if (BFan) { gl.deleteBuffer(BFan); gl.deleteBuffer(BLn); }
-  if (BBd) gl.deleteBuffer(BBd);
-  BFan = mkBuf(new Float32Array(fanArr)); BLn = mkBuf(new Float32Array(lnArr)); NLn = lnArr.length / 2;
-  BBd = mkBuf(new Float32Array(bdArr)); NBd = bdArr.length / 2;
+  for (const bf of [BFan, BCL, BPL]) if (bf) gl.deleteBuffer(bf);
+  BFan = mkBuf(new Float32Array(fanArr));
+  const L = lines(), ca = ribArr(L.c), pa = segArr(L.p);
+  BCL = mkBuf(ca); NCL = ca.length / 4;
+  BPL = mkBuf(pa); NPL = pa.length / 2;
+  FSEL = null;
+}
+function flatSel() {
+  const k = (selCC || "") + "|" + selU;
+  if (FSEL === k) return;
+  FSEL = k;
+  if (BSL) gl.deleteBuffer(BSL);
+  const a = ribArr(pieces(ringsOf(selList())));
+  BSL = mkBuf(a); NSL = a.length / 4;
 }
 function uploadFlatDots() {
   if (!gl) return;
@@ -1020,6 +1114,8 @@ if (gl) {
     "precision mediump float; uniform vec4 col; void main(){ gl_FragColor = col; }");
   PD = glProg(VHEAD + "attribute vec4 p; uniform float wp; uniform float fix; void main(){ gl_Position = at(p.xy); float z = fix > 0. ? fix : p.z * wp; if (z < 1.) { if (p.w > z * z) gl_Position = vec4(2., 2., 2., 1.); z = 1.; } gl_PointSize = z; }",
     "precision mediump float; uniform vec4 col; void main(){ vec2 d = gl_PointCoord - .5; if (dot(d, d) > .25) discard; gl_FragColor = col; }");
+  PR = glProg(VHEAD + "attribute vec4 p; uniform vec2 px; uniform float hw; void main(){ gl_Position = at(p.xy); gl_Position.xy += vec2(p.z * px.x, -p.w * px.y) * hw; }",
+    "precision mediump float; uniform vec4 col; void main(){ gl_FragColor = col; }");
   buildFlatGeo();
   uploadFlatDots();
   BSm = mkBuf(new Float32Array(MARKS.flatMap(s => [mX(s.lng), mY(s.lat), 0, 0])));
@@ -1094,16 +1190,20 @@ function renderFlat() {
     }
   }
   gl.disable(gl.STENCIL_TEST);
-  const selF = selList();
-  if (showBd) for (const o of copies) {
-    gl.uniform1f(PP.u.o, o);
-    gl.uniform4f(PP.u.r, 0, 0, 0, 0);
-    /* 国界：三角带（粗、亮）；省界：细线（暗） */
-    if (BBd && NBd) { bindP(BBd, 2); gl.uniform4f(PP.u.col, 1, 1, 1, .5); gl.drawArrays(gl.TRIANGLES, 0, NBd); }
-    bindP(BLn, 2);
-    if (NCn < NLn) { gl.uniform4f(PP.u.col, 1, 1, 1, .12); gl.drawArrays(gl.LINES, NCn, NLn - NCn); }
-    gl.uniform4f(PP.u.col, 1, 1, 1, 1);
-    for (const f of selF) gl.drawArrays(gl.LINES, f.ln[0], f.ln[1]);
+  if (showBd) {
+    flatSel();
+    /* 省界：1px 细线；国界：稍粗稍亮的带；选中轮廓最亮 */
+    for (const o of copies) {
+      gl.uniform1f(PP.u.o, o);
+      gl.uniform4f(PP.u.r, 0, 0, 0, 0);
+      if (NPL) { bindP(BPL, 2); gl.uniform4f(PP.u.col, 1, 1, 1, LW.p); gl.drawArrays(gl.LINES, 0, NPL); }
+    }
+    use(PR); gl.uniform2f(PR.u.px, 2 / W, 2 / H);
+    for (const o of copies) {
+      gl.uniform1f(PR.u.o, o);
+      if (NCL) { bindP(BCL, 4); gl.uniform1f(PR.u.hw, LW.c * dpr); gl.uniform4f(PR.u.col, 1, 1, 1, LW.cA); gl.drawArrays(gl.TRIANGLES, 0, NCL); }
+      if (NSL) { bindP(BSL, 4); gl.uniform1f(PR.u.hw, LW.sel * dpr); gl.uniform4f(PR.u.col, 1, 1, 1, .95); gl.drawArrays(gl.TRIANGLES, 0, NSL); }
+    }
   }
   use(PD); gl.uniform1f(PD.u.wp, wp);
   if (showPop && NDot) {
@@ -1173,13 +1273,20 @@ flat.addEventListener("pointerleave", () => { $("tip").style.display = "none"; s
 flat.addEventListener("wheel", e => { e.preventDefault(); cancelAnimationFrame(inert); zoomAt(Math.exp(-e.deltaY * (e.deltaMode ? .05 : .002)), e.clientX, e.clientY); }, { passive: false });
 
 /* ---------- 点击、悬停 ---------- */
+/* 返回 {c: 国家, u: 这个国家里的省 / 州（没有就是 null）} */
 function locate(cx, cy) {
   if (mode === "globe" && focus !== "earth") return null;
-  if (mode === "flat") { const g = flatLatLng(cx, cy); return shapeAt(g.lat, g.lng, 6 / g.ppd); }
-  const rect = gEl.getBoundingClientRect();
-  const g = world.toGlobeCoords(cx - rect.left, cy - rect.top);
-  return g ? shapeAt(g.lat, g.lng, .8) : null;
+  let g, tol;
+  if (mode === "flat") { g = flatLatLng(cx, cy); tol = 6 / g.ppd; }
+  else { const rect = gEl.getBoundingClientRect(); g = world.toGlobeCoords(cx - rect.left, cy - rect.top); tol = .8; }
+  if (!g) return null;
+  const c = countryAt(g.lat, g.lng, tol);
+  return c ? { c, u: unitAt(g.lat, g.lng, c.cc) } : null;
 }
+/* 当前停在哪个国家、是不是停在省一级 */
+const selCountry = () => selCC ? ccOf(selCC) : null;
+const atProvince = () => !!selCC && (selU >= 0 || isPl(selCC));
+/* 点别的国家 → 先看这个国家整体；国家已选中 → 再点选具体的省；省已选中 → 再点回到国家 */
 function placeTip(tip, cx, cy) {
   tip.style.display = "block";
   tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, cx + 16)) + "px";
@@ -1187,9 +1294,11 @@ function placeTip(tip, cx, cy) {
 }
 function clickAt(cx, cy) {
   if (mode === "globe") { const b = pickBody(cx, cy); if (b && (b.k !== focus || cs.h > b.R * 30)) { flyTo(b.k); return; } }
-  const sh = locate(cx, cy), k = sh ? keyOf(sh) : null;
-  const same = k && k === selCC && (selU < 0 || !sh || sh.u === selU);
-  select(same ? null : k, sh);
+  const h = locate(cx, cy);
+  if (!h) { select(null); return; }
+  const cc = h.c.cc;
+  if (selCountry() !== cc || atProvince()) { select(cc); return; }
+  if (h.u) select(keyOf(h.u), h.u);
 }
 let hoverRaf = 0;
 function hoverAt(cx, cy) {
@@ -1201,7 +1310,8 @@ function hoverAt(cx, cy) {
       const b = pickBody(cx, cy);
       if (b && b.k !== "earth") { setHover(null); tip.innerHTML = bodyTip(b); placeTip(tip, cx, cy); return; }
     }
-    const sh = locate(cx, cy), k = sh ? keyOf(sh) : null;
+    const h = locate(cx, cy);
+    const sh = !h ? null : h.u && selCountry() === h.c.cc ? h.u : h.c, k = sh ? keyOf(sh) : null;
     setHover(k);
     if (!sh) { tip.style.display = "none"; return; }
     const s = selCC && k !== selCC ? simOf(selCC, k) : null;
@@ -1255,13 +1365,11 @@ function repaint() {
   if (world.polygonsData() !== want) world.polygonsData(want).labelsData(showBd ? MARKS : []);
   world.polygonAltitude(f => f.u >= 0 ? .0046 : .004)
     .polygonCapColor(f => capColor(f))
-    .polygonStrokeColor(f => f.u >= 0
-      ? (f.u === selU ? "rgba(255,255,255,.95)" : "rgba(255,255,255,.18)")
-      : (selU < 0 && selCC && (keyOf(f) === selCC || f.cc === selCC) ? "rgba(255,255,255,.8)" : null))
+    .polygonStrokeColor(() => null)
     .labelColor(d => capColor({ cc: d.cc, u: -1 }, 1));
   syncBorders();
   const sk = (selCC || "") + "|" + selU;
-  if (BORD && sk !== SELKEY) { SELKEY = sk; buildSelOutline(); syncBorders(); }
+  if ((BORD || BRD) && sk !== SELKEY) { SELKEY = sk; buildSelOutline(); syncBorders(); }
   if (mode === "flat") drawFlat();
 }
 function layout() {
@@ -1269,11 +1377,10 @@ function layout() {
   return false;
 }
 function select(cc, sh) {
-  const prev = selCC;
   selCC = cc; selCl = null; CLSET = null; HOVSET = null; hovCl = null;
   MAXSIM = 1;
   if (cc && sh && sh.u >= 0) { selU = sh.u; selUCC = sh.cc; }
-  else if (!cc || cc !== prev) { selU = -1; selUCC = null; }
+  else { selU = -1; selUCC = isPl(cc) ? ccOf(cc) : null; }
   const cl = cc && clusterOf(cc);
   SELSET = cl ? new Set(cl.members) : null;
   repaint(); renderPanel();
@@ -1316,7 +1423,7 @@ function simRows(cc) {
 }
 function countryCard(cc) {
   const c = R && R.countries[cc];
-  let h = `<span class="x" data-x>×</span><h2>${esc(enName(cc))}</h2><div class="m">Income per person ${fmtInc(incOf(cc))}</div>` + platBlock(cc);
+  let h = `<span class="x" data-x>×</span><h2>${esc(enName(cc))}</h2><div class="m">PCI ${fmtInc(incOf(cc))}</div>` + platBlock(cc);
   if (!c) return h + `<p class="m">No chart data here yet</p>`;
   const cl = clusterOf(cc);
   if (cl) h += `<div data-cl="${cl.id}" style="cursor:pointer">${badge(cc, null, true)}</div>`;
@@ -1364,7 +1471,7 @@ function platBlock(cc) {
   if (!c) return "";
   return `<h3>Platforms people use</h3>` + PF.cats.map(([k, label]) => {
     const g = c[k]; if (!g) return "";
-    const apps = g.apps.map(a => { const x = PF.apps[a] || { name: a }; return `<div class="a">${x.icon ? `<img src="/map/picon/${esc(a)}" loading="lazy">` : `<b>${esc((x.name || a)[0])}</b>`}${esc(x.name || a)}</div>`; }).join("");
+    const apps = g.apps.map(a => { const x = PF.apps[a] || { name: a }; return `<div class="a">${x.icon ? `<img src="${esc(x.icon)}" loading="lazy" referrerpolicy="no-referrer">` : `<b>${esc((x.name || a)[0])}</b>`}${esc(x.name || a)}</div>`; }).join("");
     return `<div class="pf"><div class="pl">${esc(label)}<span>${esc(PF_HOW[g.how] || "")}</span></div><div class="ap">${apps}</div></div>`;
   }).join("");
 }
@@ -1380,7 +1487,7 @@ function placeCard(k) {
   const p = PL(k);
   if (!p) return "";
   const cc = p.cc, cl = clusterOf(k);
-  let h = `<span class="x" data-x>×</span><h2>${esc(nameKC(k))}</h2><div class="m"><span data-cc="${cc}" style="cursor:pointer;text-decoration:underline">${esc(enName(cc))}</span> · population ${fmtPop(p.pop)} · income per person ${fmtInc(incK(k))}</div>`;
+  let h = `<span class="x" data-x>×</span><h2>${esc(nameKC(k))}</h2><div class="m"><span data-cc="${cc}" style="cursor:pointer;text-decoration:underline">${esc(enName(cc))}</span> · population ${fmtPop(p.pop)} · PCI ${fmtInc(incK(k))}</div>`;
   if (cl) h += `<div data-cl="${cl.id}" style="cursor:pointer">${badge(k, null, true)}</div>`;
   h += platBlock(cc);
   if (p.likes && p.likes.length) h += `<h3>Liked more than the rest of ${esc(enName(cc))}</h3>` + p.likes.map(([a, x]) => gameRow(a, x)).join("");
@@ -1474,7 +1581,10 @@ async function load() {
   const igNew = (!IG || IG.kind !== 2) && await loadIncGrid();
   if (first || igNew) { dotIncomes(); if (dotMode === "inc") refreshDots(); }
   let rgNew = false;
-  if (!RG) { const rg = await getJSON("/api/regions"); if (rg && rg.units) { setRegions(rg); buildFlatGeo(); buildBorders(); rgNew = true; } }
+  /* 统一的边界数据第一次准备好时整页重新加载一次（国家轮廓要整套换掉） */
+  const reload1 = () => { try { if (sessionStorage.getItem("rg2")) return false; sessionStorage.setItem("rg2", "1"); } catch { return false; } location.reload(); return true; };
+  if (!TOPO && (w.regions || {}).geo_v === 2 && reload1()) return;
+  if (!RG) { const rg = await getJSON("/api/regions"); if (rg && rg.units) { if (rg.v === 2 && !TOPO && reload1()) return; if (rg.v !== 2 || TOPO) { setRegions(rg); buildFlatGeo(); buildBorders(); rgNew = true; } } }
   IDX = {}; NEAR = {}; UP = []; PINC = {}; CL = [];
   if (R) {
     R.order.forEach((cc, i) => IDX[cc] = i);
@@ -1488,7 +1598,7 @@ async function load() {
     } else R.order.forEach((a, i) => { NEAR[a] = new Map(R.order.map((b, j) => [b, R.sim[i][j]]).filter(([b]) => b !== a)); });
   }
   renderLegend();
-  if ((R && R.updated !== lastUpdated) || rgNew) { lastUpdated = R && R.updated; if (selCC) select(selCC); else if (selCl) selectCluster(selCl); else { repaint(); renderPanel(); } }
+  if ((R && R.updated !== lastUpdated) || rgNew) { lastUpdated = R && R.updated; if (selCC) select(selCC, selU >= 0 ? UMAP[selU] : null); else if (selCl) selectCluster(selCl); else { repaint(); renderPanel(); } }
   else renderStatus();
   loadTimer = setTimeout(load, (W.status || {}).phase === "scan" || ["fetch", "borders"].includes((W.regions || {}).phase) ? 20000 : 300000);
 }

@@ -79,6 +79,29 @@ class TapwatchTests(unittest.TestCase):
             stamp = c.execute("SELECT MIN(ts) FROM metrics WHERE entity='961780'").fetchone()[0]
             self.assertGreaterEqual(stamp, now)
 
+    def test_404_backs_off_without_deleting_watch_id_or_metrics(self):
+        tapwatch.record(taptap.parse_detail_html(961780, self.page()))
+        with patch.object(taptap, "detail", return_value=taptap.GONE) as request, \
+                patch.object(tapwatch.activity, "say") as log:
+            failed = tapwatch.run_once()
+            again = tapwatch.run_once()
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(config.TAPTAP_WATCH_IDS, ["961780"])
+        self.assertEqual(len(failed["errors"]), 1)
+        self.assertEqual(again["ids"], [])
+        self.assertGreater(failed["errors"][0]["retry_after"], time.time() + 23 * 3600)
+        self.assertEqual(log.call_count, 1)
+        self.assertIn("Same name", log.call_args.args[0])
+        self.assertNotIn("TapTap ID", log.call_args.args[0])
+
+    def test_success_logs_one_round_instead_of_one_line_per_id(self):
+        app = taptap.parse_detail_html(961780, self.page())
+        with patch.object(taptap, "detail", return_value=app), \
+                patch.object(tapwatch.activity, "say") as log:
+            tapwatch.run_once()
+        self.assertEqual(log.call_count, 1)
+        self.assertNotIn("961780", log.call_args.args[0])
+
 
 if __name__ == "__main__":
     unittest.main()

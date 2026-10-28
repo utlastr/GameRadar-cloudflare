@@ -32,12 +32,6 @@ _TRANSIENT = ("timeout", "timed out", "连接", "连不上", "没读到", "验�
 
 
 def _sample(entity, tries=2):
-    from .collect import platform_lock
-    with platform_lock("taptap"):
-        return _sample_locked(entity, tries)
-
-
-def _sample_locked(entity, tries=2):
     """采一个 ID。超时、页面没读到这类偶发失败，隔几秒再采一次（TapTap 有时候就是一回慢一回快）。"""
     last = None
     for attempt in range(tries):
@@ -62,23 +56,33 @@ def targets():
               and time.time() - (v["extra"].get("released_time") or 0) <= 30 * 86400]
     recent.sort(key=lambda ev: (ev[1]["extra"].get("fetch_attempt_at") or 0,
                                ev[1]["extra"].get("detail_at") or 0))
-    return list(dict.fromkeys(pinned + [e for e, _ in recent]))[:config.TAPTAP_PRIORITY_PER_RUN]
+    candidates = list(dict.fromkeys(pinned + [e for e, _ in recent]))
+    return [entity for entity in candidates if
+            float((db.kv_get("tap_priority_retry:" + entity, {}) or {}).get("after", 0))
+            <= time.time()][:config.TAPTAP_PRIORITY_PER_RUN]
 
 
 def run_once():
     started = int(time.time())
     ids, results, errors = targets(), [], []
+    entities = db.load_entities()
     db.kv_set("tap_priority", {"ts": started, "running": True, "ids": ids, "results": [], "errors": []})
     for entity in ids:
         try:
             parsed = _sample(entity)
             results.append({"id": entity, "name": parsed["name"], "metrics": parsed["metrics"],
                             "ts": parsed["extra"]["detail_at"]})
-            activity.say(f"TapTap {parsed['name']}：热度 {parsed['metrics']['downloads']:,}，"
-                         f"关注 {parsed['metrics']['fans']:,}")
+            db.kv_set("tap_priority_retry:" + entity, {})
         except Exception as e:
             error = str(e)[:180]
-            errors.append({"id": entity, "error": error})
+            name = entities.get(("tapmaker", entity), {}).get("name") or f"未识别条目（{entity}）"
+            previous = db.kv_get("tap_priority_retry:" + entity, {}) or {}
+            attempts = int(previous.get("attempts", 0)) + 1
+            delay = 86400 if "404" in error else min(21600, 900 * 2 ** min(attempts - 1, 5))
+            retry_after = time.time() + delay
+            db.kv_set("tap_priority_retry:" + entity,
+                      {"after": retry_after, "attempts": attempts, "error": error})
+            errors.append({"id": entity, "name": name, "error": error, "retry_after": retry_after})
             with db.session() as c:
                 import json
                 row = c.execute("SELECT extra FROM entities WHERE source='tapmaker' AND entity=?",
@@ -88,14 +92,17 @@ def run_once():
                     extra.update(fetch_attempt_at=int(time.time()), fetch_error=error)
                     c.execute("UPDATE entities SET extra=? WHERE source='tapmaker' AND entity=?",
                               (json.dumps(extra, ensure_ascii=False), entity))
-            activity.say(f"TapTap {entity} 采样失败：{error}")
         db.kv_set("tap_priority", {"ts": started, "finished": int(time.time()), "running": True,
                                   "ids": ids, "results": results, "errors": errors})
     report = {"ts": started, "finished": int(time.time()), "running": False,
               "ids": ids, "results": results, "errors": errors}
     db.kv_set("tap_priority", report)
-    db.log_run("collect:tap_priority", time.time() - started, not errors,
-               f"{len(results)}/{len(ids)} 个ID成功；" + "；".join(f"{e['id']}：{e['error']}" for e in errors))
+    details = "；".join(f"{e['name']}：{e['error']}" for e in errors[:3])
+    if ids:
+        activity.say(f"TapTap重点采样：更新 {len(results)} 款，失败 {len(errors)} 款"
+                     + (f"；{details}；失败条目已延后重试" if details else ""))
+        db.log_run("collect:tap_priority", time.time() - started, not errors,
+                   f"{len(results)}/{len(ids)} 款成功；" + details)
     return report
 
 

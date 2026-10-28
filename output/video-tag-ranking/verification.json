@@ -1,0 +1,53 @@
+{
+  "initial": {
+    "day": "2026-10-27",
+    "total": 3898,
+    "tables": 1,
+    "filters": 0
+  },
+  "searched": {
+    "query": "养成",
+    "total": 5
+  },
+  "historical": {
+    "day": "2026-10-25",
+    "total": 8263
+  },
+  "mobile": {
+    "width": 390,
+    "scrollWidth": 390,
+    "tableWidth": 620,
+    "controls": [
+      {
+        "label": "搜索 Tag",
+        "x": 26.80000114440918,
+        "right": 335.19999504089355,
+        "width": 308.3999938964844
+      },
+      {
+        "label": "搜索",
+        "x": 339.20001220703125,
+        "right": 373.20001220703125,
+        "width": 34
+      },
+      {
+        "label": "统计日期",
+        "x": 72,
+        "right": 222,
+        "width": 150
+      },
+      {
+        "label": "刷新增长榜",
+        "x": 230,
+        "right": 264,
+        "width": 34
+      }
+    ]
+  },
+  "narrow": {
+    "width": 381,
+    "scrollWidth": 381
+  },
+  "errors": [],
+  "checked_at": "2026-10-28T01:02:37.886Z"
+}

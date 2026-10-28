@@ -1,0 +1,281 @@
+{
+  "tabs": [
+    {
+      "source": "appcn",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "appus",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:Google Play",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "mistore",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:华为 / OPPO / vivo",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "steam",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:Epic 游戏商城",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:WeGame",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "taptap",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "tapmaker",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "haoyou",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "wxmini",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "dymini",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:快手 / QQ / 支付宝 / 百度 / B站",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:快游戏（厂商快应用）",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "roblox",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "fortnite",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "crazygames",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "poki",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "itch",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:Telegram / Discord / Playables",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "huya",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "douyu",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "bili",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "twitch",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "kick",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:抖音 / 快手直播",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:YouTube 直播",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "bvideo",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "soc:douyin",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "soc:kuaishou",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "soc:xiaohongshu",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "soc:tiktok",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "todo:YouTube Shorts",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "soc:douyin_index",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    },
+    {
+      "source": "soc:bili_index",
+      "labels": [
+        "刚起势",
+        "全部数字"
+      ]
+    }
+  ],
+  "raw": {
+    "entities": 4126,
+    "returned": 4126,
+    "displayed": 300,
+    "pending": 473
+  },
+  "recent": 1545,
+  "measured": {
+    "steam": 11,
+    "haoyou": 37,
+    "dymini": 69,
+    "taptap": 0,
+    "tapmaker": 373
+  },
+  "mobile": {
+    "width": 487,
+    "clientWidth": 468,
+    "documentWidth": 468,
+    "tabs": [
+      "刚起势",
+      "全部数字"
+    ],
+    "removedExplanation": true
+  },
+  "errors": []
+}

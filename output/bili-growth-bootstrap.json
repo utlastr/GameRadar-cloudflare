@@ -1,0 +1,18 @@
+{
+  "revision": "2026-10-27-tag-growth-v1",
+  "day": "2026-10-26",
+  "imported": 100699,
+  "tag_count": 73320,
+  "selected": 300,
+  "groups": 300,
+  "coverage": {
+    "source": "已保存的B站样本，不是全站全量",
+    "play_basis": "真实累计播放快照；非整点边界只在前后快照间线性估算，不外推",
+    "max_snapshot_gap_hours": 30.0,
+    "selection_basis": "播放基线不足时按已保存投稿数的增长预选，不视为播放增长",
+    "ready_groups": 0,
+    "baseline_pending_groups": 300,
+    "missing_tag_videos": 429124
+  },
+  "seconds": 49.83
+}
