@@ -1,27 +1,37 @@
-"""评分：平滑新增量、有限趋势修正，再做同平台归一化。
+"""v81 评分：分数 = 异常值，只跟别的游戏比。
 
 - 地区：SCORE_REGION（默认 cn）。算哪些视频平台看地图里这个地区的视频平台（radar/platforms.py），
   其中有数据的：B站（opp_* 表，按档案）、抖音 / 快手 / 小红书（soc_videos，搜索结果按名字对到档案）。
-- 每条视频和累计指标：观测差分换算每日新增，最近三天按 50%/30%/20% 平滑。
-- 趋势：(最近三天日均新增 - 此前七天日均新增) / 两者之和；缺少基线时不调整。
+- 每条视频：最近 7 天的增量折成每天。不满 7 天按实际时长取平均（新发的视频从发布时算，发布时 = 0）；
+  两个点至少隔 MIN_SPAN。
 - 每个平台：综合量 = 播放 + Σ 权重 × 评论 / 点赞 / 转发 / 收藏，权重 = 全平台播放增量 ÷ 这种动作的增量
   （平台没有播放数时用点赞当单位）。一款游戏 = 它所有视频的每天综合量相加。
-- 正常值：这个平台上满 10 天观测的游戏（不到 MIN_FIT 款用全部）的 ln(1 + 基础量) 的中位数，
+- 正常值：这个平台上满 7 天的游戏（不到 MIN_FIT 款用全部）的 ln(1 + 综合量) 的中位数，
   离散程度 = 1.4826 × 中位数绝对偏差。异常值 z = (ln(1 + 综合量) − 正常值) ÷ 离散程度。
 - 多个平台：Σz ÷ √平台数（Stouffer）。
-- 降分开：大作 / 大厂不排名；PENALTY_WORDS 的倍数乘到综合量上再算 z。
-- 累计评论、下载/热度、访问等使用同一增量算法；趋势只调整基础量的 ±20%。
-- 累计指标也参与评分，单位不同的指标先分别归一化；在线人数和名次不做累计差分。
+- 降分开：PENALTY_WORDS 的倍数乘到综合量上再算 z。
+- v85 大厂 / 大作（big_reason）：照常算分，单独标出来；必看页"大厂游戏：隐藏"开关（默认开）把它们藏起来，不删除。
+  判断：名字在 KW_BIG_GAMES / BIG_GAME_NAMES；开发或发行在 BIG_COMPANIES（+ BIG_COMPANIES_EXTRA）；
+  标签 3A / AAA；Steam 价格 ≥ BIG_PRICE_USD；安装包 ≥ BIG_SIZE_GB（电脑）/ BIG_SIZE_GB_MOBILE（手机）。
+  缺数据 = 不算大厂，照常显示。
+- 下载类倍数（entity_multiples）只做参考显示，不进分数。
+- v96：平台不再按地区挑：B站 + soc_videos 里有数据的所有平台（video_platforms，以后 YouTube 有数据自动加入）
+  + 直播平台（live_scores：config.LIVE_SOURCES，最近 7 天每天最高观看人数 / 直播热度的平均，没抓到的天不算）。
+  每个平台照样只和自己比（z）。合成改成 combine：max(最好的平台, Σz ÷ √平台数)——几个平台都火加分，
+  多一个不火的平台不扣分。只有一个平台时和以前完全一样。
 """
+import datetime
 import math
+import re
 import time
+import unicodedata
 from collections import defaultdict
 
-from . import config, db, match, trend
+from . import config, db, match
 
 DAY = 86400
 WINDOW = 7 * DAY          # 你定的：最近 7 天
-LOOKBACK = 12 * DAY       # 最近 3 天、此前 7 天，另留采样边界
+LOOKBACK = 8 * DAY        # 工程参数：下载类参考倍数往回找 8 天（抓取调度最长一周查一次）
 MIN_SPAN = 3600           # 工程参数：两个点至少隔 1 小时（你说一小时也关键）
 MIN_GAP = 12 * 3600       # 工程参数：下载类参考倍数的两个点至少隔 12 小时
 FRESH = 32 * 3600         # 工程参数：名次只用 32 小时内的榜
@@ -32,10 +42,12 @@ DOWN = {"downloads", "reserves", "reviews", "players", "visits"}
 MOBILE = {"taptap", "tapmaker", "appcn", "appus", "haoyou", "mistore", "wxmini", "dymini"}
 FIELDS = ("plays", "comments", "likes", "shares", "favs")
 FIELD_CN = {"plays": "播放", "comments": "评论", "likes": "点赞", "shares": "转发", "favs": "收藏"}
-SOCIAL = {"douyin", "kuaishou", "xiaohongshu"}   # 搜索结果存在 soc_videos 的平台（键和地图里的一样）
-COUNTERS = {"downloads", "reserves", "reviews", "fans", "visits"}
-COUNTER_CN = {"downloads": "下载/热度", "reserves": "预约", "reviews": "评论",
-              "fans": "关注", "visits": "访问"}
+SOCIAL = {"douyin", "kuaishou", "xiaohongshu", "tiktok"}   # 搜索结果存在 soc_videos 的平台
+VIDEO_NAMES = {"bilibili": "B站", "douyin": "抖音", "kuaishou": "快手", "xiaohongshu": "小红书",
+               "youtube": "YouTube", "tiktok": "TikTok", "instagram": "Instagram"}
+LIVE_CN = {"viewers": "观看人数", "heat": "直播热度"}
+LIVE_CACHE = 1800         # 工程参数：直播 7 天数据半小时重算一次（表很大）
+VIDS_KEEP = 80            # 工程参数：每款游戏每个平台记下综合量最大的 80 条视频，详情图表用
 
 
 def median(xs):
@@ -81,16 +93,8 @@ def entity_multiples(now=None):
     now = int(now or time.time())
     kinds = {k: v[0] for k, v in config.ANALYZE.items()}
     out = defaultdict(list)
-    vals, profiles, levels, observed = {}, {}, {}, {}
+    vals = {}
     with db.session() as c:
-        # Include collected counters even when they have no legacy anomaly threshold.
-        sources = sorted(config.DISCOVERY_SOURCES)
-        placeholders = ",".join("?" for _ in sources)
-        for src, metric in c.execute(
-                f"SELECT DISTINCT source, metric FROM metrics WHERE source IN ({placeholders}) "
-                "AND metric IN ('downloads','reserves','reviews','fans','visits') AND ts >= ?",
-                (*sources, now - LOOKBACK)):
-            kinds[(src, metric)] = "cumulative"
         for (src, metric), kind in kinds.items():
             if not config.source_on(src):
                 continue
@@ -102,23 +106,9 @@ def entity_multiples(now=None):
                     series[e].append((ts, v))
             got = {}
             for e, pts in series.items():
-                if kind == "cumulative":
-                    p = trend.counter_profile(pts, now)
-                    if p is None:
-                        continue
-                    p.update(total=pts[-1][1], sampled_at=pts[-1][0])
-                    profiles[(src, metric, e)] = p
-                    x = p["adjusted"]
-                else:
-                    if now - pts[-1][0] > FRESH:
-                        continue
-                    x = pts[-1][1]
-                    p = trend.level_profile(pts, now)
-                    if p is not None:
-                        levels[(src, metric, e)] = p
-                if x is not None and x >= 0:
+                x = daily_increment(pts) if kind == "cumulative" else pts[-1][1]
+                if x is not None and x > 0:
                     got[e] = x
-                    observed[(src, metric, e)] = pts[-1][0]
             vals[(src, metric)] = got
         ranks = defaultdict(dict)
         latest = {r[0]: r[1] for r in c.execute(
@@ -136,17 +126,12 @@ def entity_multiples(now=None):
     b, n_fit, how = fit_b(pairs)
     for (src, metric), got in vals.items():
         mid = median(list(got.values()))
-        if mid is None:
+        if not mid:
             continue
-        kind = "down" if metric in DOWN or metric in COUNTERS else "expo"
+        kind = "down" if metric in DOWN else "expo"
         for e, x in got.items():
-            p = profiles.get((src, metric, e))
-            lp = levels.get((src, metric, e))
-            out[f"{src}:{e}"].append({**(lp or {}), **(p or {}), "kind": kind, "src": src, "metric": metric,
-                                      "value": p["value"] if p else x,
-                                      "normal": mid, "x": x / mid if mid > 0 else 0.0,
-                                      "cumulative": p is not None, "entity": e,
-                                      "sampled_at": observed[(src, metric, e)]})
+            out[f"{src}:{e}"].append({"kind": kind, "src": src, "metric": metric, "value": x,
+                                      "normal": mid, "x": x / mid})
     for (src, metric), d in ranks.items():
         mid = median(list(d.values()))
         if not mid:
@@ -181,7 +166,7 @@ def video_rate(pts, pub, now):
     return rate, t0
 
 
-def composite(rates, round_weights=True):
+def composite(rates):
     """{视频: 每天增量} → ({视频: 综合量}, 单位, 权重)。权重 = 全平台单位增量 ÷ 这种动作的增量。"""
     def total(i, j):
         return sum(r[i] for r in rates.values() if r[i] is not None and r[j] is not None)
@@ -198,7 +183,7 @@ def composite(rates, round_weights=True):
         x = (r[base] or 0.0) + sum(wi * (r[i] or 0.0) for i, wi in w.items())
         if x > 0 or r[base] is not None:
             out[v] = x
-    return out, FIELDS[base], {FIELDS[i]: round(wi, 2) if round_weights else wi for i, wi in w.items()}
+    return out, FIELDS[base], {FIELDS[i]: round(wi, 2) for i, wi in w.items()}
 
 
 def robust_center(xs):
@@ -242,7 +227,7 @@ def video_links(groups, entities):
 
 def bili_videos(now, links):
     """{bvid: (样本, 发布时间)}，{bvid: {档案号}}。"""
-    since = now - LOOKBACK
+    since = now - 2 * WINDOW
     try:
         with db.session() as c:
             rows = c.execute("SELECT bvid, ts, view, reply, lk, share, fav FROM opp_vsamples WHERE ts >= ? "
@@ -259,86 +244,63 @@ def bili_videos(now, links):
 
 
 def social_videos(platform, now, term_gids):
-    """抖音 / 快手 / 小红书 搜索结果里的视频，按搜索词对到档案。"""
-    since = now - LOOKBACK
+    """社交视频搜索结果按所有命中的搜索词对到游戏档案。"""
+    since = now - 2 * WINDOW
     try:
         with db.session() as c:
-            trusted = ("EXISTS(SELECT 1 FROM soc_verified e WHERE e.kind='video' "
-                       "AND e.record_id=v.rowid AND e.version=1)")
-            rows = c.execute("SELECT vid, ts, plays, comments, likes, shares, favs FROM soc_videos v "
-                             f"WHERE platform=? AND ts>=? AND {trusted} ORDER BY ts",
-                             (platform, since)).fetchall()
-            meta = c.execute("SELECT vid, MAX(pub_ts), GROUP_CONCAT(DISTINCT term) FROM soc_videos v "
-                             f"WHERE platform=? AND ts>=? AND {trusted} GROUP BY vid",
-                             (platform, since)).fetchall()
+            rows = c.execute("SELECT vid, ts, plays, comments, likes, shares, favs FROM soc_videos "
+                             "WHERE platform = ? AND ts >= ? ORDER BY ts", (platform, since)).fetchall()
+            try:
+                evidence = (" AND EXISTS (SELECT 1 FROM soc_search_matches e WHERE e.platform=t.platform "
+                            "AND e.vid=t.vid AND e.term=t.term AND e.provenance_version>=5)") if platform == "douyin" else ""
+                meta = c.execute(
+                    "SELECT v.vid, MAX(v.pub_ts), t.term "
+                    "FROM soc_videos v JOIN soc_video_terms t "
+                    "ON t.platform = v.platform AND t.vid = v.vid "
+                    "WHERE v.platform = ? AND v.ts >= ? " + evidence + " GROUP BY v.vid, t.term",
+                    (platform, since)).fetchall()
+            except Exception:
+                if platform == "douyin":
+                    # Fail closed if search-card evidence has not been created yet.
+                    return {}, {}
+                meta = c.execute("SELECT vid, MAX(pub_ts), term FROM soc_videos "
+                                 "WHERE platform = ? AND ts >= ? GROUP BY vid, term", (platform, since)).fetchall()
     except Exception:                                   # noqa: BLE001
         return {}, {}
     gids = defaultdict(set)
     pub = {}
-    for vid, p, terms in meta:
+    for vid, p, term in meta:
         pub[vid] = p
-        for t in (terms or "").split(","):
-            gids[vid] |= term_gids.get(match.normalize(t), set())
+        gids[vid] |= term_gids.get(match.normalize(term or ""), set())
     return {v: (pts, pub.get(v)) for v, pts in _series(rows).items()}, gids
 
 
 def platform_scores(videos, gids, now):
     """一个平台：{档案号: {value, full, n}}，说明。"""
-    rates, histories = {}, {}
+    rates, start = {}, {}
     for v, (pts, pub) in videos.items():
         if not gids.get(v):
             continue
-        fields = [trend.daily_rates([(ts, values[i]) for ts, values in pts], now, pub)
-                  for i in range(len(FIELDS))]
-        ps = [trend.profile(days) for days in fields]
-        if any(p is not None for p in ps):
-            rates[v] = [p["value"] if p else None for p in ps]
-            histories[v] = fields
-    comp, unit, w = composite(rates, round_weights=False)
-    weights = {FIELDS.index(k): wi for k, wi in w.items()}
-    base = FIELDS.index(unit)
-    per = defaultdict(lambda: {"days": [[] for _ in range(trend.HISTORY_DAYS)], "n": 0})
-    for v in comp:
-        fields = histories[v]
-        days = []
-        for i in range(trend.HISTORY_DAYS):
-            indices = [base] + list(weights)
-            if any(fields[j] is None or fields[j][i] is None for j in indices
-                   if rates[v][j] is not None):
-                days.append(None)
-            else:
-                days.append(((fields[base][i] if fields[base] else None) or 0.0)
-                            + sum(wi * ((fields[j][i] if fields[j] else None) or 0.0)
-                                  for j, wi in weights.items()))
+        r = video_rate(pts, pub, now)
+        if r:
+            rates[v], start[v] = r
+    comp, unit, w = composite(rates)
+    per = defaultdict(lambda: {"value": 0.0, "t0": now, "n": 0, "parts": {}, "vids": []})
+    for v, x in comp.items():
+        r = rates[v]
         for g in gids[v]:
             d = per[g]
+            d["value"] += x
             d["n"] += 1
-            for i, value in enumerate(days):
-                d["days"][i].append(value)
-    out = {}
-    for g, d in per.items():
-        days = [sum(xs) if xs and all(x is not None for x in xs) else None for xs in d["days"]]
-        p = trend.profile(days)
-        if p:
-            out[g] = {**p, "n": d["n"], "full": all(x is not None for x in days)}
-    return out, {"unit": FIELD_CN[unit], "weights": {FIELD_CN[k]: round(x, 2) for k, x in w.items()}}
-
-
-def counter_platforms(groups, multiples):
-    """Normalize each store/metric separately; never add reviews to downloads."""
-    per = defaultdict(dict)
-    for gid, members in groups.items():
-        grouped = defaultdict(list)
-        for m in members:
-            for item in multiples.get(m, []):
-                if item.get("cumulative"):
-                    grouped[(item["src"], item["metric"])].append(item)
-        for (src, metric), items in grouped.items():
-            # Duplicate members of one store describe the same game, not extra demand.
-            p = max(items, key=lambda it: it["adjusted"])
-            per[f"{src}/{metric}"][gid] = {**p, "n": 1,
-                                          "full": all(x is not None for x in p["days"])}
-    return dict(per)
+            d["t0"] = min(d["t0"], start[v])
+            d["vids"].append((x, v))
+            for i, y in enumerate(r):          # v93：真实的每天播放 / 评论 / 点赞……（页面显示用，不进分数）；没这项的视频不算 0
+                if y is not None:
+                    d["parts"][FIELDS[i]] = d["parts"].get(FIELDS[i], 0.0) + y
+    for d in per.values():
+        d["full"] = now - d.pop("t0") >= WINDOW
+        d["vids"] = [v for _, v in sorted(d["vids"], reverse=True)[:VIDS_KEEP]]
+    return dict(per), {"unit": FIELD_CN[unit], "weights": {FIELD_CN[k]: x for k, x in w.items()}}
 
 
 def region_platforms():
@@ -350,16 +312,104 @@ def region_platforms():
     return [k for k in keys if k == "bilibili" or k in SOCIAL]
 
 
+def video_platforms(now):
+    """v96：B站 + soc_videos 里最近 14 天出现过的所有平台。以后 YouTube / TikTok 一有数据（soc_videos 里
+    platform = youtube）就自动算进排名，不用改代码。"""
+    out = ["bilibili"]
+    try:
+        with db.session() as c:
+            for (p,) in c.execute("SELECT DISTINCT platform FROM soc_videos WHERE ts >= ?", (now - 2 * WINDOW,)):
+                if p and p.lower() not in ("bilibili", "bili", "b站") and p not in out:
+                    out.append(p)
+    except Exception:                                   # noqa: BLE001
+        pass
+    return out
+
+
+_LIVE = {"ts": 0, "data": None}
+
+
+def live_daily(now):
+    """v96 直播：{成员: (平台, 指标, {第几天前: 当天最高})}，最近 7 天。
+    平台 = 来源去掉 _t / _kw（虎牙分区和虎牙标题里提到这款游戏的算同一个平台）；每个平台有观看人数就用观看人数，
+    没有就用直播热度。config.LIVE_SOURCES 里以后加的直播平台自动算进来。结果缓存半小时。"""
+    if _LIVE["data"] is not None and now - _LIVE["ts"] < LIVE_CACHE:
+        return _LIVE["data"]
+    srcs = sorted(getattr(config, "LIVE_SOURCES", set()) or set())
+    per = defaultdict(dict)
+    if srcs:
+        q = ",".join("?" * len(srcs))
+        try:
+            with db.session() as c:
+                rows = c.execute(
+                    f"SELECT source, entity, metric, CAST((? - ts) / 86400 AS INTEGER) AS d, MAX(value) FROM metrics "
+                    f"WHERE source IN ({q}) AND metric IN ('viewers', 'heat') AND ts >= ? "
+                    "GROUP BY source, entity, metric, d", (now, *srcs, now - WINDOW)).fetchall()
+        except Exception:                               # noqa: BLE001
+            rows = []
+        for s, e, m, d, v in rows:
+            if v and v > 0:
+                per[(s, m)].setdefault(e, {})[int(d)] = v
+    base = lambda s: s.split("_", 1)[0]                 # noqa: E731
+    has_viewers = {base(s) for s, m in per if m == "viewers"}
+    out = {}
+    for (s, m), ents in per.items():
+        want = "viewers" if base(s) in has_viewers else "heat"
+        if m != want:
+            continue
+        for e, days in ents.items():
+            out[f"{s}:{e}"] = (base(s), m, days)
+    _LIVE.update(ts=now, data=out)
+    return out
+
+
+def live_scores(groups, now):
+    """直播平台：{平台: ({档案号: {value, n, full, parts}}, 说明)}。
+    value = 最近 7 天每天最高观看人数（或热度）的平均；没抓到的天不算（不当 0）；同一个平台几个成员当天相加。"""
+    links = {m: gid for gid, ms in groups.items() for m in ms}
+    per = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    met = {}
+    for m, (p, metric, days) in live_daily(now).items():
+        g = links.get(m)
+        if not g:
+            continue
+        met[p] = metric
+        for d, v in days.items():
+            per[p][g][d] += v
+    out = {}
+    for p, gs in per.items():
+        cn = LIVE_CN.get(met[p], met[p])
+        sc = {}
+        for g, days in gs.items():
+            vals = [v for v in days.values() if v > 0]
+            if not vals:
+                continue
+            val = sum(vals) / len(vals)
+            sc[g] = {"value": val, "n": len(vals), "full": max(days) >= 6, "parts": {cn: round(val)}}
+        if sc:
+            out["live:" + p] = (sc, {"unit": cn, "weights": {}, "kind": "live"})
+    return out
+
+
 def name_index(groups, entities):
     out = defaultdict(set)
+    labels = db.load_labels()
     for gid, ms in groups.items():
         for m in ms:
             e = entities.get(tuple(m.split(":", 1))) or {}
             x = e.get("extra") or {}
-            for n in (e.get("name"), x.get("name_cn"), x.get("name_en")):
+            label = labels.get(m) or {}
+            for n in ((e.get("name"), x.get("name_cn"), x.get("name_en")) +
+                      tuple(x.get("aliases") or []) + tuple(label.get("aliases") or [])):
                 k = match.normalize(n or "")
                 if match.linkable(k):
                     out[k].add(gid)
+    # The batch is an explicit archive association, including short aliases.
+    batch = db.kv_get("radar_social_batch", {}) or {}
+    for query in batch.get("queries", []):
+        for gid in query.get("gids", []):
+            if gid in groups:
+                out[match.normalize(query["term"])].add(gid)
     return out
 
 
@@ -399,83 +449,110 @@ def penalty_factors(groups, entities):
     return out
 
 
-def big_reason(members, entities, name_norms, big_words):
-    for n in name_norms:
-        hit = next((w for w in big_words if w and w in n), None)
-        if hit:
-            return "大作：" + hit
-    for m in members:
-        s, e = m.split(":", 1)
-        x = (entities.get((s, e)) or {}).get("extra") or {}
-        devs = list(x.get("developers") or []) + ([x["dev"]] if x.get("dev") else []) + list(x.get("publishers") or [])
-        for d in devs:
-            if d and match.company_match(d, config.BIG_COMPANIES):
-                return "大厂：" + d
+_TOK = re.compile(r"[a-z0-9]+")
+
+
+def company_hit(dev, companies):
+    """开发 / 发行名里有没有大厂名。中文按包含（"深圳市腾讯计算机系统有限公司"含"腾讯"），
+    英文按整词（"EA" 不会对上 "Idea Factory"）。对上返回名单里的那个名字。"""
+    low = unicodedata.normalize("NFKC", str(dev or "")).lower()
+    if not low.strip():
+        return None
+    toks = " " + " ".join(_TOK.findall(low)) + " "
+    norm = match.normalize(low)
+    for c in companies:
+        cl = unicodedata.normalize("NFKC", str(c or "")).lower()
+        if match.has_cjk(cl):
+            cn = match.normalize(cl)
+            if len(cn) >= 2 and cn in norm:
+                return c
+        else:
+            ct = " ".join(_TOK.findall(cl))
+            if ct and " " + ct + " " in toks:
+                return c
     return None
 
 
-def pure_trend(rows):
-    """Strongest observed relative trend; absolute volume never breaks ties."""
-    eligible = [r for r in rows if r.get("trend_known") and r.get("baseline", 0) > 0]
-    if eligible:
-        row = max(eligible, key=lambda r: (r["recent"] / r["baseline"], r["p"]))
-        ratio = row["recent"] / row["baseline"]
-        return {"state": "measured", "ratio": ratio, "growth_pct": (ratio - 1) * 100,
-                "value": row["trend"], "p": row["p"], "name": row["name"],
-                "recent": row["recent"], "baseline": row["baseline"],
-                "recent_days": row.get("recent_days"), "baseline_days": row.get("baseline_days")}
-    starts = [r for r in rows if r.get("trend_known") and r.get("baseline") == 0 and r["recent"] > 0]
-    if starts:
-        row = min(starts, key=lambda r: r["p"])
-        return {"state": "zero_baseline", "ratio": None, "growth_pct": None,
-                "p": row["p"], "name": row["name"], "recent": row["recent"], "baseline": 0,
-                "recent_days": row.get("recent_days"), "baseline_days": row.get("baseline_days")}
-    return {"state": "insufficient", "ratio": None, "growth_pct": None}
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
 
-def visible_groups(keys, scores, limit=400):
-    """Take the union so a large trend cannot be hidden by volume-based truncation."""
-    out, seen = [], set()
-    for which in ("final", "raw", "trend"):
-        for key in sorted(keys, key=lambda k: (rank_key(scores[k], which), k))[:limit]:
-            if key not in seen:
-                seen.add(key)
-                out.append(key)
-    return out
+def big_reason(members, entities, name_norms, big_words):
+    """大厂 / 大作的原因（一句话），不是返回 None。缺数据的那一项不算。"""
+    names = big_words + [match.normalize(x) for x in getattr(config, "BIG_GAME_NAMES", []) or []
+                         if match.normalize(x)]
+    for n in name_norms:
+        hit = next((w for w in names if w and n and w in n), None)
+        if hit:
+            return "大作：名字带「" + hit + "」"
+    comps = list(getattr(config, "BIG_COMPANIES", []) or []) + list(getattr(config, "BIG_COMPANIES_EXTRA", []) or [])
+    size_pc = _num(getattr(config, "BIG_SIZE_GB", None))
+    size_mob = _num(getattr(config, "BIG_SIZE_GB_MOBILE", None))
+    price_max = _num(getattr(config, "BIG_PRICE_USD", None))
+    for m in members:
+        s, e = m.split(":", 1)
+        x = (entities.get((s, e)) or {}).get("extra") or {}
+        devs = list(x.get("developers") or []) + list(x.get("publishers") or []) + \
+            [x[k] for k in ("dev", "publisher") if x.get(k)]
+        for d in devs:
+            if isinstance(d, str) and d and company_hit(d, comps):
+                return "大厂：" + d
+    for m in members:
+        s, e = m.split(":", 1)
+        x = (entities.get((s, e)) or {}).get("extra") or {}
+        gb = _num(x.get("size_gb"))
+        lim = size_mob if s in MOBILE else size_pc
+        if gb is not None and lim and gb >= lim:
+            return f"大作：安装包 {gb:.1f} GB（≥ {lim:g} GB）"
+        if s == "steam":
+            p = _num(x.get("price_usd"))
+            if p is not None and price_max and p >= price_max:
+                return f"大作：Steam 售价 ${p:.0f}（≥ ${price_max:g}）"
+    tags = set(_tags(members, entities))
+    if tags & {"3a", "aaa"}:
+        return "大作：标签 3A"
+    return None
 
 
 def score_groups(groups, entities):
-    """平滑新增量先修正趋势，再按同平台同指标的分布归一化。"""
+    """每个档案：raw（不降分的异常值）、final（降分后）、各平台明细、下载参考倍数。没有视频数据的 raw = None。"""
     now = int(time.time())
     em, meta = entity_multiples(now)
     pen = penalty_factors(groups, entities)
     big_words = [match.normalize(x) for x in getattr(config, "KW_BIG_GAMES", []) if match.normalize(x)]
     words = getattr(config, "PENALTY_WORDS", {}) or {}
-    plats = region_platforms()
-    names = {"bilibili": "B站", "douyin": "抖音", "kuaishou": "快手", "xiaohongshu": "小红书"}
-    terms = name_index(groups, entities) if any(p in SOCIAL for p in plats) else {}
-    links = video_links(groups, entities) if "bilibili" in plats else {}
-    per_plat, plat_meta = {}, {}
-    data = {}
+    # v96：不再只看一个地区：所有有数据的视频平台 + 直播平台都算（以后有数据的平台自动加入）
+    plats = video_platforms(now)
+    names = {p: VIDEO_NAMES.get(p, p) for p in plats}
+    terms = name_index(groups, entities) if len(plats) > 1 else {}
+    links = video_links(groups, entities)
+    scored = []
     for p in plats:
         vids, gids = bili_videos(now, links) if p == "bilibili" else social_videos(p, now, terms)
-        sc, info = platform_scores(vids, gids, now)
-        data[p] = (sc, info, names[p], "video")
-    for p, sc in counter_platforms(groups, em).items():
-        src, metric = p.split("/", 1)
-        name = f"{src} · {COUNTER_CN.get(metric, metric)}"
-        data[p] = (sc, {"unit": COUNTER_CN.get(metric, metric)}, name, "counter")
-    for p, (sc, info, name, kind) in data.items():
+        scored.append((p, *platform_scores(vids, gids, now)))
+    try:
+        for p, (sc, info) in live_scores(groups, now).items():
+            b = p.split(":", 1)[1]
+            nm = (getattr(config, "LIVE_PLATFORMS", {}).get(b) or (b,))[0]
+            names[p] = nm if nm.endswith("直播") else nm + " 直播"
+            scored.append((p, sc, info))
+    except Exception:                                   # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+    per_plat, plat_meta = {}, {}
+    for p, sc, info in scored:
         if not sc:
-            plat_meta[p] = {"name": name, "games": 0, "kind": kind}
+            plat_meta[p] = {"name": names[p], "games": 0}
             continue
         full = [math.log1p(d["value"]) for d in sc.values() if d["full"]]
         pool = full if len(full) >= MIN_FIT else [math.log1p(d["value"]) for d in sc.values()]
         mid, s = robust_center(pool)
-        s = max(s, config.Z_MIN_SPREAD)
         per_plat[p] = (sc, mid, s)
-        plat_meta[p] = {**info, "name": name, "kind": kind, "games": len(sc), "full": len(full),
-                        "pool": "满 10 天观测的游戏" if pool is full else "全部有增量的游戏", "pool_n": len(pool),
+        plat_meta[p] = {**info, "name": names[p], "games": len(sc), "full": len(full),
+                        "pool": "满 7 天的游戏" if pool is full else "全部游戏", "pool_n": len(pool),
                         "normal": round(math.expm1(mid), 1), "s": round(s, 3)}
     out = {}
     for gid, ms in groups.items():
@@ -486,56 +563,88 @@ def score_groups(groups, entities):
         tags = _tags(ms, entities)
         cuts = [(k, pen[k]["factor"]) for k in words if k in pen and _has(tags, words[k]) and pen[k]["factor"] < 1]
         f = math.prod(x for _, x in cuts) if cuts else 1.0
-        vrows, crows = [], []
+        vrows, vids = [], {}
         for p, (sc, mid, s) in per_plat.items():
             d = sc.get(gid)
             if not d:
                 continue
-            adjusted = d.get("adjusted", d["value"])
-            z = (math.log1p(adjusted) - mid) / s if s > 0 else 0.0
-            zf = (math.log1p(adjusted * f) - mid) / s if s > 0 else 0.0
-            row = {"p": p, "name": plat_meta[p]["name"], "kind": plat_meta[p]["kind"],
-                   "value": round(d["value"], 1), "adjusted": adjusted,
-                   "normal": plat_meta[p]["normal"], "z": round(z, 2), "zf": round(zf, 2),
-                   "n": d["n"], "full": d["full"],
-                   **{key: d[key] for key in ("recent", "baseline", "trend", "trend_known",
-                                              "trend_factor", "recent_days", "baseline_days",
-                                              "total", "sampled_at") if key in d}}
-            (vrows if row["kind"] == "video" else crows).append(row)
-        if not vrows and not crows and not down:
+            z = (math.log1p(d["value"]) - mid) / s if s > 0 else 0.0
+            zf = (math.log1p(d["value"] * f) - mid) / s if s > 0 else 0.0
+            vrows.append({"p": p, "name": names[p], "value": round(d["value"], 1), "normal": plat_meta[p]["normal"],
+                          "z": round(z, 2), "zf": round(zf, 2), "n": d["n"], "full": d["full"],
+                          "parts": {FIELD_CN.get(k, k): round(x) for k, x in d.get("parts", {}).items()},
+                          "kind": "live" if p.startswith("live:") else "video"})
+            if d.get("vids"):
+                vids[p] = d["vids"]
+        if not vrows and not down:
             continue
-        # Multiple counters from one store are correlated, not independent platforms.
-        by_platform = defaultdict(list)
-        for row in vrows + crows:
-            by_platform[row["p"].split("/", 1)[0]].append(row)
-        k = len(by_platform)
-        raw = round(sum(sum(r["z"] for r in rs) / len(rs) for rs in by_platform.values())
-                    / math.sqrt(k), 2) if k else None
-        final = None if big or not k else round(
-            sum(sum(r["zf"] for r in rs) / len(rs) for rs in by_platform.values()) / math.sqrt(k), 2)
-        vrows.sort(key=lambda r: -r["z"])
-        crows.sort(key=lambda r: -r["z"])
-        level_rows = [{**it, "p": f"{it['src']}/{it['metric']}",
-                       "name": f"{it['src']} · {it['metric']}"}
-                      for it in items if not it.get("cumulative") and "trend_known" in it]
-        out[gid] = {"raw": raw, "final": final, "videos": vrows, "counters": crows,
-                    "down": down, "big": big, "cut": cuts,
-                    "trend": pure_trend(vrows + crows + level_rows),
-                    "scale": [{k: it[k] for k in ("src", "metric", "entity", "value", "total",
-                                                  "cumulative", "sampled_at") if k in it}
-                              for it in items if it.get("cumulative") or it["metric"] == "players"]}
-    return out, {**meta, "platforms": plat_meta, "region": getattr(config, "SCORE_REGION", "cn"),
-                 "penalty": pen, "trend_weight": trend.TREND_WEIGHT,
-                 "recent_days": 3, "baseline_days": 7}
+        out[gid] = {"raw": combine([r["z"] for r in vrows]), "final": combine([r["zf"] for r in vrows]),
+                    "videos": sorted(vrows, key=lambda r: -r["z"]), "down": down, "big": big, "cut": cuts,
+                    "_vids": vids}
+    return out, {**meta, "platforms": plat_meta, "region": getattr(config, "SCORE_REGION", "cn"), "penalty": pen}
+
+
+def combine(zs):
+    """v96 几个平台合成一个分数：取"最好的那个平台"和"所有平台合起来（Σz ÷ √平台数）"里大的那个。
+    几个平台都火 → 合起来更高（加分）；多了一个不火的平台 → 不扣分（还是最好的那个）；没数据的平台不算。"""
+    if not zs:
+        return None
+    return round(max(max(zs), sum(zs) / math.sqrt(len(zs))), 2)
+
+
+def _day(ts):
+    return datetime.date.fromtimestamp(ts).toordinal()
+
+
+def game_series(gid, days=90):
+    """v96 详情图表用：这款游戏在每个视频平台每天新增多少播放（只算排名时对上的那些视频；不进分数）。
+    每条视频取每天最后一次的播放数，两次之间的增量平均摊到中间每一天；视频在范围内发布的从发布那天的 0 算起。
+    返回 {平台: {"name", "days": [[日期, 播放], ...]}}，日期按本机时间。"""
+    vids = (db.kv_get("heat_vids") or {}).get(gid) or {}
+    now = int(time.time())
+    since = now - days * DAY
+    out = {}
+    for p, ids in vids.items():
+        ids = [i for i in ids if i][:VIDS_KEEP]
+        if not ids or p.startswith("live:"):
+            continue
+        q = ",".join("?" * len(ids))
+        try:
+            with db.session() as c:
+                if p == "bilibili":
+                    rows = c.execute(f"SELECT bvid, ts, view FROM opp_vsamples WHERE bvid IN ({q}) AND ts >= ? "
+                                     "ORDER BY ts", (*ids, since)).fetchall()
+                    pub = dict(c.execute(f"SELECT bvid, pubdate FROM opp_videos WHERE bvid IN ({q})", ids).fetchall())
+                else:
+                    rows = c.execute(f"SELECT vid, ts, plays FROM soc_videos WHERE platform = ? AND vid IN ({q}) "
+                                     "AND ts >= ? ORDER BY ts", (p, *ids, since)).fetchall()
+                    pub = dict(c.execute(f"SELECT vid, MAX(pub_ts) FROM soc_videos WHERE platform = ? "
+                                         f"AND vid IN ({q}) GROUP BY vid", (p, *ids)).fetchall())
+        except Exception:                               # noqa: BLE001
+            continue
+        last = defaultdict(dict)
+        for v, ts, x in rows:
+            if x is not None and ts:
+                last[v][_day(ts)] = x
+        tot = defaultdict(float)
+        for v, byd in last.items():
+            ds = sorted(byd)
+            pts = [(d, byd[d]) for d in ds]
+            p0 = pub.get(v)
+            if p0 and p0 >= since and _day(p0) <= ds[0]:
+                pts.insert(0, (_day(p0) - 1, 0.0))
+            for (d0, x0), (d1, x1) in zip(pts, pts[1:]):
+                inc = max(0.0, x1 - x0) / (d1 - d0)
+                for d in range(d0 + 1, d1 + 1):
+                    tot[d] += inc
+        if tot:
+            out[p] = {"name": VIDEO_NAMES.get(p, p),
+                      "days": [[datetime.date.fromordinal(d).isoformat(), round(v)] for d, v in sorted(tot.items())]}
+    return out
 
 
 def rank_key(h, which):
     """排序：有分数的按分数，没有的排后面（再按下载参考倍数）。"""
-    if which == "trend":
-        t = (h or {}).get("trend") or {}
-        if t.get("state") == "measured":
-            return (0, -t["ratio"], 0.0)
-        return (1 if t.get("state") == "zero_baseline" else 2, 0.0, 0.0)
     v = (h or {}).get(which)
     d = ((h or {}).get("down") or {}).get("x") or 0.0
     return (0, -v, 0.0) if v is not None else (1, 0.0, -d)

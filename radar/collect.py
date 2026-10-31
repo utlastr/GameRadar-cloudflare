@@ -6,104 +6,13 @@ import random
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import activity, config, db, revisit
-from .sources import (appstore_rank, bili, crazygames, douyu, dymini, fortnite, gravity, haoyou, huya, itch, kick, mistore,
+from . import activity, config, db, match, revisit
+from .sources import (appstore_rank, bili, crazygames, douyu, fortnite, gravity, haoyou, huya, itch, kick, mistore,
                       poki, roblox, steam, taptap, twitch)
 
 _status_lock = threading.RLock()
-_platform_locks = {}
-_platform_guard = threading.Lock()
-_sampling_started = False
-_force_generation = 0
-
-
-def platform_lock(source):
-    key = "taptap" if source in ("tapmaker", "taptap") else (
-        "appstore" if source in ("appcn", "appus") else source)
-    with _platform_guard:
-        return _platform_locks.setdefault(key, threading.RLock())
-
-
-def _collect_one(source, fn, ts, scheduled=False, force=False):
-    from . import sampling
-    def sample():
-        if _run(source, fn, int(time.time()) if scheduled else ts) is False:
-            error = ((db.kv_get("source_status", {}) or {}).get(source) or {}).get("error")
-            raise RuntimeError(error or source + " sampling failed")
-    try:
-        if scheduled:
-            return sampling.run_due("platform:" + source, sample, force=force)
-        return sample()
-    except Exception as e:
-        activity.say(f"{NAMES.get(source, source)} 本时段采样失败：{e}")
-
-
-def _parallel(sources, fns, ts, scheduled=False, force=False):
-    from concurrent.futures import ThreadPoolExecutor
-    groups = {}
-    for source in sources:
-        groups.setdefault(platform_lock(source), []).append(source)
-
-    def work(lock, group):
-        with lock:
-            for source in group:
-                _collect_one(source, fns[source], ts, scheduled, force)
-    if groups:
-        with ThreadPoolExecutor(max_workers=min(12, len(groups)), thread_name_prefix="platform") as pool:
-            futures = [pool.submit(work, lock, group) for lock, group in groups.items()]
-            for future in futures:
-                future.result()
-
-
-def _platform_functions():
-    return {"taptap": _taptap, "tapmaker": _tapmaker, "haoyou": _haoyou, "dymini": _dymini,
-           "roblox": _roblox, "appcn": _appcn, "appus": _appus, "mistore": _mistore,
-           "fortnite": _fortnite, "crazygames": _crazygames, "poki": _poki, "itch": _itch,
-           "wxmini": _wxmini, "huya": _huya, "douyu": _douyu, "bili": _bili,
-            "twitch": _twitch, "kick": _kick}
-
-
-def sample_platforms(force=False):
-    """Independent persistent slots; a slow live source cannot block game charts."""
-    fns = _platform_functions()
-    sources = [s for s in fns if config.source_on(s)]
-    _parallel(sources, fns, int(time.time()), scheduled=True, force=force)
-    return len(sources)
-
-
-def request_sample():
-    global _force_generation
-    with _platform_guard:
-        _force_generation += 1
-
-
-def start_sampling(stop_event=None):
-    global _sampling_started
-    if _sampling_started:
-        return
-    _sampling_started = True
-    stop = stop_event or threading.Event()
-    fns = _platform_functions()
-    groups = {}
-    for source in fns:
-        groups.setdefault(platform_lock(source), []).append(source)
-
-    def loop(lock, group):
-        from . import sampling
-        generation = _force_generation
-        while not stop.is_set():
-            requested = _force_generation
-            force = requested != generation
-            for source in group:
-                if config.source_on(source):
-                    with lock:
-                        _collect_one(source, fns[source], 0, scheduled=True, force=force)
-            generation = requested
-            stop.wait(max(.5, min(30, sampling.next_slot() - time.time())))
-    for lock, group in groups.items():
-        threading.Thread(target=loop, args=(lock, group), daemon=True,
-                         name="sampling-" + group[0]).start()
 
 
 def _align(ts, minutes):
@@ -176,13 +85,11 @@ def _run(source, fn, ts):
         _status(source, True, n, warn=warn)
         db.log_run("collect:" + source, time.time() - t0, True, f"{n} 条" + (f"；部分失败：{warn}" if warn else ""))
         activity.say(f"{name} 完成：{n} 条，用时 {time.time() - t0:.0f} 秒" + (f"（部分失败：{warn}）" if warn else ""))
-        return True
     except Exception as e:
         _status(source, False, err=str(e))
         # 错误原因放最前面，后面才是详细的出错位置（面板上只显示前几百个字）
         db.log_run("collect:" + source, time.time() - t0, False, f"{e}\n\n{traceback.format_exc()}")
         activity.say(f"{name} 失败：{e}")
-        return False
     finally:
         activity.end()
 
@@ -332,7 +239,7 @@ def _wxmini(ts):
 
 
 def _dymini(ts):
-    items, errors = dymini.boards(progress=lambda d, n: activity.progress(d, n, f"官方榜单 {d} / {n}"))
+    items, errors = gravity.boards("dymini", progress=lambda d, n: activity.progress(d, n, f"榜单 第 {d} / {n} 页"))
     return _board("dymini", items, errors, ts)
 
 
@@ -350,26 +257,24 @@ def _fortnite(ts):
 
 
 def _bvideo(ts):
-    if (db.kv_get("bili_collection_reset", {}) or {}).get("mode") == "realtime_only":
-        from . import bili_latest
-        result = bili_latest.poll_once(force=True)
-        if result.get("status") in ("paused", "error"):
-            raise RuntimeError("B站最新投稿：" + (result.get("error") or result["status"]))
-        return result.get("new", 0), ""
-    if config.BVIDEO_DAILY_ENABLED:
-        from . import bili_daily
-        result = bili_daily.run_once()
-        state = result["status"]
-        error = result.get("error") or ""
-        if state in ("paused", "error", "waiting_index"):
-            raise RuntimeError("B站按日采集：" + (error or state))
-        return result.get("videos", 0), error
-    from . import video
-    return video.collect()
+    # Manual/sample runs must use the rolling latest-post collector. The old
+    # video.collect() path is a historical ranking sweep with a 30-minute wait.
+    from . import bili_latest
+    result = bili_latest.poll_once(force=True)
+    if result.get("status") in ("error", "paused", "gap", "stale"):
+        raise RuntimeError(result.get("error") or "B站最新投稿采集异常")
+    return result.get("new", 0), (
+        "实时列表出现断档" if result.get("status") == "gap" else "")
 
 
 # ---------------- Steam ----------------
 def _steam(ts):
+    errors = []
+    try:
+        scanned = steam.scan_recent_releases()
+        activity.say(f"Steam 近 30 天发行目录扫描完成：新增/更新 {scanned} 条")
+    except Exception as e:
+        errors.append("近期发行扫描：" + str(e))
     steam.seed_recent_releases()
     ids, ranks, lists = [], {}, {}
 
@@ -380,29 +285,13 @@ def _steam(ts):
         if list_name not in lists[appid]:
             lists[appid].append(list_name)
 
-    errors = []
     activity.progress(0, 0, "读取榜单")
     try:
         for r in steam.most_played():
             ranks[r["appid"]] = r
-            add(r["appid"], "在线人数榜")
+            add(r["appid"], "在线人数前 200")
     except Exception as e:
         errors.append(str(e))
-    try:
-        for k, v in steam.featured_lists().items():
-            for a in v:
-                add(a, {"top_sellers": "热销", "new_releases": "新品",
-                        "coming_soon": "即将推出"}[k])
-    except Exception as e:
-        errors.append(str(e))
-    for f, label in (("popularnew", "热门新品"), ("topsellers", "热销榜"),
-                     ("popularcomingsoon", "热门即将推出")):
-        try:
-            for a in steam.search_list(f):
-                add(a, label)
-        except Exception as e:
-            errors.append(str(e))
-        time.sleep(0.5)
     known = {}
     with db.session() as c:
         for r in c.execute("SELECT entity, extra FROM entities WHERE source = 'steam'"):
@@ -410,73 +299,144 @@ def _steam(ts):
                 known[r[0]] = json.loads(r[1]) if r[1] else {}
             except ValueError:
                 known[r[0]] = {}
-    # The release scanner supplies native IDs, not name matches.
-    for app in steam.discovery_candidates(known, ts):
+    recent = steam.discovery_candidates(known, ts, new_only=False)
+    recent_ids = {str(x["appid"]) for x in recent}
+    for app in recent:
         key = str(app["appid"])
-        if key not in known:
-            known[key] = {"name": app["name"], "release_ts": app["released"],
-                          "type": "game", "coming_soon": False, "discovered_by": "release_scan"}
-        add(app["appid"], "近期发行扫描")
-    # 上线不到 LAUNCH_TRACK_DAYS 天的游戏，掉出榜单后继续跟踪（新游戏上线后自然回落，不能一掉榜就没数据）
-    kept = 0
-    for e, x in known.items():
-        rel = x.get("release_ts") or 0
-        if rel and e.isdigit() and not x.get("coming_soon") and x.get("type", "game") == "game" \
-                and ts - rel < config.LAUNCH_TRACK_DAYS * 86400 and int(e) not in ids:
-            add(int(e), "上线不久，继续跟踪")
-            kept += 1
-    if not ids:
-        raise RuntimeError("Steam 榜单和近期发行池均没有可追踪的游戏：" + "; ".join(errors))
+        extra = known.get(key) or {"name": app["name"], "type": "game"}
+        if app.get("released") and (extra.get("coming_soon") or not extra.get("release_ts")):
+            extra.update(release_ts=app["released"], coming_soon=False)
+        extra["review_seed"] = app.get("review_seed")
+        known[key] = extra
 
+    # Rotate the eligible new-release pool by oldest real metric sample.
+    with db.session() as c:
+        new_batch = [r[0] for r in c.execute(
+            """SELECT e.entity FROM entities e
+               JOIN hist_steam h ON h.appid=CAST(e.entity AS INTEGER)
+               LEFT JOIN metrics m ON m.source='steam' AND m.entity=e.entity
+               WHERE e.source='steam' AND h.released BETWEEN ? AND ? AND h.reviews>=?
+               GROUP BY e.entity
+               ORDER BY MAX(m.ts) IS NOT NULL, MAX(m.ts), h.reviews DESC
+               LIMIT ?""",
+            (ts - config.STEAM_DISCOVERY_DAYS * 86400, ts, config.STEAM_REVIEW_MIN,
+             config.STEAM_DISCOVERY_METRICS_PER_RUN))]
+
+    hot_ids = list(ranks)
+    if len(hot_ids) < config.STEAM_HOT_POOL:
+        try:
+            for appid in steam.search_list("topsellers", config.STEAM_HOT_POOL):
+                if appid not in hot_ids:
+                    hot_ids.append(appid)
+                if len(hot_ids) >= config.STEAM_HOT_POOL:
+                    break
+        except Exception as e:
+            errors.append(str(e))
+    if len(hot_ids) < config.STEAM_HOT_POOL:
+        with db.session() as c:
+            prior = [int(r[0]) for r in c.execute(
+                """SELECT m.entity FROM metrics m
+                   JOIN (SELECT entity, MAX(ts) ts FROM metrics
+                         WHERE source='steam' AND metric='players' GROUP BY entity) z
+                     ON z.entity=m.entity AND z.ts=m.ts
+                   WHERE m.source='steam' AND m.metric='players'
+                   ORDER BY m.value DESC LIMIT ?""",
+                (config.STEAM_HOT_POOL * 2,))]
+        for appid in prior:
+            if appid not in hot_ids:
+                hot_ids.append(appid)
+            if len(hot_ids) >= config.STEAM_HOT_POOL:
+                break
+    hot_ids = hot_ids[:config.STEAM_HOT_POOL]
+    for appid in hot_ids:
+        add(appid, "在线人数热门池")
+    for entity in new_batch:
+        appid = int(entity)
+        add(appid, "近 30 天且评论至少 20")
+    if not ids:
+        raise RuntimeError("Steam 在线热门池和近 30 天达标新游池都没有可追踪游戏：" + "; ".join(errors))
+
+    # Store the complete eligible catalog, but only sample a bounded rotating batch each run.
     items, fetched = [], 0
-    plan = revisit.Plan(ts)
-    deep = set()
+    top20 = {int(appid) for appid, r in ranks.items() if (r.get("rank") or 9999) <= config.STEAM_NEW_TOP}
+    top20_seen = set(db.kv_get("steam_top20_seen", []) or [])
+    if not top20_seen:
+        with db.session() as c:
+            top20_seen = {int(r[0]) for r in c.execute(
+                """SELECT DISTINCT entity FROM metrics WHERE source='steam'
+                   AND metric='rank_played' AND value<=?""",
+                (config.STEAM_NEW_TOP,))}
+    first_top20 = top20 - top20_seen
     # New releases need their details before already-known chart entries.
-    ids.sort(key=lambda appid: ((known.get(str(appid)) or {}).get("steam_full_at", 0),
-                               bool((known.get(str(appid)) or {}).get("fetched_at")),
+    ids.sort(key=lambda appid: (bool((known.get(str(appid)) or {}).get("fetched_at")),
                                -((known.get(str(appid)) or {}).get("release_ts") or 0)))
-    ids = ids[:config.STEAM_FULL_PER_RUN]
-    for i, appid in enumerate(ids, 1):
-        activity.progress(i, len(ids), f"游戏详情和在线人数 {i} / {len(ids)}")
-        key = str(appid)
-        member = "steam:" + key
-        extra = dict(known.get(key) or {})
-        stale = ts - (extra.get("fetched_at") or 0) > 7 * 86400
-        if plan.skipped(member) and extra.get("fetched_at"):
-            stale = False
-        if stale and fetched < min(10, config.MAX_STEAM_DETAILS_PER_RUN):
-            fetched += 1
+    detail_jobs, player_jobs, item_by_id = {}, {}, {}
+    with ThreadPoolExecutor(max_workers=6, thread_name_prefix="steam-players") as pool:
+        for i, appid in enumerate(ids, 1):
+            activity.progress(i, len(ids), f"提交 Steam 采样 {i} / {len(ids)}")
+            key = str(appid)
+            extra = dict(known.get(key) or {})
+            stale = ts - (extra.get("fetched_at") or 0) > 7 * 86400
+            if stale and fetched < config.MAX_STEAM_DETAILS_PER_RUN:
+                fetched += 1
+                detail_jobs[pool.submit(steam.detail, appid, retries=0, timeout=10)] = key
+            if extra.get("type") and extra["type"] != "game":
+                continue
+            metrics = {}
+            r = ranks.get(appid)
+            if r:
+                metrics["rank_played"] = r.get("rank")
+                if r.get("peak"):
+                    metrics["peak_daily"] = r["peak"]
+            if not extra.get("coming_soon"):
+                player_jobs[pool.submit(
+                    steam.current_players, appid, retries=0, timeout=8)] = appid
+            if metrics:
+                extra.pop("metrics_pending", None)
+            if appid in first_top20:
+                extra["steam_top20_first_ts"] = int(ts)
+            extra["lists"] = lists.get(appid, [])
+            item = {"entity": key, "name": extra.get("name") or key,
+                    "metrics": metrics, "extra": extra}
+            items.append(item)
+            item_by_id[key] = item
+
+        for j, future in enumerate(as_completed(detail_jobs), 1):
+            activity.progress(j, len(detail_jobs), f"Steam 详情 {j} / {len(detail_jobs)}")
+            key = detail_jobs[future]
             try:
-                info = steam.detail(appid)
+                info = future.result()
             except Exception:
                 info = None
-            extra = {**extra, **info} if info else dict(extra, failed=True)
-            time.sleep(0.5)
-        if extra.get("type") and extra["type"] != "game":
-            continue
-        metrics = {}
-        r = ranks.get(appid)
-        if r:
-            metrics["rank_played"] = r.get("rank")
-            if r.get("peak"):
-                metrics["peak_daily"] = r["peak"]
-        plan.signal(member, revisit.rank_value(metrics))
-        if not extra.get("coming_soon") and plan.due(member):
-            deep.add(key)
+            item = item_by_id.get(key)
+            if not item:
+                continue
+            if info:
+                item["extra"].update(info)
+                item["name"] = info.get("name") or item["name"]
+            else:
+                item["extra"]["failed"] = True
+            if item["extra"].get("type") and item["extra"]["type"] != "game":
+                item["metrics"].pop("players", None)
+                item["metrics"].pop("rank_played", None)
+                item["metrics"].pop("peak_daily", None)
+            elif item["extra"].get("coming_soon"):
+                item["metrics"].pop("players", None)
+
+        for j, future in enumerate(as_completed(player_jobs), 1):
+            activity.progress(j, len(player_jobs), f"Steam 在线人数 {j} / {len(player_jobs)}")
+            appid = player_jobs[future]
             try:
-                p = steam.current_players(appid)
+                players = future.result()
             except Exception:
-                p = None
-            if p is not None:
-                metrics["players"] = p
-            time.sleep(0.15)
-        if metrics:
-            extra.pop("metrics_pending", None)
-        extra["lists"] = lists.get(appid, [])
-        extra["steam_full_at"] = int(time.time())
-        items.append({"entity": key, "name": extra.get("name") or key,
-                      "metrics": metrics, "extra": extra})
-        _save("steam", int(time.time()), [items[-1]])
+                players = None
+            if players is not None:
+                item = item_by_id.get(str(appid))
+                if (item is not None and item["extra"].get("type") in (None, "game")
+                        and not item["extra"].get("coming_soon")):
+                    item["metrics"]["players"] = players
+    items = [it for it in items
+             if not it["extra"].get("type") or it["extra"].get("type") == "game"]
 
     # 折扣：打折带来的热度不等于玩法火了，卡片上要标出来
     activity.progress(0, 0, "价格和折扣")
@@ -491,40 +451,87 @@ def _steam(ts):
             if p["price_usd"]:
                 it["extra"]["price_usd"] = p["price_usd"]
 
-    top = sorted([it for it in items if "players" in it["metrics"]],
-                 key=lambda it: -it["metrics"]["players"])[:config.STEAM_REVIEWS_TOP_N]
-    # 上线不久的游戏也要评论数（"上线以来平均每天多少条评论"靠它）
+    hot_id_set = {str(x) for x in hot_ids}
+    with db.session() as c:
+        cached_reviews = {r[0]: r[1] for r in c.execute(
+            """SELECT m.entity,m.value FROM metrics m
+               JOIN (SELECT entity,MAX(ts) ts FROM metrics
+                     WHERE source='steam' AND metric='reviews' GROUP BY entity) x
+                 ON x.entity=m.entity AND x.ts=m.ts
+               WHERE m.source='steam' AND m.metric='reviews'""")}
+    # Recent releases already carry Steam's catalog review count. Reuse cumulative
+    # review totals for chart games and only query IDs with no known count.
+    needs_review = []
     for it in items:
-        rel = it["extra"].get("release_ts") or 0
-        if it not in top and it["entity"] in deep and rel and not it["extra"].get("coming_soon") \
-                and ts - rel < config.LAUNCH_TRACK_DAYS * 86400:
-            top.append(it)
-    activity.say(f"Steam：本轮限额采样 {len(ids)} 款，近期跟踪池 {kept} 款，查评论数 {len(top)} 款")
-    for j, it in enumerate(top, 1):
-        activity.progress(j, len(top), f"评论数 {j} / {len(top)}")
-        try:
-            total = steam.review_total(it["entity"])
-            time.sleep(0.4)
-            cn = steam.review_total(it["entity"], "schinese")
-            time.sleep(0.4)
-        except Exception:
+        key = it["entity"]
+        known_count = it["extra"].get("review_seed")
+        if known_count is None:
+            known_count = it["metrics"].get("reviews", cached_reviews.get(key))
+        if known_count is not None:
+            it["metrics"]["reviews"] = int(known_count)
+        elif key in hot_id_set and key not in recent_ids:
+            needs_review.append(it)
+
+    accepted = []
+    for it in items:
+        key = it["entity"]
+        company_names = (it["extra"].get("developers") or []) + (it["extra"].get("publishers") or [])
+        is_hot_only = key in hot_id_set and key not in recent_ids
+        if is_hot_only and any(match.company_match(
+                name, config.BIG_COMPANIES + config.BIG_COMPANIES_EXTRA) for name in company_names):
             continue
-        if total is not None:
+        if key in recent_ids or it["metrics"].get("reviews", 0) >= config.STEAM_REVIEW_MIN:
+            accepted.append(it)
+    _save("steam", ts, accepted)
+
+    activity.say(f"Steam：在线榜返回 {len(ranks)} 款，热门探测 {len(hot_ids)} 款；"
+                 f"近 30 天评论达标 {len(recent_ids)} 款，本轮新游采样 {len(new_batch)} 款；"
+                 f"缺评论数需核验 {len(needs_review)} 款")
+    checked = 0
+    pending_save = []
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="steam-reviews") as pool:
+        review_jobs = {
+            pool.submit(steam.review_total, it["entity"], retries=0, timeout=10): it
+            for it in needs_review
+        }
+        for j, future in enumerate(as_completed(review_jobs), 1):
+            activity.progress(j, len(review_jobs), f"评论数核验 {j} / {len(review_jobs)}")
+            it = review_jobs[future]
+            try:
+                total = future.result()
+            except Exception:
+                continue
+            if total is None:
+                continue
+            checked += 1
             it["metrics"]["reviews"] = total
-            review_metrics = {"reviews": total}
-            if cn is not None:
-                it["metrics"]["reviews_cn"] = cn
-                review_metrics["reviews_cn"] = cn
-                if total:
-                    it["extra"]["cn_share"] = round(cn / total, 3)
-            _save("steam", int(time.time()), [dict(it, metrics=review_metrics)])
-    for it in items:
-        if it["entity"] in deep:
-            plan.done("steam:" + it["entity"], it["metrics"], ts)
-    plan.flush()
-    activity.say("Steam：" + plan.summary())
-    _save("steam", int(time.time()), [dict(it, metrics={}) for it in items])
-    return len(items)
+            if total < config.STEAM_REVIEW_MIN:
+                continue
+            pending_save.append(it)
+            if int(it["entity"]) in first_top20:
+                it["extra"]["steam_top20_first_ts"] = int(ts)
+            it["metrics"].pop("reviews_cn", None)
+            it["extra"].pop("cn_share", None)
+            if checked % 20 == 0:
+                _save("steam", ts, pending_save)
+                accepted.extend(pending_save)
+                pending_save = []
+    if pending_save:
+        _save("steam", ts, pending_save)
+        accepted.extend(pending_save)
+    for it in accepted:
+        if int(it["entity"]) in first_top20 and it["metrics"].get("reviews", 0) >= config.STEAM_REVIEW_MIN:
+            it["extra"]["steam_top20_first_ts"] = int(ts)
+        it["metrics"].pop("reviews_cn", None)
+        it["extra"].pop("cn_share", None)
+    qualified_top20 = {
+        int(it["entity"]) for it in items
+        if int(it["entity"]) in top20
+        and it["metrics"].get("reviews", 0) >= config.STEAM_REVIEW_MIN
+    }
+    db.kv_set("steam_top20_seen", sorted(top20_seen | qualified_top20))
+    _save("steam", ts, accepted)
+    return len(accepted)
 
 
 # ---------------- Roblox ----------------
@@ -577,10 +584,8 @@ RESUME_MAX_AGE = 2 * 3600
 
 
 def _resume_get(source):
-    from . import sampling
     r = db.kv_get("resume:" + source)
-    if r and time.time() - (r.get("started") or 0) < RESUME_MAX_AGE and (
-            sampling.latest_slot(r.get("ts") or 0) == sampling.latest_slot()):
+    if r and time.time() - (r.get("started") or 0) < RESUME_MAX_AGE:
         return r
     return None
 
@@ -595,38 +600,26 @@ def _resume_clear(source):
 
 # ---------------- TapTap 榜单 ----------------
 def _taptap(ts):
-    """Discover the complete new-release chart, then persist each game's details."""
+    """照参考网站 TapTrack：先翻全部榜单网页拿游戏，再逐个打开详情页。中途重启会接着上次的进度。"""
     r = _resume_get("taptap")
-    if r and r.get("scope") == "new-v2":
+    if r:
         ts, board, done, ok = r["ts"], r["board"], set(r["done"]), r["ok"]
         activity.say(f"TapTap 榜单：接着上次的进度抓（{len(done)} / {len(board)} 款已打开过）")
     else:
         raw = taptap.board_lists(progress=lambda d, n: activity.progress(d, n, f"榜单网页 第 {d} / {n} 页"))
         board = {str(a): {"name": b["name"], "lists": [list(x) for x in b["lists"]]} for a, b in raw.items()}
         done, ok = set(), 0
-        r = {"scope": "new-v2", "ts": ts, "started": int(time.time()), "board": board, "done": [], "ok": 0}
+        r = {"ts": ts, "started": int(time.time()), "board": board, "done": [], "ok": 0}
         _resume_put("taptap", r)
     known = _known("taptap")
     ids = list(board)
-    discovered_at = int(time.time())
-    seeds = []
-    for key, entry in board.items():
-        extra = dict((known.get(key) or (None, 0, {}))[2])
-        extra.update(lists=[f"{c}第{p}" for c, p in entry["lists"]],
-                     new_candidate=True, preorder=False,
-                     url=f"{taptap.BASE_URL}/app/{key}")
-        seeds.append({"entity": key, "name": entry["name"], "extra": extra,
-                      "metrics": {"rank_" + taptap.BOARD_RANK_KEYS[c]: p
-                                  for c, p in entry["lists"] if c in taptap.BOARD_RANK_KEYS}})
-    _save("taptap", discovered_at, seeds)
     batch = []
     plan = revisit.Plan(ts)
     tried = 0
 
     def flush():
         if batch:
-            for item in batch:
-                _save("taptap", item.pop("_sampled_at"), [item])
+            _save("taptap", ts, batch)
             batch.clear()
         plan.flush()
         r.update({"done": sorted(done), "ok": ok})
@@ -643,37 +636,27 @@ def _taptap(ts):
         rank_m = {"rank_" + taptap.BOARD_RANK_KEYS[c]: p for c, p in b["lists"] if taptap.BOARD_RANK_KEYS.get(c)}
         plan.signal(member, revisit.rank_value(rank_m))
         app = None
-        error = ""
-        _between()
-        tried += 1
-        try:
-            app = taptap.detail(key, strict=True)
-        except Exception as e:
-            error = str(e)[:400]
-        _detail_pause()
-        sampled_at = int(time.time())
+        if plan.due(member):
+            _between()
+            tried += 1
+            app = taptap.detail(key)
+            _detail_pause()
         prev = (known.get(key) or (None, 0, {}))[2]
         if app and app != taptap.GONE:
             ok += 1
             it = taptap.parse_app(app)
-            it["extra"]["detail_at"] = sampled_at
-            it["extra"]["fetch_error"] = ""
-            it["extra"]["preorder"] = False
-            plan.done(member, it["metrics"], sampled_at)
+            it["extra"]["detail_at"] = ts
+            plan.done(member, it["metrics"], ts)
         else:
             x = dict(prev)
             x.setdefault("preorder", False)       # 在下载榜上的都已上线
             it = {"entity": key, "name": (known.get(key) or (b["name"],))[0] or b["name"], "metrics": {}, "extra": x}
-            x.update(fetch_error=error or ("已下线" if app == taptap.GONE else "详情未返回"),
-                     detail_attempt_at=sampled_at, gone=app == taptap.GONE)
-        it["extra"]["new_candidate"] = True
         it["extra"]["lists"] = [f"{c}第{p}" for c, p in b["lists"]]
         for c, p in b["lists"]:
             k = taptap.BOARD_RANK_KEYS.get(c)
             if k:
                 it["metrics"]["rank_" + k] = p
         it["metrics"] = {k: v for k, v in it["metrics"].items() if v is not None}
-        it["_sampled_at"] = sampled_at
         batch.append(it)
         done.add(key)
         if len(batch) >= RESUME_EVERY:
@@ -688,12 +671,18 @@ def _taptap(ts):
 
 # ---------------- TapTap 制造 / 创意工坊 ----------------
 def _tapmaker(ts):
-    """Follow the reference's paginated discovery and full per-game detail sampling."""
+    """照参考网站 taptap-maker-tracker：翻 TapTap制造 标签页 1–50 页拿游戏，再逐个打开详情页。
+
+    标签页（约 500 款）每轮都翻；以前发现、现在掉出标签页的老游戏（含以前的创意工坊游戏），
+    按抓取调度（radar/revisit.py）到点的才补，上线 14 天内的优先，每轮最多 TAPMAKER_DETAIL_PER_RUN 款。
+    标签页上的也按调度：平稳的间隔翻倍，名次突升或增速异常的回到每轮都查。
+    创意工坊没有标签页（TapTap 打开是 404），参考网站也没公开它的做法，所以不再找新的创意工坊游戏。
+    """
     known = _known("tapmaker")
     plan = revisit.Plan(ts)
     watch = {str(e) for e in config.TAPTAP_WATCH_IDS}
     r = _resume_get("tapmaker")
-    if r and r.get("scope") == "all-counters-v2":
+    if r:
         ts, ids, done = r["ts"], r["ids"], set(r["done"])
         listed = {e: tuple(v) for e, v in r["listed"].items()}
         ok, gone, tracked = r["ok"], r["gone"], r["tracked"]
@@ -706,18 +695,20 @@ def _tapmaker(ts):
 
         old = []
         for e, (name, last_seen, x) in known.items():
-            if e in listed or x.get("gone"):
-                continue
+            if e in listed or not x.get("track"):
+                continue                      # 热度一直不到 100 的老游戏不再补（只留名字给供给检查）
             fresh = ts - (x.get("released_time") or 0) < 14 * 86400
-            old.append((0 if fresh else 1, x.get("detail_at") or 0, e))
+            if plan.due("tapmaker:" + e):
+                old.append((0 if fresh else 1, x.get("detail_at") or 0, e))
         old.sort()
         ids = list(dict.fromkeys([str(e) for e in config.TAPTAP_WATCH_IDS] +
-                                 list(listed) + [e for _, _, e in old]))
+                                 list(listed) + [e for _, _, e in old[:config.TAPMAKER_DETAIL_PER_RUN]]))
         done, ok, gone, tracked = set(), 0, 0, 0
-        r = {"scope": "all-counters-v2", "ts": ts, "started": int(time.time()), "ids": ids, "listed": {e: list(v) for e, v in listed.items()},
+        r = {"ts": ts, "started": int(time.time()), "ids": ids, "listed": {e: list(v) for e, v in listed.items()},
              "done": [], "ok": 0, "gone": 0, "tracked": 0}
         _resume_put("tapmaker", r)
 
+    six_hourly = (ts // 3600) % 6 == 0
     batch = []
     tried = 0
 
@@ -741,14 +732,11 @@ def _tapmaker(ts):
         if e in listed:
             plan.signal(member, revisit.rank_value({"rank_page": listed[e][0]}))
         app = None
-        error = ""
-        _between()
-        tried += 1
-        try:
-            app = taptap.detail(e, strict=True)
-        except Exception as exc:
-            error = str(exc)[:400]
-        _detail_pause()
+        if e in watch or plan.due(member):
+            _between()
+            tried += 1
+            app = taptap.detail(e)
+            _detail_pause()
         sampled_at = int(time.time())
         if app == taptap.GONE:
             gone += 1
@@ -756,7 +744,6 @@ def _tapmaker(ts):
             it = {"entity": e, "name": name, "metrics": {}, "extra": x}
         elif not app:
             x = dict(prev)
-            x.update(fetch_error=error or "详情未返回", detail_attempt_at=sampled_at)
             if not prev:
                 x.update({"preorder": False, "tags": [], "lists": []})   # 能出现在标签页的都已上线
             it = {"entity": e, "name": listed.get(e, (0, name))[1] or name, "metrics": {}, "extra": x}
@@ -765,7 +752,6 @@ def _tapmaker(ts):
             it = taptap.parse_app(app)
             it["extra"]["detail_at"] = sampled_at
             it["extra"]["gone"] = False
-            it["extra"]["fetch_error"] = ""
             plan.done(member, it["metrics"], sampled_at)
         x = it["extra"]
         if e in listed:
@@ -774,9 +760,15 @@ def _tapmaker(ts):
         else:
             x["kind"] = x.get("kind") or prev.get("kind") or ""
             x["lists"] = []
-        x["track"] = True
+        dl = it["metrics"].get("downloads") or 0
+        x["track"] = bool(prev.get("track") or dl >= config.TAPMAKER_MIN_STORE)
         it["metrics"] = {k: v for k, v in it["metrics"].items() if v is not None}
-        tracked += 1
+        if not x["track"]:
+            it["metrics"] = {}            # 热度太低的只记名字，不记每小时数据
+        else:
+            tracked += 1
+            if not six_hourly:
+                it["metrics"].pop("reviews", None)   # 评价数 6 小时记一次就够
         it["_sampled_at"] = sampled_at
         batch.append(it)
         done.add(e)
@@ -826,8 +818,24 @@ def oldest_ok(sources):
     return min(ts) if ts else 0
 
 
+def source_status():
+    """Keep stored platform status visible even when collection is paused."""
+    status = {k: dict(v) for k, v in (db.kv_get("source_status", {}) or {}).items()}
+    now = time.time()
+    for source, value in status.items():
+        value["paused"] = bool(config.STEAM_ONLY and source not in ("steam", "bvideo", "youtube"))
+        seconds = (90 if source == "bvideo" else 5400 if source == "youtube" else
+                   max(300, (config.FAST_MINUTES if source in LIVE_SOURCES else
+                             SLOW_EVERY_HOURS.get(source, config.SLOW_MINUTES / 60) * 60) * 60 + 300))
+        value["stale"] = bool(not value["paused"] and value.get("ok_ts") and
+                              now - value["ok_ts"] > seconds)
+    return status
+
+
 def collect_live(force=False):
     """返回这次实际抓了几个平台。"""
+    if getattr(config, "STEAM_ONLY", False):
+        return 0
     ts = _align(time.time(), config.FAST_MINUTES)
     run, skipped = _skip_fresh(LIVE_SOURCES, config.FAST_MINUTES, force)
     if skipped:
@@ -846,9 +854,11 @@ def collect_slow(between=None, middle=None, force=False):
     global _between_fn
     _between_fn = between
     ts = _align(time.time(), config.SLOW_MINUTES)
-    fns = {"roblox": _roblox, "appcn": _appcn, "appus": _appus, "haoyou": _haoyou,
+    fns = {"steam": _steam}
+    if not getattr(config, "STEAM_ONLY", False):
+        fns.update({"roblox": _roblox, "appcn": _appcn, "appus": _appus, "haoyou": _haoyou,
            "mistore": _mistore, "fortnite": _fortnite, "crazygames": _crazygames, "poki": _poki, "itch": _itch,
-           "wxmini": _wxmini, "dymini": _dymini}
+           "wxmini": _wxmini, "dymini": _dymini})
     n = 0
     try:
         run, skipped = _skip_fresh(list(fns), config.SLOW_MINUTES, force)
@@ -861,25 +871,27 @@ def collect_slow(between=None, middle=None, force=False):
         if middle and run:
             middle()
 
+        if getattr(config, "STEAM_ONLY", False):
+            return n
         tm_resume = _resume_get("tapmaker")
         tm_run, tm_skip = _skip_fresh(["tapmaker"], config.SLOW_MINUTES, force)
         tp_resume = _resume_get("taptap")
         tp_age = time.time() - _ok_ts("taptap")
-        tp_due = force or tp_resume or tp_age >= config.TAPTAP_BOARD_HOURS * 3600 - 600
+        tp_due = tp_resume or tp_age >= config.TAPTAP_BOARD_HOURS * 3600 - 600
         if (tm_resume or tm_run) or (tp_due and config.SOURCES_ENABLED.get("taptap", True)):
             activity.say("开始抓 TapTap：要逐个打开几百个游戏详情页，一轮 30–60 分钟，进度在右上角；"
-                         "平台数字每天 08:00、20:00 采样；中途重启会接着抓")
-        if tp_due:
-            _between()
-            _run("taptap", _taptap, ts)
-            n += 1
+                         "这期间直播平台照常每 30 分钟抓一次；中途重启会接着抓")
         if tm_resume or tm_run:
             _between()
             _run("tapmaker", _tapmaker, ts)
             n += 1
         elif tm_skip:
             activity.say("刚抓过，这次跳过：" + "、".join(tm_skip))
-        if not tp_due:
+        if tp_due:
+            _between()
+            _run("taptap", _taptap, ts)
+            n += 1
+        else:
             activity.say(f"TapTap 榜单每 {config.TAPTAP_BOARD_HOURS} 小时抓一次，"
                          f"下次约 {time.strftime('%H:%M', time.localtime(time.time() + config.TAPTAP_BOARD_HOURS * 3600 - tp_age))}")
     finally:

@@ -18,7 +18,7 @@ ID_LIKE = re.compile(r"(^|_)(id|uid|mid|aid|cid|sec_uid|item_id|aweme_id|photo_i
 _NUM_CN = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([万wW亿kK千]?)\s*\+?\s*$")
 
 
-_JUNK_TEXT = re.compile(r"^(?:middleware_|runtime_|perf_)|您|请输入|请选择|请填写|请问|满意|反馈|客服|二维码|联系方式|微信号|官网首页|登录|注册|下载APP|下载 APP|"
+_JUNK_TEXT = re.compile(r"您|请输入|请选择|请填写|请问|满意|反馈|客服|二维码|联系方式|微信号|官网首页|登录|注册|下载APP|下载 APP|"
                         r"隐私|用户协议|关于我们|帮助中心|退出登录|上一页|下一页|查看更多|全部分类|^其他")
 _JUNK_SRC = re.compile(r"survey|questionnaire|feedback|wenjuan|nps|setting|config|i18n|locale|abtest|ab_test|slardar|"
                        r"monitor|/report|/track|menu|captcha|verify", re.I)
@@ -194,9 +194,7 @@ def find(caps):
                 t, tk = _text_of(f)
                 if not t:
                     continue
-                rank = next((num(f[k]) for k in ("rank", "position", "ranking") if k in f), None)
-                items.append({"rank": rank, "position": i + 1,
-                              "text": t, "text_key": tk, "nums": _nums(f, tk), "ts": _ts_of(f),
+                items.append({"rank": i + 1, "text": t, "text_key": tk, "nums": _nums(f, tk), "ts": _ts_of(f),
                               "url": _url_of(f)})
             if len(items) >= 3 and len(items) >= 0.6 * len(flats):
                 sig = ("l", path, items[0]["text"], items[-1]["text"], len(items))
@@ -258,12 +256,14 @@ def summarize_videos(L, now=None):
         vids.append({"title": it["text"][:120], "ts": it.get("ts"), "url": it.get("url"), **st})
     likes = [v["likes"] for v in vids if v["likes"] is not None]
     plays = [v["plays"] for v in vids if v["plays"] is not None]
+    comments = [v["comments"] for v in vids if v["comments"] is not None]
     recent = [v for v in vids if v["ts"] and 0 <= now - v["ts"] <= 7 * 86400]
     return {
         "n": len(vids),
         "likes_sum": sum(likes) if likes else None,
         "likes_max": max(likes) if likes else None,
         "plays_sum": sum(plays) if plays else None,
+        "comments_sum": sum(comments) if comments else None,
         "n_7d": len(recent) if any(v["ts"] for v in vids) else None,
         "likes_7d": sum(v["likes"] or 0 for v in recent) if recent else None,
         "latest_ts": max((v["ts"] for v in vids if v["ts"]), default=None),

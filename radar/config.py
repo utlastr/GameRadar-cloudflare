@@ -22,15 +22,12 @@ BACKUP_KEEP = 14                                  # 备份保留份数
 # 国内访问 Steam、苹果、Roblox 不稳定时填代理，例如 "http://127.0.0.1:7890"；不用就留空
 PROXY = ""
 STEAM_CC = "us"
-STEAM_PRIORITY_MINUTES = 720
-STEAM_PRIORITY_PER_RUN = 40
-STEAM_FULL_PER_RUN = 120
 
 # ================= 运行频率 =================
 FAST_MINUTES = 30        # 直播平台（虎牙、斗鱼）
 SLOW_MINUTES = 60        # Steam、Roblox、TapTap
 SUPPLY_HOURS = 12        # 同一个游戏在 App Store 的供给检查多久重查一次
-RAW_KEEP_DAYS = 90       # 高频数据保留天数；之后压缩成每小时一条，永久保存，不删除
+RAW_KEEP_DAYS = 30       # 30 天后的普通原始数据删除
 
 # ================= 看板 =================
 SERVER_HOST = "127.0.0.1"
@@ -39,11 +36,12 @@ OPEN_BROWSER = True
 
 # ================= 数据源 =================
 # 想关掉某个平台：settings.json 里写 "SOURCES_ENABLED": {"douyu": false}（其余平台不写就是开着）
+STEAM_ONLY = True
 SOURCES_ENABLED = {"steam": True, "roblox": True, "taptap": True, "tapmaker": True, "huya": True, "douyu": True,
                    # v30 新接的平台（来源名不能带下划线）
                    "haoyou": True, "mistore": True, "appcn": True, "appus": True, "itch": True, "poki": True,
                    "crazygames": True, "fortnite": True, "kick": True, "twitch": True, "bili": True, "bvideo": True,
-                   # Mini-games: WeChat via Gravity; Douyin via signed-in official CDP charts.
+                   # v48：微信 / 抖音小游戏榜（数据来自引力引擎小游戏排行榜，见 sources/gravity.py）
                    "wxmini": True, "dymini": True}
 
 # Twitch 要你自己免费申请的密钥（步骤见 sources/twitch.py 或运行情况页"没接上的平台"），不填就显示失败原因
@@ -71,7 +69,7 @@ RANK_BOARDS = {
     ("itch", "rank_web"): ("new", "itch.io 网页游戏新而热门"),
     ("poki", "rank_popular"): ("trend", "Poki 本周热门"),
     ("crazygames", "rank_hot"): ("new", "CrazyGames 24 小时热门"),
-    # Daily charts: WeChat via Gravity; Douyin official charts retain ranks 1-200.
+    # v48 微信 / 抖音小游戏（引力引擎），各 100 名，按天出榜
     ("wxmini", "rank_popular"): ("trend", "微信小游戏人气榜"),
     ("wxmini", "rank_played"): ("trend", "微信小游戏最多人玩榜"),
     ("wxmini", "rank_grossing"): ("trend", "微信小游戏畅销榜"),
@@ -86,8 +84,6 @@ for _g, _n in {"survival": "生存", "strategy": "策略", "sportsracing": "体�
     RANK_BOARDS[("fortnite", "rank_" + _g)] = ("trend", f"Fortnite {_n}榜")
 RANK_NEW_TOP = 0.9           # new 榜第 1 名给多少热度（往后按名次递减，大约前 25 名能进必看）
 RANK_RISE_MIN = 3            # trend 榜一天里至少往前冲几名才算
-DYMINI_MIN_RANK = 51         # Official charts retain 1-200; only new-chart ranks 51-200 are candidates.
-DYMINI_MAX_RANK = 200
 # 这些平台的游戏不在 App Store / Steam 上，不去那里搜上线时间（会搜错）
 NO_LAUNCH_LOOKUP = {"roblox", "fortnite", "itch", "poki", "crazygames", "wxmini", "dymini"}
 
@@ -136,22 +132,23 @@ DOUYU_MAX_PAGES = 60
 TAPTAP_BOARD_HOURS = 6
 # TapTap 制造：每小时翻标签页 1–50 页（和参考网站一样），标签页上的游戏每小时都打开详情
 TAPTAP_TAG_HTML_PAGES = 50
-TAPMAKER_MIN_STORE = 0          # Preserve all observed counters, including valid zero.
+TAPMAKER_MIN_STORE = 100        # 热度到这个数才开始记每小时数据；不到的只记名字（供给检查用）
 TAPMAKER_REFRESH_HOURS = 20     # v74 起不再使用（改由抓取调度 radar/revisit.py 决定），留着免得旧设置报错
 TAPMAKER_DETAIL_PER_RUN = 250   # 老游戏每轮最多补抓多少个
 TAPTAP_WATCH_IDS = []
-TAPTAP_PRIORITY_MINUTES = 720
+TAPTAP_PRIORITY_MINUTES = 15
 TAPTAP_PRIORITY_PER_RUN = 12
 
-MAX_STEAM_DETAILS_PER_RUN = 40   # 每次最多新抓多少个 Steam 游戏详情
-STEAM_REVIEWS_TOP_N = 40         # 在线人数前多少的游戏抓评论数（含中文评论数）
-STEAM_DISCOVERY_DAYS = 15
-STEAM_DISCOVERY_PER_RUN = 10000
+MAX_STEAM_DETAILS_PER_RUN = 80   # 详情每款需多次请求；按轮次补齐，避免拖住整轮采集
+STEAM_REVIEWS_TOP_N = 200        # 热门池每天检查评论数（含中文评论数）
+STEAM_REVIEW_MIN = 20            # 评论低于此值的游戏不进入档案和探测池
+STEAM_HOT_POOL = 200             # 每日在线人数探测池
+STEAM_NEW_TOP = 20               # 第一次进入在线人数前 20 才算新游戏
+STEAM_DISCOVERY_DAYS = 30
+STEAM_DISCOVERY_PER_RUN = 20000
 STEAM_DISCOVERY_PAGES = 3
-STEAM_DISCOVERY_METRICS_PER_RUN = 20
-RISING_DAYS = 15
+STEAM_DISCOVERY_METRICS_PER_RUN = 200
 BVIDEO_MINUTES = 30
-BVIDEO_NEWLIST_PAGES = 3
 BVIDEO_SEARCH_TERMS = []
 BVIDEO_WATCH_IDS = []
 BVIDEO_TRACK_PER_RUN = 30
@@ -162,16 +159,13 @@ BVIDEO_STREAM_ENABLED = True
 BVIDEO_STREAM_SECONDS = 60
 BVIDEO_STREAM_PAGE_SIZE = 100
 BVIDEO_LATEST_SECONDS = 10
-BILI_REQUESTS_PER_MINUTE = 180
-BILI_MAX_INFLIGHT = 4
-BVIDEO_TAG_WORKERS = 4
+BVIDEO_TAG_WORKERS = 2
 BVIDEO_BACKLOG_HIGH_WATER = 20000
 BVIDEO_BACKLOG_LOW_WATER = 10000
-BVIDEO_DAILY_ENABLED = True
+BVIDEO_DAILY_ENABLED = False
 BVIDEO_DAILY_HOUR = 0
 BVIDEO_DAILY_MINUTE = 5
-BVIDEO_DAILY_TIDS = [17, 65, 171, 172, 173, 121, 136, 19,
-                    21, 138, 27, 184, 183, 31, 243, 242]
+BVIDEO_DAILY_TIDS = [17, 65, 171, 172, 173, 121, 136, 19]
 BVIDEO_DAILY_PAGE_SIZE = 100
 BVIDEO_DAILY_REQUESTS_PER_RUN = 200
 BVIDEO_DAILY_SECONDS_PER_RUN = 300
@@ -179,9 +173,9 @@ BVIDEO_DAILY_RETRY_SECONDS = 3600
 BVIDEO_CANDIDATE_MIN_VIDEOS = 3
 BVIDEO_CANDIDATE_MIN_AUTHORS = 2
 BVIDEO_TITLE_KEEP_DAYS = 90
+BVIDEO_NAME_ALIASES = {}
 BVIDEO_WORD_BLACKLIST = []
 BVIDEO_PERSON_NAMES = []
-BVIDEO_NAME_ALIASES = {}
 BVIDEO_GROWTH_ENABLED = True
 BVIDEO_GROWTH_CANDIDATES = 300
 BVIDEO_GROWTH_SMOOTHING = 100.0
@@ -257,8 +251,6 @@ KW_BIG_GAMES = [
     "cs2", "csgo", "反恐精英", "dota", "刀塔", "原神", "崩坏", "星穹", "绝区零", "鸣潮", "永劫", "三角洲", "穿越火线",
     "dnf", "地下城", "魔兽", "炉石", "守望先锋", "我的世界", "minecraft", "蛋仔", "第五人格", "光遇", "火影",
     "逆水寒", "梦幻西游", "apex", "堡垒之夜", "fortnite", "暗区", "无限暖暖", "燕云",
-    "使命召唤", "call of duty", "qq飞车", "qq炫舞", "明日方舟", "部落冲突", "荒野乱斗",
-    "clash of clans", "brawl stars",
 ]
 KW_STOP_SUBSTRINGS += KW_BIG_GAMES
 
@@ -354,7 +346,23 @@ BIG_COMPANIES = [
     "lilith", "莉莉丝", "hypergryph", "鹰角", "perfect world", "完美世界", "kingsoft", "西山居",
     "三七互娱", "37games", "papergames", "叠纸", "bytedance", "字节跳动", "朝夕光年", "nuverse",
     "happy elements", "乐元素", "kuro games", "库洛", "garena", "level infinite", "riot games",
+    # v85 补充（必看"大厂游戏：隐藏"用）。中文按包含，英文按整词
+    "腾讯游戏", "天美工作室", "光子工作室", "魔方工作室", "北极光工作室", "proxima beta", "lightspeed studios",
+    "timi studio", "网易游戏", "网易雷火", "灵游坊", "s-game", "散爆网络", "sunborn", "悠星网络", "yostar",
+    "游族网络", "多益网络", "盛趣游戏", "盛大游戏", "世纪华通", "恺英网络", "吉比特", "雷霆游戏", "紫龙游戏",
+    "紫龙互娱", "英雄互娱", "巨人网络", "心动网络", "xd entertainment", "xd inc", "farlight", "funplus", "igg",
+    "tap4fun", "龙创悦动", "途游", "掌趣科技", "seasun", "搜狐畅游", "游卡网络", "冰川网络", "中手游", "祖龙娱乐",
+    "电魂网络", "鹰角网络", "库洛游戏", "莉莉丝游戏",
+    "valve", "sony interactive entertainment", "playstation studios", "microsoft studios", "xbox",
+    "ea games", "ea sports", "2k games", "warner bros", "wb games", "embracer", "cd projekt", "fromsoftware",
+    "koei tecmo", "level-5", "netmarble", "smilegate", "pearl abyss", "supercell", "king com", "playtika",
+    "scopely", "zynga", "moon active", "niantic", "bandai", "square enix", "sega", "konami", "capcom",
 ]
+BIG_COMPANIES_EXTRA = []      # 你自己补的大厂名（settings.json 里填，不会被更新覆盖）
+BIG_GAME_NAMES = ["影之刃", "洛克王国", "异人之下"]   # 大作名字（名字里带就算），必看默认藏起来；可在 settings.json 里改
+BIG_SIZE_GB = 20              # 临时默认值，待校准：电脑游戏安装包到这么大算大作（Steam 最低配置里的"存储空间"）
+BIG_SIZE_GB_MOBILE = 4        # 临时默认值，待校准：手机游戏安装包到这么大算大作（平台给了大小才判断）
+BIG_PRICE_USD = 40            # 临时默认值，待校准：Steam 售价到这么多美元算大作（3A 一般 $60–70）
 
 # 标签（Steam 英文标签、TapTap 中文标签、Roblox 类型），全部小写
 TAGS_PLUS = {
@@ -487,24 +495,10 @@ _EDITABLE = ["PROXY", "BACKUP_DIR", "SERVER_PORT", "GITHUB_TOKEN", "AUTO_UPDATE"
              "OPP_STAGE_GO_P", "OPP_DECLINE_RATIO", "OPP_MIN_LIVE_CASES", "BILI_TOPIC_MIN_UP",
              "ARCHIVE_BLOCK_MAX", "ARCHIVE_U_SAMPLE", "ARCHIVE_GOLD", "PENALTY_WORDS", "SCORE_REGION",
              "NEW_MAX_DAYS", "BILI_GAME_SEARCH_PER_RUN",
+             "BIG_COMPANIES_EXTRA", "BIG_GAME_NAMES", "BIG_SIZE_GB", "BIG_SIZE_GB_MOBILE", "BIG_PRICE_USD",
              "REVISIT_ENABLED", "REVISIT_LEARN", "REVISIT_MAX_HOURS", "REVISIT_Z",
              "HIT_WINDOW_START_YEAR", "HIT_LEAD_MONTHS", "HIT_DISCOVER_RULE", "HIT_CLOSE_RULE",
              "HIT_REOPEN_RULE", "HIT_BURST_RULE", "HIT_MIN_CASE_VIDEOS"]
-
-
-_EDITABLE += ["BVIDEO_DAILY_ENABLED", "BVIDEO_DAILY_HOUR", "BVIDEO_DAILY_MINUTE",
-              "BVIDEO_DAILY_TIDS", "BVIDEO_DAILY_PAGE_SIZE", "BVIDEO_DAILY_REQUESTS_PER_RUN",
-              "BVIDEO_DAILY_SECONDS_PER_RUN", "BVIDEO_DAILY_RETRY_SECONDS",
-              "BVIDEO_CANDIDATE_MIN_VIDEOS", "BVIDEO_CANDIDATE_MIN_AUTHORS",
-              "BVIDEO_TITLE_KEEP_DAYS", "BVIDEO_WORD_BLACKLIST", "BVIDEO_PERSON_NAMES",
-              "BVIDEO_NAME_ALIASES"]
-_EDITABLE += ["BVIDEO_STREAM_ENABLED", "BVIDEO_STREAM_SECONDS", "BVIDEO_STREAM_PAGE_SIZE",
-              "BVIDEO_LATEST_SECONDS", "BILI_REQUESTS_PER_MINUTE", "BILI_MAX_INFLIGHT",
-              "BVIDEO_TAG_WORKERS", "BVIDEO_BACKLOG_HIGH_WATER", "BVIDEO_BACKLOG_LOW_WATER"]
-_EDITABLE += ["BVIDEO_GROWTH_ENABLED", "BVIDEO_GROWTH_CANDIDATES",
-              "BVIDEO_GROWTH_SMOOTHING", "BVIDEO_GROWTH_SAMPLE_HOURS",
-              "BVIDEO_GROWTH_REQUEST_SECONDS", "BVIDEO_GROWTH_MAX_GAP_HOURS",
-              "BVIDEO_GROWTH_TRACK_DAYS"]
 
 
 def _load_user_settings():

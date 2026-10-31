@@ -1,5 +1,4 @@
 """本地看板网页服务（只在自己电脑上打开，不联网发布）。地址默认 http://127.0.0.1:8765"""
-import gzip
 import json
 import os
 import threading
@@ -113,16 +112,8 @@ class Handler(BaseHTTPRequestHandler):
     def _send(self, body, ctype="application/json; charset=utf-8", code=200, cache="no-store"):
         if isinstance(body, str):
             body = body.encode("utf-8")
-        compressed = (ctype.startswith("application/json") and len(body) >= 4096
-                      and "gzip" in self.headers.get("Accept-Encoding", ""))
-        if compressed:
-            body = gzip.compress(body, compresslevel=1)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
-        if compressed:
-            self.send_header("Content-Encoding", "gzip")
-        if ctype.startswith("application/json"):
-            self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
         self.end_headers()
@@ -193,6 +184,8 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/state":
             from . import updater
             d = db.kv_get("dashboard", {}) or {}
+            from . import health
+            d["health"] = health.snapshot()
             d["version"] = updater.local_version()[0]
             d["analyze_error"] = db.kv_get("analyze_error")
             try:
@@ -201,18 +194,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             from . import video
-            # The live/daily screen does not render the legacy 1,000-video list.
-            d["video_hotspots"] = video.summary(
-                include_legacy=not (config.BVIDEO_STREAM_ENABLED or config.BVIDEO_DAILY_ENABLED))
-            d["sources"] = db.kv_get("source_status", {}) or {}
+            d["video_hotspots"] = video.summary()
+            from . import youtube
+            d["youtube"] = youtube.public_state()
+            from . import collect
+            d["sources"] = collect.source_status()
             d["release_discovery"] = db.kv_get("release_discovery", {}) or {}
-            d["tap_priority"] = db.kv_get("tap_priority", {}) or {}
-            from . import steamwatch
-            d["steam_priority"] = steamwatch.summary()
-            from . import sampling
-            d["sampling"] = sampling.summary()
             from .sources import steam
             d["release_pool"] = steam.release_pool()
+            from . import steam_cycle
+            d["steam_cycle"] = steam_cycle.state()
             try:
                 from . import history
                 d["history"] = history.summary()
@@ -228,12 +219,12 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/bili-terms":
             from . import bili_terms
             try:
-                result = bili_terms.matched_catalogue() if q.get("matched") == ["1"] else bili_terms.catalogue(
-                    q.get("q", [""])[0], q.get("status", ["all"])[0],
-                    _int(q, "page", 1, 1, 10000000),
-                    _int(q, "page_size", 100, 1, 100))
-            except ValueError as e:
-                self._json({"error": str(e)}, 400)
+                result = (bili_terms.matched_catalogue() if q.get("matched") == ["1"] else
+                          bili_terms.catalogue(q.get("q", [""])[0], q.get("status", ["all"])[0],
+                                               _int(q, "page", 1, 1, 10000000),
+                                               _int(q, "page_size", 100, 1, 100)))
+            except ValueError as exc:
+                self._json({"error": str(exc)}, 400)
             else:
                 self._json(result)
         elif u.path == "/api/bili-stream":
@@ -248,8 +239,16 @@ class Handler(BaseHTTPRequestHandler):
                 with db.session() as c:
                     bili_terms.archive_links(c, result["groups"] + result["tags"])
                 self._json(result)
-            except ValueError as e:
-                self._json({"error": str(e)}, 400)
+            except ValueError as exc:
+                self._json({"error": str(exc)}, 400)
+        elif u.path == "/api/youtube/state":
+            from . import youtube
+            self._json(youtube.public_state())
+        elif u.path == "/api/youtube/videos":
+            from . import youtube
+            self._json({"videos": youtube.videos(q.get("after", [None])[0], q.get("before", [None])[0],
+                                                   _int(q, "offset", 0, 0, 100000000),
+                                                   _int(q, "limit", 50, 1, 500))})
         elif u.path == "/api/series":
             keys = (q.get("keys", [""])[0]).split(",")
             days = _int(q, "days", 7, 1, 90)
@@ -268,6 +267,10 @@ class Handler(BaseHTTPRequestHandler):
                         d.setdefault(m, []).append([ts, v])
                     out[key] = d
             self._json(out)
+        elif u.path == "/api/heat/series":
+            # v96：详情图表里的 B站（和其他视频平台）每天新增播放
+            from . import heat
+            self._json(heat.game_series(q.get("gid", [""])[0], _int(q, "days", 90, 1, 90)))
         elif u.path == "/api/entity":
             # v50：各平台里任何一个游戏点开，看它的基本资料
             key = q.get("key", [""])[0]
@@ -300,9 +303,6 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/fresh":
             from . import charts
             self._json(charts.fresh())
-        elif u.path == "/api/rising":
-            from . import charts
-            self._json(charts.rising(q.get("source", ["steam"])[0]))
         elif u.path == "/api/raw":
             from . import charts
             self._json(charts.raw(q.get("source", ["tapmaker"])[0]))
@@ -314,7 +314,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json(charts.index_series(_int(q, "days", 7, 1, 90)))
         elif u.path == "/api/activity":
             from . import activity
-            self._json(activity.snapshot(int(q.get("after", ["0"])[0] or 0)))
+            from . import health
+            self._json({**activity.snapshot(int(q.get("after", ["0"])[0] or 0)),
+                        "health": health.snapshot()})
+        elif u.path == "/api/health":
+            from . import health
+            self._json(health.snapshot())
         elif u.path == "/api/runs":
             with db.session() as c:
                 rows = [dict(r) for r in c.execute("SELECT * FROM runs ORDER BY ts DESC LIMIT 50")]
@@ -386,6 +391,14 @@ class Handler(BaseHTTPRequestHandler):
             r = archive.undo(body["a"], body["b"])
             reanalyze_soon()
             self._json(r)
+        elif p == "/api/bili/verified":
+            from .sources import bili
+            try:
+                bili.resume_after_verification(body.get("verified"))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            self._json({"ok": True})
         elif p == "/api/run":
             RUN_NOW.set()
             self._json({"ok": True})
@@ -393,16 +406,16 @@ class Handler(BaseHTTPRequestHandler):
             from . import bili_growth
             try:
                 self._json(bili_growth.edge_decision(body.get("a"), body.get("b"),
-                                                    body.get("blocked", True), body.get("day")))
-            except (ValueError, TypeError) as e:
-                self._json({"error": str(e)}, 400)
+                                                     body.get("blocked", True), body.get("day")))
+            except (ValueError, TypeError) as exc:
+                self._json({"error": str(exc)}, 400)
         elif p == "/api/bili-growth/rebuild":
             from . import bili_growth
             try:
                 day = body.get("day")
                 if day is not None:
                     from datetime import date, datetime
-                    from .sources import bili
+                    from . import bili_realtime_client as bili
                     if date.fromisoformat(day) >= datetime.now(bili.BEIJING).date():
                         raise ValueError("增长榜只比较已结束的北京时间日期")
                 if "smoothing" in body:
@@ -411,12 +424,21 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError("c 必须在0.001至1000000之间")
                     db.kv_set("bili_growth_smoothing", smoothing)
                 self._json(bili_growth.build(day))
-            except (ValueError, TypeError) as e:
-                self._json({"error": str(e)}, 400)
+            except (ValueError, TypeError) as exc:
+                self._json({"error": str(exc)}, 400)
         elif p == "/api/world/run":
             from . import worldmap
             worldmap.RUN_NOW.set()
             self._json({"ok": True})
+        elif p == "/api/youtube/run":
+            from . import youtube
+            try:
+                if not isinstance(body, dict):
+                    raise ValueError("请求内容必须是对象")
+                after, before = str(body.get("after") or ""), str(body.get("before") or "")
+                self._json(youtube.run_async(after, before, 100), code=202)
+            except (ValueError, TypeError) as e:
+                self._json({"ok": False, "error": str(e)}, 400)
         elif p.startswith("/api/social/"):
             from . import social
             social.http_post(self, p, body)
@@ -429,4 +451,16 @@ def start():
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     from . import vendor
     threading.Thread(target=vendor.ensure_echarts, daemon=True).start()   # 提前把图表组件下载好
+    threading.Thread(target=_warm_map, daemon=True).start()               # 提前把地图数据读进内存，第一次打开地图不用等
     return srv, f"http://{config.SERVER_HOST}:{config.SERVER_PORT}/"
+
+
+def _warm_map():
+    """地区边界 + 人口网格第一次读要解码好几秒（纯 Python），启动时后台先做掉，打开地图时直接用缓存。"""
+    try:
+        from . import regions
+        regions.load_geo()
+        for name in ("popgrid", "earth-night", "earth-topology", "night-sky"):
+            _map_asset(name)
+    except Exception:
+        pass

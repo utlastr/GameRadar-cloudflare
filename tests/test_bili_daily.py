@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from radar import bili_daily as daily, bili_queue, bili_terms as terms, collect, config, db, server, video
-from radar.sources import bili
+from radar import bili_realtime_client as bili
 
 DAY = "2026-10-21"
 SWORD = "\u94f8\u5251\u5927\u5e08"

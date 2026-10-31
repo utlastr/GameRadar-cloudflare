@@ -12,7 +12,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from radar import bili_daily as daily, bili_latest as latest, bili_stream as stream, config, db
-from radar.sources import bili
+from radar import bili_realtime_client as bili
 
 
 def bv(number):

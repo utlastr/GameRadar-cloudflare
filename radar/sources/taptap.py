@@ -4,8 +4,9 @@
   翻 https://www.taptap.cn/tag/TapTap%E5%88%B6%E9%80%A0 第 1–50 页（第 1 页不带 page 参数），
   每张卡片 div.app-title：父级 <a> 的 href 是详情链接，里面 meta[itemprop=name] 是名字。
   没解析到的页跳过继续翻，不提前停。每页成功后停 1.5 秒。
-- TapTap 榜单：仅新品榜，使用当前榜单页面实际请求的 app-top/v2/hits 分页。
-  参考 TapTrack 的发现、去重、逐游戏详情及历史持久化流程，不再使用失效的旧 HTML 分页参数。
+- TapTap 榜单（TapTrack/crawl_bangdan.py + 榜单链接.txt）：
+  翻热门榜、热玩榜、新品榜、独家榜和各分类榜的网页，每个 div.list-item 里 meta[itemprop=name] 是名字、
+  第一个 /app/数字 链接是游戏。每页之后停 0.5 秒。
 - 游戏详情（taptap_mk_detail.py / crawl_detail.py）：打开 https://www.taptap.cn/app/ID?os=android，
   JSON-LD（@type=VideoGame）读名字、上线日期、热度（userInteractionCount）、评分、评价数，
   __NUXT_DATA__ 里 fans_count 指向的值是关注数。404 = 已下线。每款之间随机停 1–3 秒（由调用方停）。
@@ -238,14 +239,6 @@ def _board_games(page_html):
     games = []
     if _have_bs4():
         soup = _soup(page_html, "lxml")
-        modern = soup.select('a.ranking-card[data-scroll-restore-anchor^="new:"]')
-        if modern:
-            for item in modern:
-                title = item.select_one(".ranking-card__title")
-                aid = _app_id(item.get("href"))
-                if title and aid:
-                    games.append((title.get_text(strip=True), aid))
-            return games
         for item in soup.find_all("div", class_="list-item"):
             name_meta = item.find("meta", itemprop="name")
             if not name_meta:
@@ -272,52 +265,28 @@ def _board_games(page_html):
 
 
 def board_lists(progress=None):
-    """Read only the new-release chart, following its actual offset pagination."""
-    from .. import db
-    apps, seen_pages = {}, set()
-    report = {"scope": "new", "pages": 0, "count": 0, "complete": False}
-    offset = 0
-    for idx in range(1, 201):
+    """照 crawl_bangdan.py 翻全部榜单页。返回 {app_id: {"name", "lists": [(榜名, 名次)]}}"""
+    apps, pos, errs = {}, {}, []
+    for idx, (category, url) in enumerate(BOARD_LINKS, 1):
         if progress:
-            progress(idx, 0)
+            progress(idx, len(BOARD_LINKS))
         try:
-            query = urllib.parse.urlencode({"from": offset, "limit": 10, "platform": "android",
-                                            "type_name": "new", "X-UA": _XUA})
-            status, text = _get(BASE_URL + "/webapiv2/app-top/v2/hits?" + query, TAG_HEADERS, 20)
+            status, text = _get(url, BOARD_HEADERS, 30)
             if status != 200:
-                raise RuntimeError(f"HTTP {status}")
-            payload = json.loads(text)
-            data = payload.get("data")
-            if not isinstance(data, dict) or not isinstance(data.get("list"), list):
-                raise RuntimeError("新品榜响应缺少 data.list")
-            items = data["list"]
-            fingerprint = tuple(str((r.get("app") or {}).get("id")) for r in items)
-            if items and fingerprint in seen_pages:
-                raise RuntimeError("新品榜重复分页，未将重复页算作新增游戏")
-            seen_pages.add(fingerprint)
-            for position, row in enumerate(items, offset + 1):
-                app = row.get("app") or {}
-                if app.get("id") and app.get("title"):
-                    apps[int(app["id"])] = {"name": app["title"],
-                                            "lists": [("新品榜", position)]}
-            report.update(pages=idx, count=len(apps))
-            total = data.get("total")
-            report["declared_total"] = total
-            if len(items) < 10 or ("next_page" in data and not data["next_page"]):
-                report["complete"] = True
-                break
-            offset += len(items)
+                errs.append(f"{category} {url.split('page=')[-1]} 页：HTTP {status}")
+            else:
+                for name, aid in _board_games(text):
+                    pos[category] = pos.get(category, 0) + 1
+                    a = apps.setdefault(aid, {"name": name, "lists": []})
+                    if not any(c == category for c, _ in a["lists"]):
+                        a["lists"].append((category, pos[category]))
         except Exception as e:
-            report["error"] = str(e)[:400]
-            db.kv_set("taptap_new_coverage", report)
-            raise RuntimeError(f"TapTap 新品榜第 {idx} 页失败，已发现 {len(apps)} 款：{e}") from e
+            errs.append(f"{category} {url.split('page=')[-1]} 页：{e}")
         time.sleep(0.5)
-    db.kv_set("taptap_new_coverage", report)
-    if not report["complete"]:
-        raise RuntimeError("TapTap 新品榜超过分页安全上限，未标记为完整")
+    _say(f"TapTap 榜单·网页：{len(BOARD_LINKS)} 页，拿到 {len(apps)} 款不重复的游戏"
+         + (f"；{len(errs)} 页出错，第一个：{errs[0]}" if errs else ""))
     if not apps:
-        raise RuntimeError("TapTap 新品榜返回空列表")
-    _say(f"TapTap 新品榜：{report['pages']} 页，{len(apps)} 款")
+        raise RuntimeError(errs[0] if errs else "榜单页里找不到游戏（页面结构可能变了）")
     return apps
 
 
@@ -420,14 +389,17 @@ def parse_detail_html(app_id, page_html):
                 rel = 0
     genre = game.get("applicationSubCategory") or game.get("genre") or []
     genres = [genre] if isinstance(genre, str) else list(genre)
-    author = game.get("author") or {}
+    from ..mobile_details import taptap_companies
+    developers, publishers = taptap_companies(game, nuxt, app_id)
     return {
         "id": int(app_id), "title": game.get("name") or str(app_id), "released_time": rel,
         "description": str(game.get("description") or "")[:800],
         "stat": {"hits_total": hits if hits is not None else inter.get("userInteractionCount"), "fans_count": fans,
                  "review_count": agg.get("ratingCount"), "rating": {"score": str(agg.get("ratingValue") or "")}},
         "tags": [{"value": g} for g in genres if g],
-        "information": [{"title": "厂商", "text": author.get("name") if isinstance(author, dict) else ""}],
+        "information": [{"title": "厂商", "text": "、".join(developers)},
+                        {"title": "发行", "text": "、".join(publishers)},
+                        {"title": "文件大小", "text": str(game.get("fileSize") or "")}],
         # v51：JSON-LD 里的 image 有时是列表或 {"url": ...}，统一取成地址；没有就用网页的 og:image
         "icon": {"small_url": url_of(game.get("image")) or _og_image(page_html)},
         "source_url": f"{BASE_URL}/app/{app_id}",
@@ -451,6 +423,22 @@ def _info(app, title):
     return ""
 
 
+_SIZE_TXT = re.compile(r"([\d.]+)\s*(G|M|K)i?B?", re.I)
+
+
+def size_gb_of(text):
+    """"1.2 GB" / "856.3 MB" / "1.5G" → GB；看不懂返回 None（缺数据不算大作）。"""
+    m = _SIZE_TXT.search(str(text or ""))
+    if not m:
+        return None
+    try:
+        v = float(m.group(1))
+    except ValueError:
+        return None
+    u = m.group(2).upper()
+    return round(v if u == "G" else (v / 1024 if u == "M" else v / 1024 / 1024), 3)
+
+
 def _num(v):
     try:
         return int(float(v))
@@ -461,7 +449,7 @@ def _num(v):
 def parse_app(app):
     st = app.get("stat") or {}
     released = app.get("released_time") or (app.get("seo") or {}).get("release_time") or 0
-    preorder = app.get("button_label") == "预约"
+    preorder = (app.get("button_label") == "预约") or not released
     metrics = {
         "fans": _num(st.get("fans_count")),
         "reviews": _num(st.get("review_count")),
@@ -469,7 +457,7 @@ def parse_app(app):
     hits = _num(st.get("hits_total"))
     if hits is not None:      # 0 也是有效数字（刚上线的游戏热度就是 0），不能当成"没抓到"
         metrics["downloads"] = hits
-    if st.get("reserve_count") is not None:
+    if st.get("reserve_count"):
         metrics["reserves"] = st.get("reserve_count")
     return {
         "entity": str(app["id"]),
@@ -490,6 +478,8 @@ def parse_app(app):
             "score": ((st.get("rating") or {}).get("score")) or "",
             "icon": url_of(app.get("icon")),
             "dev": _info(app, "厂商"),
+            "publisher": _info(app, "发行"),
+            "size_gb": size_gb_of(_info(app, "文件大小") or _info(app, "大小")),
             "kind": kind_of(app),
             "lists": [],
             "url": app.get("source_url") or f"{BASE_URL}/app/{app['id']}",

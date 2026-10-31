@@ -21,7 +21,7 @@ TOP_N = 600
 SCOPES = {
     "maker": ("tapmaker", "maker", "TapTap 制造"),
     "workshop": ("tapmaker", "workshop", "创意工坊（不含 TapTap 制造）"),
-    "taptap": ("taptap", None, "TapTap 新品榜"),
+    "taptap": ("taptap", None, "TapTap 热门、热玩、新品、独家和各分类榜里的游戏"),
 }
 
 _cache = {}
@@ -287,190 +287,41 @@ def _index_series(days):
 
 # ---------------- 数据核对：某个数据源最近两次抓到的原始数字 ----------------
 def raw(source):
-    """Latest two observations per game AND metric, never a platform-wide timestamp."""
-    now = int(time.time())
     with db.session() as c:
-        sources = [r[0] for r in c.execute("SELECT DISTINCT source FROM entities ORDER BY source")
-                   if config.source_on(r[0])]
-        entities = {}
-        for e, n, fs, ls, x in c.execute(
-                "SELECT entity,name,first_seen,last_seen,extra FROM entities WHERE source=?",
-                (source,)):
-            if e == "__index__":
-                continue
-            try:
-                extra = json.loads(x or "{}")
-            except ValueError:
-                extra = {}
-            entities[e] = {"name": n, "extra": extra, "first_seen": fs, "last_seen": ls}
+        sources = [r[0] for r in c.execute("SELECT DISTINCT source FROM entities ORDER BY source")]
+        tss = [r[0] for r in c.execute(
+            "SELECT DISTINCT ts FROM metrics WHERE source = ? AND entity != '__index__' ORDER BY ts DESC LIMIT 2",
+            (source,))]
+        names, urls = {}, {}
+        for e, n, x in c.execute("SELECT entity, name, extra FROM entities WHERE source = ?", (source,)):
+            names[e] = n
+            if x and '"url"' in x:
+                try:
+                    urls[e] = (json.loads(x) or {}).get("url") or ""
+                except ValueError:
+                    pass
         cur, prev = defaultdict(dict), defaultdict(dict)
-        sampled, previous_at = defaultdict(dict), defaultdict(dict)
-        for e, m, v, ts, rn in c.execute(
-                """SELECT entity,metric,value,ts,rn FROM (
-                SELECT entity,metric,value,ts,
-                ROW_NUMBER() OVER(PARTITION BY entity,metric ORDER BY ts DESC) rn
-                FROM metrics WHERE source=? AND entity!='__index__'
-                AND metric NOT LIKE '%_g24') WHERE rn<=2""", (source,)):
-            if e not in entities:
-                continue
-            if rn == 1:
-                cur[e][m], sampled[e][m] = v, ts
+        sampled_at = {}
+        # Detail collectors write at different times; a global MAX(ts) loses most games.
+        for e, m, v, ts, sample in c.execute(
+                """SELECT entity, metric, value, ts, sample FROM (
+                       SELECT entity, metric, value, ts,
+                              ROW_NUMBER() OVER (PARTITION BY entity, metric ORDER BY ts DESC) AS sample
+                       FROM metrics WHERE source=? AND entity!='__index__'
+                   ) WHERE sample<=2""", (source,)):
+            if sample == 1:
+                cur[e][m] = v
+                sampled_at[e] = max(sampled_at.get(e, 0), ts)
             else:
-                prev[e][m], previous_at[e][m] = v, ts
+                prev[e][m] = v
         fetches = c.execute("SELECT COUNT(DISTINCT ts) FROM metrics WHERE source = ? AND entity != '__index__'",
                             (source,)).fetchone()[0]
     st = (db.kv_get("source_status", {}) or {}).get(source, {})
-    rows = []
-    for e, ent in entities.items():
-        x = ent["extra"]
-        ts = max(sampled[e].values(), default=None)
-        rows.append({"key": f"{source}:{e}", "id": e, "name": ent["name"],
-                     "cur": cur[e], "prev": prev[e], "sampled": sampled[e],
-                     "unverified_zero": [m for m, v in cur[e].items()
-                         if source == "steam" and m == "players" and v == 0
-                         and x.get("players_verified_at") != sampled[e].get(m)],
-                     "previous_at": previous_at[e], "ts": ts,
-                     "stale": bool(ts and now - ts > 36 * 3600),
-                     "state": "sampled" if ts else ("error" if x.get("fetch_error") else "pending"),
-                     "error": x.get("fetch_error") or "",
-                     "first_seen": ent["first_seen"], "last_seen": ent["last_seen"],
-                     "release": x.get("release_ts") or x.get("released_time") or x.get("created_ts") or 0,
-                     "url": x.get("url") or x.get("source_url") or "", "extra": x})
-    return {"source": source, "sources": sources,
-            "ts": max((r["ts"] for r in rows if r["ts"]), default=None),
-            "prev_ts": max((t for times in previous_at.values() for t in times.values()), default=None),
-            "fetches": fetches, "entities": len(entities),
-            "metrics": sorted({m for d in cur.values() for m in d}), "rows": rows, "status": st,
-            "sampled_count": sum(bool(r["cur"]) for r in rows),
-            "pending_count": sum(not r["cur"] for r in rows)}
-
-
-_GROWTH_METRICS = {"players", "downloads", "fans", "reviews", "store_reviews",
-                   "reserves", "rooms", "viewers", "visits", "views", "videos"}
-
-
-def _new_reason(row, source, now):
-    x = row["extra"]
-    if x.get("gone") or x.get("coming_soon") or x.get("preorder"):
-        return None
-    if source == "steam" and x.get("type", "game") != "game":
-        return None
-    release = row["release"]
-    if release:
-        return "近15天上线" if 0 <= now - release <= config.RISING_DAYS * 86400 else None
-    # A new-release board is explicit evidence, not an inferred release date.
-    if "rank_new" in row["cur"] or x.get("new_candidate") or any(
-            any(word in label for word in ("新游榜", "新品榜", "热门新品", "近期发行"))
-            for label in x.get("lists", [])):
-        return "新游榜 · 发行日期待核实"
-    if source in ("roblox", "fortnite", "itch", "poki", "crazygames",
-                  "huya", "douyu", "bili", "twitch", "kick", "mistore",
-                  "wxmini", "appcn", "appus", "tapmaker"):
-        if row["first_seen"] and 0 <= now - row["first_seen"] <= config.RISING_DAYS * 86400:
-            return "近15天首次发现 · 发行日期待核实"
-    return None
-
-
-def rising(source):
-    """Rank observed growth in recent games; keep new games awaiting a baseline visible."""
-    return _cached(("rising", source), 30, lambda: _rising(source))
-
-
-def _rising(source):
-    from . import heat, match
-    now = int(time.time())
-    data = raw(source)
-    baselines = {}
-    with db.session() as c:
-        for e, m, v, ts in c.execute("""
-            WITH latest AS (
-                SELECT entity,metric,MAX(ts) ts FROM metrics
-                WHERE source=? AND entity!='__index__' GROUP BY entity,metric
-            ), ranked AS (
-                SELECT p.entity,p.metric,p.value,p.ts,
-                    ROW_NUMBER() OVER(PARTITION BY p.entity,p.metric
-                        ORDER BY ABS(l.ts-p.ts-86400),p.ts DESC) rn
-                FROM metrics p JOIN latest l ON p.entity=l.entity AND p.metric=l.metric
-                WHERE p.source=? AND p.ts BETWEEN l.ts-259200 AND l.ts-3600
-            ) SELECT entity,metric,value,ts FROM ranked WHERE rn=1
-            """, (source, source)):
-            baselines[(e, m)] = (v, ts)
-    big_words = [match.normalize(n) for n in config.KW_BIG_GAMES if match.normalize(n)]
-    candidates, excluded = [], {"old": 0, "big": 0}
-    no_growth_count = 0
-    for row in data["rows"]:
-        reason = _new_reason(row, source, now)
-        if not reason:
-            excluded["old"] += 1
-            continue
-        ent = {"name": row["name"], "extra": row["extra"]}
-        if heat.big_reason([row["key"]], {(source, row["id"]): ent},
-                           [match.normalize(row["name"])], big_words):
-            excluded["big"] += 1
-            continue
-        options = []
-        uncertain_baseline = False
-        x = row["extra"]
-        for metric, current in row["cur"].items():
-            rank = metric.startswith("rank_")
-            if metric not in _GROWTH_METRICS and not rank:
-                continue
-            baseline = baselines.get((row["id"], metric))
-            previous = baseline[0] if baseline else None
-            current_ts = row["sampled"].get(metric)
-            previous_ts = baseline[1] if baseline else None
-            if not current_ts or now - current_ts > 36 * 3600 or metric == "rank_expect":
-                continue
-            evidence = "observed"
-            # Rank changes published by the platform have their own provenance.
-            mark = (x.get("marks") or {}).get(metric)
-            if previous is None and rank and isinstance(mark, (int, float)) and mark > 0:
-                previous, evidence = current + mark, "platform_rank_change"
-            if previous is None:
-                continue
-            if source == "steam" and metric == "players" and previous == 0 and (
-                    previous_ts not in x.get("players_zero_verified", [])):
-                uncertain_baseline = True
-                continue
-            hours = (current_ts - previous_ts) / 3600 if current_ts and previous_ts else None
-            if evidence == "observed" and (hours is None or hours < 1 or hours > 72):
-                continue
-            delta = previous - current if rank else current - previous
-            if delta <= 0 or (not rank and current < 0):
-                continue
-            fraction = delta / previous if previous > 0 else None
-            options.append({"metric": metric, "value": current, "previous": previous,
-                            "delta": delta, "growth": fraction, "hours": hours,
-                            "sampled": current_ts, "previous_ts": previous_ts,
-                            "kind": "rank" if rank else "level", "evidence": evidence,
-                            "state": "growth" if fraction is not None else "zero_baseline"})
-        if options:
-            best = max(options, key=lambda r: (r["growth"] is not None,
-                                               r["growth"] or 0, r["delta"]))
-        else:
-            metrics = [m for m in row["cur"] if m in _GROWTH_METRICS or m.startswith("rank_")]
-            if not uncertain_baseline and any((row["id"], m) in baselines and
-                    now - row["sampled"].get(m, 0) <= 36 * 3600 for m in metrics):
-                no_growth_count += 1
-                continue
-            metric = next((m for m in ("players", "downloads", "rank_new") if m in metrics),
-                          metrics[0] if metrics else None)
-            best = {"metric": metric, "value": row["cur"].get(metric), "previous": None,
-                    "delta": None, "growth": None, "hours": None, "sampled": row["sampled"].get(metric),
-                    "kind": "rank" if metric and metric.startswith("rank_") else "level",
-                    "state": "baseline_pending" if metrics else "sample_pending"}
-        candidates.append({**best, "key": row["key"], "id": row["id"], "name": row["name"],
-                           "release": row["release"], "why": reason, "url": row["url"],
-                           "stale": bool(best.get("sampled") and now - best["sampled"] > 36 * 3600),
-                           "error": row["error"]})
-    order = {"growth": 0, "zero_baseline": 1, "baseline_pending": 2,
-             "sample_pending": 3, "no_positive_growth": 4}
-    candidates.sort(key=lambda r: (order[r["state"]], -(r["growth"] or 0),
-                                    -(r["delta"] or 0), r["name"]))
-    return {"source": source, "days": config.RISING_DAYS, "rows": candidates,
-            "measured": sum(r["state"] in ("growth", "zero_baseline") for r in candidates),
-            "total": len(data["rows"]), "excluded": excluded,
-            "no_growth_count": no_growth_count, "updated": now}
+    rows = [{"key": f"{source}:{e}", "id": e, "name": names.get(e, e), "cur": cur[e], "prev": prev.get(e, {}),
+             "url": urls.get(e, ""), "sampled_at": sampled_at[e]} for e in cur if e != "__index__"]
+    return {"source": source, "sources": sources, "ts": tss[0] if tss else None,
+            "prev_ts": tss[1] if len(tss) > 1 else None, "fetches": fetches, "entities": len(names),
+            "metrics": sorted({m for d in cur.values() for m in d}), "rows": rows, "status": st}
 
 
 # ---------------- 新冒头：最近才出现、或刚上线不久的 ----------------

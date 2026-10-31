@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 from itertools import combinations
 
 from . import bili_queue, config, db
-from .sources import bili
+from . import bili_realtime_client as bili
 
 REVISION = "2026-10-27-tag-growth-v1"
 SCHEMA = """

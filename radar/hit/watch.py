@@ -112,7 +112,7 @@ def _loop(stop):
                     activity.say("成功案例：补了 %d 个 UP 的平时播放基线" % n)
         except bili.RiskError as e:
             bili.note_risk(e)
-            activity.say("成功案例：B站风控，暂停 %d 分钟" % (bili.pause_left() // 60))
+            activity.say("成功案例：" + bili.pause_message())
         except Exception as e:                    # noqa: BLE001
             last["err"] += 1
             activity.say("成功案例值守出错：%s" % e)

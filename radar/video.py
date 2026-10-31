@@ -76,15 +76,15 @@ def growth(points):
     return result
 
 
-def summary(now=None, include_legacy=True):
+def summary(now=None):
     now = int(time.time() if now is None else now)
-    videos, points = [], defaultdict(list)
-    if include_legacy:
-        init()
-        with db.session() as c:
-            videos = [dict(r) for r in c.execute("SELECT * FROM video_records ORDER BY last_seen DESC LIMIT 1000")]
-            for r in c.execute("SELECT bvid,ts,views FROM video_samples WHERE ts>=? ORDER BY ts", (now - 8 * 86400,)):
-                points[r[0]].append((r[1], r[2]))
+    risk = bili.risk_status()
+    init()
+    with db.session() as c:
+        videos = [dict(r) for r in c.execute("SELECT * FROM video_records ORDER BY last_seen DESC LIMIT 1000")]
+        points = defaultdict(list)
+        for r in c.execute("SELECT bvid,ts,views FROM video_samples WHERE ts>=? ORDER BY ts", (now - 8 * 86400,)):
+            points[r[0]].append((r[1], r[2]))
     rows = []
     for v in videos:
         p = points.get(v["bvid"], [])
@@ -98,6 +98,8 @@ def summary(now=None, include_legacy=True):
         v["fast"] = not v["stale"] and v["growth"].get("rate", 0) >= config.BVIDEO_FAST_VIEWS_PER_HOUR
         v["attention"] = not v["stale"] and (v["fast"] or (recent and v["views"] >= config.BVIDEO_EARLY_VIEWS))
         v["reason"] = ("播放加速" if v["fast"] else "近期高播放") if v["attention"] else ("数据过期" if v["stale"] else "持续观察")
+        if risk:
+            v.update(fast=False, attention=False, reason="暂停前历史数据")
         v["origins"] = json.loads(v["origins"])
         v["game_ids"] = json.loads(v["game_ids"])
         v["url"] = "https://www.bilibili.com/video/" + v["bvid"] + "/"
@@ -112,79 +114,68 @@ def summary(now=None, include_legacy=True):
                          "new_24h": sum(0 <= now - v["published"] <= 86400 for v in matches),
                          "observed_delta": sum(v["growth"].get("delta", 0) for v in fresh),
                          "windows": sum(bool(v["growth"]) for v in fresh)})
-    st = db.kv_get("video_collection", {}) or {}
+    st = dict(db.kv_get("video_collection", {}) or {})
     status = "未采集"
     if st.get("ts"):
         status = "失败" if st.get("failed") else ("覆盖不全" if st.get("errors") else "已采样")
         if now - st["ts"] > max(7200, config.BVIDEO_MINUTES * 180):
             status = "数据过期"
+    if risk:
+        status = ("等待历史客户端退避结束" if risk.get("legacy") else
+                  "已暂停，接口要求验证" if risk.get("verification_required") else
+                  "已暂停，等待人工检查" if not risk.get("retry_at") else "等待平台允许重试")
+    elif st.get("deferred"):
+        status = "等待恢复采样"
+        st.update(deferred=False, awaiting_sample=True, deferred_reason="")
     authors = {v["owner_id"] for v in rows if v["attention"] and v["owner_id"]}
-    from . import bili_daily, bili_stream
-    return {"status": status, "collection": st, "rows": rows,
+    fallback = {"mode": "history" if risk and rows else "unavailable" if risk else "live",
+                "samples": len(rows), "latest_sample_ts": max((v["sample_ts"] for v in rows), default=None)}
+    return {"status": status, "collection": st, "rows": rows, "risk": risk, "fallback": fallback,
+            "pause_message": bili.pause_message() if risk else "",
             "total": len(videos), "attention": sum(v["attention"] for v in rows),
-            "authors": len(authors), "searches": searches,
-            "stream": bili_stream.summary() if config.BVIDEO_STREAM_ENABLED else None,
-            "daily": bili_daily.summary() if config.BVIDEO_DAILY_ENABLED else None}
+            "authors": len(authors), "searches": searches}
 
 
 def collect():
     """Independent discovery plus targeted search plus persistent ID tracking."""
     init()
     now, errors, fetched = int(time.time()), [], set()
+    previous = db.kv_get("video_collection", {}) or {}
+    deferred = bili.pause_message()
     endpoints = []
-    partition = {"pages": 0, "count": 0, "complete": False}
-    coverage = "游戏分区最新投稿抽样、有限榜单、关键词与已发现视频；非游戏区每日全量"
     def ingest(records, origin):
         save(records, origin)
         fetched.update(v["bvid"] for v in records if _BV.fullmatch(v.get("bvid") or ""))
         db.kv_set("video_collection", {"ts": now, "count": len(fetched), "running": True,
                   "errors": errors[:40], "failed": False, "endpoints": endpoints,
-                  "coverage": coverage, "partition": dict(partition)})
-    if bili.paused():
-        errors.append("B站全局风控暂停中，还剩 %d 分钟" % ((bili.pause_left() + 59) // 60))
-    else:
-        seen = set()
-        for pn in range(1, max(1, int(getattr(config, "BVIDEO_NEWLIST_PAGES", 3))) + 1):
-            try:
-                records = [bili.video_record(v) for v in bili.newlist(pn)]
-                partition["pages"] += 1
-                seen.update(v["bvid"] for v in records if _BV.fullmatch(v["bvid"]))
-                partition["count"] = len(seen)
-                ingest(records, "游戏分区最新")
-                if "游戏分区最新" not in endpoints:
-                    endpoints.append("游戏分区最新")
-                if not records:
-                    break
-            except Exception as e:
-                errors.append("游戏分区最新：" + str(e)[:180])
-                break
-        if not bili.paused():
-            try:
-                records, warnings = bili.game_videos()
-                ingest(records, "游戏排行／热门")
-                errors.extend(warnings)
-                endpoints.append("游戏排行／热门")
-            except Exception as e:
-                errors.append("排行／热门：" + str(e)[:180])
-    stop_search = False
-    for term in config.BVIDEO_SEARCH_TERMS[:8] if not bili.paused() else []:
-        if stop_search or bili.paused():
-            break
-        if bili.paused("搜索"):
-            if not any(e.startswith("搜索：") for e in errors):
-                errors.append("搜索：风控暂停，保留其他入口的采集结果")
-            break
+                  "coverage": "有限榜单、配置的关键词与已发现视频；不代表B站全站"})
+    if not deferred:
+        try:
+            records, warnings = bili.game_videos()
+            origin = records[0].get("discovery_source", "游戏排行／热门") if records else "游戏排行／热门"
+            ingest(records, origin)
+            errors.extend(warnings)
+            endpoints.append(origin)
+        except bili.RiskError as e:
+            deferred = str(e)
+        except Exception as e:
+            errors.append("发现入口：" + str(e)[:180])
+    for term in config.BVIDEO_SEARCH_TERMS[:8]:
         for order in ("pubdate", "click"):
+            if deferred or bili.paused():
+                deferred = deferred or bili.pause_message()
+                break
             try:
                 ingest(bili.search_videos(term, order), "搜索：" + term)
                 endpoints.append("搜索：" + term + "/" + order)
             except bili.RiskError as e:
-                errors.append("搜索：" + str(e)[:120])
-                stop_search = True
+                deferred = str(e)
                 break
             except Exception as e:
                 errors.append("搜索 " + term + "：" + str(e)[:120])
             time.sleep(0.3)
+    if bili.paused():
+        deferred = deferred or bili.pause_message()
     with db.session() as c:
         tracked = [r[0] for r in c.execute(
             """SELECT v.bvid FROM video_records v LEFT JOIN video_samples s ON v.bvid=s.bvid
@@ -199,7 +190,8 @@ def collect():
             (config.BVIDEO_DETAIL_PER_RUN,))]
     detail_ids = list(dict.fromkeys(detail_ids + new))
     for bvid in detail_ids:
-        if bili.paused() or bili.paused("视频详情"):
+        if deferred or bili.paused():
+            deferred = deferred or bili.pause_message()
             break
         if time.time() - now > 180:
             errors.append("本轮采样时间已到，剩余 BV 号下一轮继续")
@@ -209,18 +201,27 @@ def collect():
         try:
             ingest([bili.video_detail(bvid)], "BV持续追踪")
         except bili.RiskError as e:
-            errors.append("视频详情：" + str(e)[:120])
+            deferred = str(e)
             break
         except Exception as e:
             errors.append(bvid + "：" + str(e)[:100])
         time.sleep(0.3)
     report = {"ts": now, "count": len(fetched), "errors": errors[:40],
-              "failed": not bool(fetched), "endpoints": endpoints,
+              "failed": not bool(fetched) and not bool(deferred), "endpoints": endpoints,
+              "deferred": bool(deferred), "deferred_reason": deferred,
+              "last_ok_ts": now if fetched else previous.get("last_ok_ts", previous.get("ts") if previous.get("count") else None),
+              "last_count": len(fetched) if fetched else previous.get("last_count", previous.get("count", 0)),
               "search_terms": config.BVIDEO_SEARCH_TERMS,
-              "coverage": coverage, "partition": partition,
+              "coverage": "有限榜单、配置的关键词与已发现视频；不代表B站全站",
               "tracked": len(detail_ids)}
     db.kv_set("video_collection", report)
     from . import collect as collectors
+    if deferred:
+        if fetched:
+            collectors._status("bvideo", True, len(fetched), warn="后续采样暂停")
+        collectors._deferred("bvideo", deferred)
+        activity.say(f"B站视频：已保留本轮 {len(fetched)} 个BV号；后续采样暂停")
+        raise bili.RiskError(deferred)
     collectors._status("bvideo", bool(fetched), len(fetched),
                        err="；".join(errors[:3]) if not fetched else "",
                        warn="；".join(errors[:3]))
@@ -257,6 +258,10 @@ def notify_hotspots():
 
 
 def start(stop_event=None):
+    if config.BVIDEO_STREAM_ENABLED:
+        from . import bili_latest
+        bili_latest.start(stop_event)
+        return
     global _started
     with _lock:
         if _started:
@@ -271,41 +276,15 @@ def start(stop_event=None):
                 try:
                     collect()
                     notify_hotspots()
+                except bili.RiskError:
+                    pass
                 except Exception as e:
                     activity.say(str(e))
                 next_video = time.time() + max(5, config.BVIDEO_MINUTES) * 60
             stop.wait(5)
     def release_loop():
+        from . import steam_cycle
         stop = stop_event or threading.Event()
-        while not stop.is_set():
-            if config.source_on("steam"):
-                try:
-                    seeded = steam.seed_recent_releases()
-                    if seeded:
-                        activity.say(f"Steam 新游进入实时追踪池：{seeded} 款")
-                    count = steam.scan_recent_releases()
-                    seeded += steam.seed_recent_releases()
-                    sampled, errors = steam.refresh_discovered()
-                    db.kv_set("release_discovery", {"ts": int(time.time()), "count": count,
-                                                   "seeded": seeded, "sampled": sampled,
-                                                   "error": "；".join(errors[:3])})
-                    activity.say(f"Steam 近期发行独立扫描：{count} 款")
-                    from . import server
-                    server.RUN_NOW.set()
-                except Exception as e:
-                    previous = db.kv_get("release_discovery", {}) or {}
-                    previous.update(error=str(e)[:200], err_ts=int(time.time()))
-                    db.kv_set("release_discovery", previous)
-                    activity.say("Steam 近期发行扫描失败：" + str(e)[:160])
-            stop.wait(1800)
-    if config.BVIDEO_STREAM_ENABLED:
-        from . import bili_stream
-        bili_stream.start(stop_event)
-    if config.BVIDEO_DAILY_ENABLED:
-        from . import bili_daily
-        bili_daily.start(stop_event)
-    else:
-        threading.Thread(target=loop, name="video-discovery", daemon=True).start()
-    from . import bili_term_filter
-    bili_term_filter.start(stop_event)
-    # Steam discovery now belongs to its persistent twice-daily sampling job.
+        steam_cycle.loop(stop)
+    threading.Thread(target=loop, name="video-discovery", daemon=True).start()
+    threading.Thread(target=release_loop, name="release-discovery", daemon=True).start()

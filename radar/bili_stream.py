@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 from . import activity, bili_daily, bili_queue, bili_terms, config, db
-from .sources import bili
+from . import bili_realtime_client as bili
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS bs_partitions(

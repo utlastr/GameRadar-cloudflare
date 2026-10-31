@@ -90,16 +90,6 @@ th.sorted{color:var(--accent)}
 td.nowrap{white-space:nowrap}
 .dense td{padding:8px 14px}
 .dense th{padding:8px 14px}
-.heat-table{min-width:1000px;table-layout:fixed}
-.heat-table th:nth-child(1){width:58px}
-.heat-table th:nth-child(2){width:340px}
-.heat-table th:nth-child(3){width:124px}
-.heat-table th:nth-child(4){width:230px}
-.heat-table th:nth-child(5){width:220px}
-.heat-table th:nth-child(6){width:130px}
-.heat-table th:nth-child(7){width:110px}
-.heat-table td{vertical-align:top;overflow-wrap:anywhere}
-[data-heatq]{max-width:100%}
 .g-name{font-weight:600}
 .g-alt{color:var(--muted);font-size:12px;margin-top:1px}
 .score{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:24px;padding:0 8px;border-radius:12px;font-weight:600}
@@ -192,6 +182,25 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
 .veto{background:var(--hot-weak);color:#912018;border-radius:6px;padding:9px 12px;font-size:12px;margin-bottom:12px}
 .kv{display:grid;grid-template-columns:88px 1fr;gap:6px 12px;font-size:12px}
 .kv .k{color:var(--muted)}
+/* v92 详情：顶上一句热度 + 一张图，下面用标签页 */
+.hero .big{font-size:20px;font-weight:600;line-height:1.35}
+.hero .mult{font-size:15px;font-weight:600;color:var(--hot);margin-top:2px}
+.hero .sub{font-size:12px;color:var(--text-2);margin-top:6px;line-height:1.6}
+.hero .rank{float:right;font-size:12px;color:var(--text-2);background:var(--hover);border-radius:4px;padding:2px 8px}
+.manual{font-size:12px;color:var(--text-2);line-height:1.8;background:var(--subtle);border:1px solid var(--divider);border-radius:6px;padding:10px 12px;margin-top:8px}
+.manual b{color:var(--text)}
+details.how{margin-top:8px}
+details.how summary{cursor:pointer;color:var(--accent);font-size:12px;display:inline-block}
+.dtabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-top:4px;position:sticky;top:0;background:var(--surface);z-index:2;overflow-x:auto}
+.dtabs button{border:none;background:none;padding:10px 12px;font-size:13px;color:var(--text-2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.dtabs button:hover{color:var(--text)}
+.dtabs button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.dpane{display:none;padding:16px 0}
+.dpane.on{display:block}
+.kv.big{grid-template-columns:96px 1fr;gap:9px 12px;font-size:13px}
+.legend-row{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text-2);margin-top:6px}
+.legend-row i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.legend-row i.band{height:10px;opacity:.5}
 .live{display:flex;align-items:center;gap:8px;color:var(--text-2);font-size:12px;min-width:0;max-width:520px}
 .live .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pulse{width:8px;height:8px;border-radius:50%;background:var(--border-strong);flex:none}
@@ -201,6 +210,10 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
 .prog i{display:block;height:100%;background:var(--ok);transition:width .4s}
 .nowcard{display:flex;align-items:center;gap:14px}
 .nowcard .big{font-size:15px;font-weight:600}
+.activity-task{margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
+.activity-task-head{display:flex;align-items:baseline;gap:10px;min-width:0;font-size:12px}
+.activity-task-head strong{flex:none;font-weight:600}
+.activity-task-head span{min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .term{background:#0c111d;color:#d0d5dd;font:12px/1.65 Consolas,"Cascadia Mono","Courier New",monospace;padding:12px 16px;height:420px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .term .e{color:#f97066} .term .g{color:#6ce9a6} .term .m{color:#667085}
 .banner{background:var(--accent-weak);color:#1e40af;border:1px solid #c7d7fe;border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:12px;display:flex;align-items:center;gap:12px}
@@ -212,20 +225,6 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
 /* 各平台：左边平台目录，右边选中平台 */
 .pl{display:grid;grid-template-columns:248px minmax(0,1fr);gap:20px;align-items:start}
 .pl-main{min-width:0}
-.growth-table{min-width:850px}
-.growth-table td:nth-child(2){min-width:180px;max-width:260px}
-.growth-table td:nth-child(n+3){white-space:nowrap}
-.raw-table td:first-child{min-width:180px}
-.raw-table td:nth-child(n+2){white-space:nowrap}
-.bili-growth-table{min-width:1050px;table-layout:fixed}
-.bili-growth-table th:first-child{width:290px}
-.bili-growth-table td:first-child{overflow-wrap:anywhere}
-.bili-growth-table details{font-weight:400}
-.bili-growth-table summary{cursor:pointer;font-weight:600}
-.bili-growth-evidence{padding-top:8px;font-size:12px}
-.bili-growth-edge{border-top:1px solid var(--divider);padding:6px 0;line-height:1.7}
-.bili-growth-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.bili-growth-controls input{max-width:100%;min-width:0}
 .pd{position:sticky;top:76px;max-height:calc(100vh - 100px);overflow-y:auto;padding:6px 0}
 .pd-g{padding:4px 8px 8px}
 .pd-g + .pd-g{border-top:1px solid var(--divider);padding-top:8px}
@@ -251,19 +250,7 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
 .todo .kv{grid-template-columns:96px 1fr;font-size:13px;gap:10px 16px}
 /* 视频平台大厅（抖音 / 快手 / 小红书 / TikTok / 指数） */
 .pd-h.hub{cursor:pointer;border-radius:6px}
-.pd-h.hub{width:100%;border:0;background:transparent;text-align:left;font-family:inherit}
 .pd-h.hub:hover,.pd-h.hub.on{background:var(--accent-weak);color:var(--accent)}
-.platform-status{margin-bottom:22px}
-.platform-status-head{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}
-.platform-status-head h3{font-size:14px;font-weight:600;margin:0}
-.platform-status-head span{font-size:12px;color:var(--muted)}
-.platform-status-table{min-width:760px;table-layout:fixed}
-.platform-status-table th:nth-child(1){width:125px}
-.platform-status-table th:nth-child(2){width:82px}
-.platform-status-table th:nth-child(3){width:115px}
-.platform-status-table th:nth-child(4),.platform-status-table th:nth-child(5){width:110px}
-.platform-status-table td{vertical-align:top;overflow-wrap:anywhere}
-.platform-status-table .platform-status-note{font-size:12px;color:var(--text-2);line-height:1.6}
 .soc-jobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
 .soc-job{border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:var(--subtle);font-size:12px}
 .soc-job b{font-size:12.5px;display:flex;align-items:center;gap:6px;margin-bottom:2px}
@@ -272,7 +259,7 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
 .soc-err{color:var(--hot)}
 
 @media (max-width:960px){
-  .app{grid-template-columns:minmax(0,1fr);height:auto}
+  .app{grid-template-columns:1fr;height:auto}
   aside{border-right:none;border-bottom:1px solid var(--border)}
   .brand{padding:14px 16px}
   nav{flex-direction:row;overflow-x:auto;padding:6px 8px}
@@ -280,7 +267,6 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
   .nav-group,.side-foot{display:none}
   .topbar,.content{padding-left:16px;padding-right:16px}
   .topbar .desc{display:none}
-  .topbar .right{min-width:0}
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .grid2{grid-template-columns:1fr}
   .breakdown.b4{grid-template-columns:repeat(2,1fr)}
@@ -316,11 +302,11 @@ select.sel:focus,input.search:focus{outline:none;border-color:var(--accent);box-
 <script>
 const SRC = {steam:"Steam", roblox:"Roblox", taptap:"TapTap", tapmaker:"TapTap制造", huya:"虎牙", douyu:"斗鱼", huya_kw:"虎牙标题词", douyu_kw:"斗鱼标题词", huya_t:"虎牙标题", douyu_t:"斗鱼标题", analyze:"分析打分",
   haoyou:"好游快爆", mistore:"小米商店", appcn:"App Store 中国", appus:"App Store 美国", itch:"itch.io", poki:"Poki", crazygames:"CrazyGames", fortnite:"Fortnite 创意地图",
-  kick:"Kick", twitch:"Twitch", twitch_t:"Twitch标题", bili:"B站直播", bili_t:"B站直播标题", bvideo:"B站视频",
+  kick:"Kick", twitch:"Twitch", twitch_t:"Twitch标题", bili:"B站直播", bili_t:"B站直播标题", bvideo:"B站视频", youtube:"YouTube",
   wxmini:"微信小游戏", dymini:"抖音小游戏"};
 const MET = {players:"在线人数", heat:"直播热度", rooms:"主播数", downloads:"累计热度", reserves:"预约数", fans:"关注数", reviews:"评论数", visits:"累计访问", viewers:"观看人数", videos:"视频数", views:"播放量", rank:"名次"};
 const PAGES = [
-  {k:"heat", t:"热度"},
+  {k:"must", t:"必看"},
   {k:"hit", t:"成功案例"},
   {k:"plat", t:"各平台"},
   {k:"status", t:"运行情况"},
@@ -342,57 +328,43 @@ const PLAT_DIR = [
     {src:"huya"}, {src:"douyu"}, {src:"bili"}, {src:"twitch", todo:"Twitch"}, {src:"kick"},
     {todo:"抖音直播 / 快手直播", t:"抖音 / 快手直播"}, {todo:"YouTube 直播 / YouTube Shorts", t:"YouTube 直播"}]},
   {k:"video", t:"视频平台", items:[
-    {src:"bvideo"}, {soc:"douyin", t:"抖音"},
+    {src:"bvideo"}, {src:"youtube", t:"YouTube"}, {soc:"douyin", t:"抖音"},
     {soc:"kuaishou", t:"快手"}, {soc:"xiaohongshu", t:"小红书"}, {soc:"tiktok", t:"TikTok"},
     {todo:"YouTube 直播 / YouTube Shorts", t:"YouTube Shorts"}]},
-  {k:"index", t:"趋势指数", items:[
-    {soc:"douyin_index", t:"抖音指数"}, {soc:"bili_index", t:"哔哩指数"}]},
 ];
-const HUBS = {store:"综合应用商店大厅",mini:"小游戏平台大厅",live:"直播平台大厅",video:"视频平台大厅",index:"趋势指数"};
+const HUBS = {video:"视频平台大厅"};      // 点分组标题进汇总大厅；以后应用商店 / 小游戏 / 直播也可以加
 const itemId = it => it.soc ? "soc:"+it.soc : (it.src || ("todo:"+it.t));
 const PLAT_ITEMS = PLAT_DIR.flatMap(g=>g.items.map(it=>Object.assign({g:g.k, id:itemId(it)}, it)));
 const PLATS = PLAT_ITEMS.filter(it=>it.src).map(it=>it.src);
 const PLAT_ABOUT = {
   appcn:"App Store 中国区游戏免费榜、畅销榜、新游榜的名次和上线日期", appus:"App Store 美国区游戏免费榜、畅销榜、新游榜的名次和上线日期",
   mistore:"小米应用商店网页版游戏排行的名次", steam:"在线人数、评论数、上线日期、价格和折扣",
-  taptap:"仅新品榜，以及每个游戏的官方热度、关注数和评价数", tapmaker:"TapTap 制造（玩家自制游戏）的官方热度、关注数、上线日期",
+  taptap:"热门、新品、预约等榜单，以及每个游戏的官方热度和预约数", tapmaker:"TapTap 制造（玩家自制游戏）的官方热度、关注数、上线日期",
   haoyou:"新品、本周热门、热门、预约、玩家自制 5 个榜的名次和上线时间", roblox:"热门体验的在线人数和累计访问",
   fortnite:"官方 13 个玩法分类排行，以及每张地图的在线人数", crazygames:"首页热门游戏的名次", poki:"本周热门游戏的名次",
   itch:"“新而热门”和网页游戏两个榜的名次",
   wxmini:"人气榜、最多人玩榜、畅销榜各前 100 名（按天出榜，数据来自引力引擎小游戏排行榜）",
-  dymini:"抖音官方新游、热门、畅销、发行人热度榜，各前 200 名",
+  dymini:"人气榜、新游榜、畅销榜各前 100 名（按天出榜，数据来自引力引擎小游戏排行榜）",
   huya:"游戏区所有直播间：每个分区几个主播在播、直播热度", douyu:"游戏区所有直播间：每个分区几个主播在播、直播热度",
   bili:"网游、手游、单机三个大分区的直播间：每个分区几个主播在播", twitch:"所有直播间：每个分类几个主播在播、观看人数", kick:"每个游戏分类的观看人数（Kick 不给主播数）",
-  bvideo:"旧游戏分区最新投稿与每日补采"};
+  bvideo:"按 BV 号记录视频、作者、发布时间和播放采样；游戏归属按 ID 核对"};
 function todoOf(name){ return (S.todo||[]).find(x=>x.name===name); }
 // 一个平台现在的状态：ok 正常 / err 失败 / todo 没接上（或缺密钥）/ wait 还没抓过
 function itemState(it){
   if(it.soc) return socState(it.soc);
-  if(it.src==="steam"){
-    const p=S.steam_priority||{}, results=(p.results||[]).filter(r=>r.metrics?.players!=null);
-    if((results.length || p.running) && !p.stale){
-      const stamp=results.length?Math.max(...results.map(r=>r.ts)):p.ts;
-      const progress=p.phase==="discovery"?"正在扫描近15天发行游戏":`本轮在线采样 ${p.completed??results.length} / ${p.total??"?"} 款`;
-      return {k:"ok",t:ago(stamp),v:{ok_ts:stamp,sample_progress:progress,error:"",
-        warn:p.errors?.length?`${p.errors.length} 项采样异常`:""}};
-    }
+  if(it.src==="youtube"){
+    const y=S.youtube||{}, w=y.window||{}, f=y.fields||{};
+    if(!y.api_key_configured) return {k:"todo",t:"缺 API Key",todo:{why:"settings.json 未配置 YOUTUBE_API_KEY",need:"配置 YouTube Data API v3 的 API Key"}};
+    if(w.status==="error") return {k:"err",t:"失败",v:{err_ts:w.updated,error:w.error}};
+    if(w.status==="pagination_exhausted") return {k:"ok",t:"API 分页结束 "+fmt(y.window_video_count||0)+" 条",v:{ok_ts:w.updated,count:y.window_video_count}};
+    if(w.status==="quota_limited"||w.status==="paused"||w.status==="details_pending"||w.status==="running")
+      return {k:"wait",t:w.status==="running"?"采集中":w.status==="quota_limited"?"达到今日搜索额度":w.status==="details_pending"?"详情待补":"分页待续",
+        v:{warn:w.error,ok_ts:w.updated,count:y.window_video_count}};
+    return {k:"wait",t:"等待采样",v:{}};
   }
+
   if(it.src==="bvideo"){
     const h=S.video_hotspots||{}, c=h.collection||{}, status=h.status||"未采集";
-    if(h.stream?.enabled){
-      const s=h.stream, r=s.latest?.received?s.latest:(s.round||{});
-      const stamp=r.received||r.finished, failed=["paused","error","partial","gap","stale"].includes(s.status);
-      return {k:failed?"err":(stamp?"ok":"wait"),t:BILI_STREAM_STATES[s.status]||s.status,
-        v:{count:r.new??r.new_sightings??0,ok_ts:r.received||(!failed?stamp:null),
-          err_ts:failed?(r.last_attempt||stamp):null,
-          error:r.error||(s.status==="gap"?"前后批次未衔接":s.status==="stale"?"最新投稿时间落后":""),warn:""}};
-    }
-    if(h.daily){
-      const d=h.daily, failed=["error","paused","waiting_index","partial"].includes(d.status);
-      return {k:failed?"err":(d.status==="complete"?"ok":"wait"),t:BILI_DAILY_STATES[d.status]||d.status,
-        v:{count:d.videos||0,ok_ts:d.status==="complete"?d.updated:null,
-          err_ts:failed?d.updated:null,error:biliDailyError(d),warn:""}};
-    }
     return {k:c.failed?"err":(status==="已采样"?"ok":"wait"),t:status,
       v:{ok_ts:c.count?c.ts:null,err_ts:c.failed?c.ts:null,count:c.count,
          error:c.failed?(c.errors||[]).join("；"):"",
@@ -407,31 +379,17 @@ function itemState(it){
 }
 function itemName(it){ return it.t || SRC[it.src] || it.src; }
 const HAS_BOARD = {taptap:1, tapmaker:1};       // TapTap 的热度是累计下载，才能算每周/每月新增
-let PLAT = {src:"steam", tab:"movers"}, MKSCOPE = "maker";
+let PLAT = {src:"steam", tab:"fresh"}, MKSCOPE = "maker";
 function curBoard(){ if(page!=="plat" || PLAT.tab!=="board") return null; return PLAT.src==="tapmaker" ? MKSCOPE : (PLAT.src==="taptap" ? "taptap" : null); }
 function viewKey(){ return page+"/"+PLAT.src+"/"+PLAT.tab+"/"+MKSCOPE; }
 const RAWMET = {players:"在线人数", heat:"直播热度", rooms:"主播数", downloads:"累计热度", reserves:"预约", fans:"关注", reviews:"评价/评论", reviews_cn:"中文评论", visits:"累计访问", rank_hot:"热门榜名次", rank_new:"新品榜名次", rank_reserve:"预约榜名次", rank_exclusive:"独家榜名次", rank_played:"在线榜 / 热玩榜名次", peak_daily:"当日峰值",
   viewers:"观看人数", videos:"视频数", views:"播放量", rank_week:"本周热门名次", rank_expect:"预约榜名次", rank_diy:"玩家自制榜名次", rank_game:"游戏榜名次",
   rank_free:"免费榜名次", rank_grossing:"畅销榜名次", rank_newfree:"新游榜名次", rank_all:"新而热门名次", rank_web:"网页游戏名次", rank_popular:"人气榜 / 本周热门名次"};
 const FN_GENRE = {survival:"生存", strategy:"策略", sportsracing:"体育竞速", simulationtycoon:"模拟经营", shooter:"射击", roleplayingsocial:"角色扮演社交", roguelike:"肉鸽", partyminigames:"派对小游戏", musicrhythm:"音乐节奏", horror:"恐怖", deathrunplatformer:"跑酷闯关", battleroyale:"大逃杀", adventurerpg:"冒险RPG"};
-Object.assign(RAWMET, {store_reviews:"商店评测数", store_positive_pct:"商店好评率 (%)", store_recent_reviews:"商店近30天评测数", reviews_positive:"好评数", reviews_negative:"差评数", review_score:"评测等级"});
 function metName(m, src){ if(src==="fortnite" && m==="peak_daily") return "24小时峰值"; if(src==="fortnite" && m.startsWith("rank_") && FN_GENRE[m.slice(5)]) return FN_GENRE[m.slice(5)]+"榜名次"; return RAWMET[m] || (m.startsWith("rank_")?"名次（"+m.slice(5)+"）":m); }
 function isRank(m){ return m.startsWith("rank_") || m==="rank"; }
-function rankChange(delta){
-  if(delta==null || delta===0) return "-";
-  return `<span class="${delta>0?"up":"down"}" aria-label="${delta>0?"排名上升":"排名下降"}">${delta>0?"↑":"↓"} ${fmt(Math.abs(delta))}</span>`;
-}
-const VIDEO_HEAT_CONFIG = {
-  weights:{bvideo:1,douyin:1,youtube:1}, historyDays:14, recurrenceThreshold:2
-};
-const VIDEO_HEAT_NAMES = {bvideo:"B站",douyin:"抖音",youtube:"YouTube"};
-const REFERENCE_METRICS = {
-  steam:["reviews","store_reviews","players"], roblox:["visits","players"],
-  taptap:["downloads","reviews","fans","reserves"], tapmaker:["downloads","reviews","fans","reserves"]
-};
-const HEAT = {data:{}, matches:[], references:{}, history:{}, failed:{}, source:"all", q:"", limit:200,
-  loaded:0, loading:null, historyLoaded:0, opened:new Set()};
-let RAW = {source:"tapmaker", data:null, q:"", limit:300, sort:null, days:"all"};
+let MUST = {tab:"rank"};
+let RAW = {source:"tapmaker", data:null, q:"", limit:300, sort:null};
 let FRESH = {data:null, src:null};
 const PALETTE = ["#2563eb","#d97706","#039855","#7c3aed","#dc2626","#0891b2","#db2777","#65a30d","#475467","#ea580c"];
 const TOOLBOX = {right:8, top:0, feature:{
@@ -442,7 +400,7 @@ const TOOLBOX = {right:8, top:0, feature:{
 const TOOLBOX_LITE = {right:8, top:0, feature:{dataView:{show:true, readOnly:true, title:"数据视图", lang:["数据视图","关闭","刷新"]}, saveAsImage:{show:true, title:"保存为图片", pixelRatio:2}}};
 const GRID = {left:12, right:24, top:44, bottom:56, containLabel:true};
 const DZ = [{type:"inside"}, {type:"slider", height:16, bottom:8}];
-let S = {}, page = (location.hash||"").slice(1) || "heat", openGid = null, gameKey = null, runs = null;
+let S = {}, page = (location.hash||"").slice(1) || "must", openGid = null, gameKey = null, runs = null;
 let ACT = {state:{}, seq:0}, LOG = [], lastRev = null, contentPage = null;
 let BD = {}, STATS = null, IDX = null;
 const CHARTS = {};
@@ -507,46 +465,32 @@ function miniLine(pts){
 }
 
 /* ---------- 数据 ---------- */
-let PAGE_VERSION = null, STATE_LOADING = null;
-function load(){
-  if(STATE_LOADING) return STATE_LOADING;
-  STATE_LOADING=(async()=>{
-    const data=await getJSON("/api/state");
-    if(!data){ toast("读取失败，保留当前数据"); return; }
-    S=data;
-    if(S.version){ if(PAGE_VERSION===null) PAGE_VERSION = S.version; else if(S.version!==PAGE_VERSION){ location.reload(); return; } }
-    render();
-    if(openGid){ const c=findCard(openGid); if(c) refreshScore(c); }
-  })().finally(()=>{ STATE_LOADING=null; });
-  return STATE_LOADING;
+let PAGE_VERSION = null;
+async function load(){
+  S = (await getJSON("/api/state")) || {};
+  if(S.version){ if(PAGE_VERSION===null) PAGE_VERSION = S.version; else if(S.version!==PAGE_VERSION){ location.reload(); return; } }
+  render();
+  if(openGid){ const c=findCard(openGid); if(c) refreshScore(c); }   // v51：不重画整个详情，看到哪里就停在哪里
 }
 async function loadRuns(){ runs = (await getJSON("/api/runs")) || []; if(page==="status") renderContent(); }
 async function loadStats(){ STATS = (await getJSON("/api/stats?days=7")) || {runs:[],volume:{},entities:{}}; if(page==="status") renderContent(); }
 async function loadIndex(){ IDX = (await getJSON("/api/index?days=7")) || {}; if(page==="plat" && PLAT.tab==="movers") renderContent(); }
 
 /* ---------- 框架 ---------- */
-function counts(){ return {heat:HEAT.loaded?heatRows("all","").length:null}; }
-function sourceState(v){ if(v.state) return v.state; const err = v.error && (!v.ok_ts || (v.err_ts||0) >= v.ok_ts); return err?"err":(v.ok_ts?"ok":""); }
-function sourceRows(){
-  const src={...(S.sources||{})};
-  if(src.bvideo || S.video_hotspots?.stream?.enabled || S.video_hotspots?.daily){
-    const st=itemState({src:"bvideo"});
-    src.bvideo={...(st.v||{}),state:st.k,state_text:st.t};
-  }
-  return Object.entries(src);
-}
+function counts(){ return {must:(S.totals||{}).cards ?? (S.cards||[]).length}; }
+function sourceState(v){ const err = v.error && (!v.ok_ts || (v.err_ts||0) >= v.ok_ts); return err?"err":v.paused?"paused":v.stale?"stale":(v.ok_ts?"ok":""); }
 function render(){
   const c = counts();
   // 地图排在运行情况前面；运行情况永远最后一个
   const mapLink = `<a href="/map" style="text-decoration:none"><span>地图</span><span class="c">各地口味</span></a>`;
   $("nav").innerHTML = PAGES.map(p=>(p.k==="status"?mapLink:"")+(p.group?`<div class="nav-group">${p.group}</div>`:`<a class="${page===p.k?"on":""}" data-page="${p.k}"><span>${p.t}</span><span class="c num">${c[p.k]!=null?c[p.k]:""}</span></a>`)).join("");
-  const src = sourceRows();
+  const src = Object.entries(S.sources||{});
   // 平台多了：失败的一个个列出来，正常的合成一行
-  const bad = src.filter(([k,v])=>sourceState(v)==="err"), good = src.filter(([k,v])=>sourceState(v)==="ok"),
-    waiting = src.filter(([k,v])=>!["err","ok"].includes(sourceState(v)));
-  $("srcs").innerHTML = src.length ? bad.map(([k,v])=>`<div class="src" title="${esc(v.error||"")}" data-page="status"><span class="dot err"></span>${SRC[k]||k}<span class="r">失败</span></div>`).join("") +
+  const bad = src.filter(([k,v])=>["err","stale"].includes(sourceState(v))), good = src.filter(([k,v])=>sourceState(v)==="ok");
+  const paused = src.filter(([k,v])=>sourceState(v)==="paused");
+  $("srcs").innerHTML = src.length ? bad.map(([k,v])=>`<div class="src" title="${esc(v.error||"")}" data-page="status"><span class="dot err"></span>${SRC[k]||k}<span class="r">${sourceState(v)==="stale"?"超时":"失败"}</span></div>`).join("") +
     (good.length?`<div class="src" data-page="status" title="${esc(good.map(([k])=>SRC[k]||k).join("、"))}"><span class="dot ok"></span>${bad.length?"其他 ":""}${good.length} 个平台正常<span class="r">${ago(Math.max(...good.map(([k,v])=>v.ok_ts||0)))}</span></div>`:"") +
-    (waiting.length?`<div class="src muted" data-page="status" title="${esc(waiting.map(([k])=>SRC[k]||k).join("、"))}">${waiting.length} 个平台待采集</div>`:"")
+    (paused.length?`<div class="src muted" data-page="status">${paused.length} 个数据源暂停采集</div>`:"")
     : `<div class="src muted">还没有运行过</div>`;
   const p = PAGES.find(x=>x.k===page);
   $("title").textContent = p.t; $("desc").textContent = p.d||"";
@@ -557,18 +501,6 @@ function render(){
 }
 function renderContent(){
   const root = $("content");
-  if(contentPage===viewKey() && page==="plat" && ["bvideo","hub:video"].includes(PLAT.src)
-      && PLAT.tab==="raw" && document.getElementById("bili-term-results")){
-    if(PLAT.src==="bvideo"){
-      const head=root.querySelector(".ph"), item=PLAT_ITEMS.find(it=>it.id==="bvideo");
-      if(head)head.outerHTML=platHead(item,itemState(item));
-    }
-    const collector=root.querySelector("[data-hub-collector][open] [data-bili-collector]");
-    if(collector)collector.innerHTML=biliStreamView()+biliDailyView()+biliGrowthSamplingView();
-    const status=root.querySelector('[data-platform-status-body="video"]');
-    if(status)status.innerHTML=platformStatusBody("video");
-    loadBiliTerms(); return;
-  }
   disposeIn(root);
   // 整块重画会新建平台目录和页面，滚动位置会回到顶上：先记下来，画完再恢复
   const pd = root.querySelector(".pd"), mainEl = document.querySelector("main");
@@ -576,37 +508,42 @@ function renderContent(){
   contentPage = viewKey();
   let h = "";
   if(S.analyze_error) h += `<div class="notice" style="border-color:#dc2626;color:#b42318"><b>分析出错（${ago(S.analyze_error.ts)}），下面显示的是上一次成功的结果${S.updated?"（"+ago(S.updated)+"）":""}，不是最新的。</b><br>${esc(S.analyze_error.error)}<details><summary>详细错误（发给开发者）</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(S.analyze_error.trace||"")}</pre></details></div>`;
-  for(const x of S.holidays||[]) h += `<div class="notice">今天是${esc(x.name)}，大盘可能整体偏高。</div>`;
-  if(page==="heat") h += heatView();
+  for(const x of S.holidays||[]) h += `<div class="notice">今天是${esc(x.name)}，大盘可能整体偏高。系统已按大盘扣除，但请留意节后回落。</div>`;
+  if(page==="must") h += mustView();
   else if(page==="hit") h += hitView();
   else if(page==="plat") h += platView();
   else if(page==="status") h += statusView();
-  root.innerHTML = h;
+  root.innerHTML = '<section id="critical-health" role="alert" aria-live="assertive"></section>' + h;
+  renderHealth();
   const pd2 = root.querySelector(".pd"); if(pd2 && keep.pd!=null) pd2.scrollTop = keep.pd;
   if(keep.same && mainEl) mainEl.scrollTop = keep.main;     // 同一页定时刷新：页面也不跳
   const term = $("term"); if(term) term.scrollTop = term.scrollHeight;
   afterRender();
 }
+function renderHealth(){
+  const root = $("critical-health"); if(!root) return;
+  const alerts = ((S.health||{}).alerts||[]);
+  root.innerHTML = alerts.length ? `<div style="background:#fff1f2;border:2px solid #dc2626;color:#991b1b;padding:14px;margin-bottom:16px;overflow-wrap:anywhere"><h2 style="font-size:18px;margin:0 0 8px">紧急：采集异常（${alerts.length}）</h2>${alerts.map(a=>`<div style="padding:7px 0;border-top:1px solid #fecaca"><strong>${esc(a.title)}</strong><div>${esc(a.detail)}</div></div>`).join("")}</div>` : "";
+}
 function afterRender(){
-  if(page==="heat" && !HEAT.loading && Date.now()-HEAT.loaded>60000) loadHeat();
   const sc = curBoard();
   if(sc && bstate(sc).data) withCharts(()=>mountBoard(sc));
   if(page==="status" && STATS) withCharts(mountStatus);
   if(page==="plat" && PLAT.tab==="movers" && IDX) withCharts(mountIndex);
-  if(page==="plat" && ["hub:video","hub:index"].includes(PLAT.src) && SOC.termData) withCharts(socMountTerm);
+  if(page==="plat" && PLAT.src==="hub:video" && SOC.termData) withCharts(socMountTerm);
   if(page==="hit"){ if(!HIT.list) loadHit(); if(HIT.game) withCharts(()=>mountHit(HIT.game)); }
 }
 function pickPlat(id){
-  PLAT.src = id; RAW.source = id; RAW.data = null; RAW.sort = null; RAW.limit = 300; RAW.q = ""; RAW.days = "all";
-  if(id==="bvideo" || id==="hub:video") PLAT.tab="raw";
-  history.replaceState(null,"",pageHash());
+  if(id==="youtube"){YT.state=null;YT.loaded=0;} if(id==="bvideo") PLAT.tab="raw";
+  PLAT.src = id; RAW.source = id; RAW.data = null; RAW.sort = null; RAW.limit = 300; RAW.q = "";
   contentPage = null; renderContent();
 }
 function platDir(cur){
   const groups = PLAT_DIR.map(g=>{
     const items = PLAT_ITEMS.filter(it=>it.g===g.k);
-    const on = items.filter(it=>platformAccess(it,itemState(it))==="已接入").length;
-    return `<div class="pd-g"><button type="button" class="pd-h hub ${cur==="hub:"+g.k?"on":""}" data-plat="hub:${g.k}" title="打开${HUBS[g.k]}"><span>${g.t} ›</span><span class="num">${on} / ${items.length} 已接</span></button>` +
+    const on = items.filter(it=>itemState(it).k!=="todo").length;
+    const hub = HUBS[g.k] ? `hub ${cur==="hub:"+g.k?"on":""}" data-plat="hub:${g.k}" title="点开看${HUBS[g.k]}` : "";
+    return `<div class="pd-g"><div class="pd-h ${hub}"><span>${g.t}${hub?" ›":""}</span><span class="num">${on} / ${items.length} 已接</span></div>` +
       items.map(it=>{ const st=itemState(it);
         return `<a class="pd-i ${it.id===cur?"on":""} ${st.k==="todo"?"off":""}" data-plat="${esc(it.id)}"><span class="dot ${st.k}"></span><span class="n">${esc(itemName(it))}</span><span class="r">${esc(st.t)}</span></a>`; }).join("") + `</div>`;
   }).join("");
@@ -615,147 +552,126 @@ function platDir(cur){
   return `<div class="pd panel">${groups}</div><select class="sel pd-sel" data-platsel>${opts}</select>`;
 }
 function platHead(it, st){
+  const v = st.v||{};
+  const tag = ["bvideo","youtube"].includes(it.src) ? `<span class="tag ${st.k==="ok"?"ok":"hot"}">${esc(st.t)}</span>` : {ok:`<span class="tag ok">正常</span>`, err:`<span class="tag hot">失败</span>`, todo:`<span class="tag">${esc(st.t)}</span>`, wait:`<span class="tag">等第一次抓取</span>`}[st.k];
+  const meta = [];
+  if(v.ok_ts) meta.push("最近成功 "+ago(v.ok_ts)+(v.count!=null?"，抓到 "+fmt(v.count)+" 条":""));
   const g = PLAT_DIR.find(x=>x.k===it.g);
-  return `<div class="ph"><div class="ph-t"><h2>${esc(itemName(it))}</h2><span class="ph-g">${g?esc(g.t):""}</span></div>
-    <div class="ph-d">${esc(PLAT_ABOUT[it.src]||(it.soc&&SOC_ITEMS[it.soc]||{}).about||"")}</div></div>`;
+  let h = `<div class="ph"><div class="ph-t"><h2>${esc(itemName(it))}</h2>${tag}<span class="ph-g">${g?g.t:""}</span></div>
+    <div class="ph-d">${esc(PLAT_ABOUT[it.src]||(it.soc&&SOC_ITEMS[it.soc]||{}).about||"")}${meta.length?`<span class="ph-m">${meta.join(" · ")}</span>`:""}</div></div>`;
+  if(st.k==="err") h += `<div class="notice">最近一次抓取失败（${ago(v.err_ts)}）：${esc(v.error)}</div>`;
+  else if(v.warn) h += `<div class="notice">上一次部分失败：${esc(v.warn)}</div>`;
+  return h;
 }
 function platView(){
-  if(PLAT.src.startsWith("hub:") && HUBS[PLAT.src.slice(4)]){
-    const group=PLAT.src.slice(4);
-    if(group==="video"||group==="index")loadSoc();
-    const main=group==="video"||group==="index"?socHubView(group):
-      `<div class="ph"><div class="ph-t"><h2>${esc(HUBS[group])}</h2></div></div>${platformStatusView(group)}`;
-    return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${main}</div></div>`;
-  }
+  if(PLAT.src==="hub:video"){ loadSoc(); return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${socHubView()}</div></div>`; }
   if(!PLAT_ITEMS.some(it=>it.id===PLAT.src)) PLAT.src = "steam";
   const it = PLAT_ITEMS.find(x=>x.id===PLAT.src), st = itemState(it);
   let main = platHead(it, st);
-  if(it.soc){
-    loadSoc();
-    const tabs=[["movers","趋势"],["raw","全部数据"]];
-    if(!tabs.some(x=>x[0]===PLAT.tab)) PLAT.tab="movers";
-    return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${main}<div class="toolbar">${seg(tabs,"ptab",PLAT.tab)}</div>${socItemView(it.soc)}</div></div>`;
-  }
+  if(it.soc){ loadSoc(); return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${main}${socItemView(it.soc)}</div></div>`; }
   if(st.k==="todo"){
     const t = st.todo||{};
-    if(!["movers","raw"].includes(PLAT.tab)) PLAT.tab="movers";
-    main += `<div class="toolbar">${seg([["movers","趋势"],["raw","全部数据"]],"ptab",PLAT.tab)}</div><div class="panel"><div class="pbody todo">
+    main += `<div class="panel"><div class="pbody todo">
       <div class="kv"><span class="k">为什么没接上</span><span>${esc(t.why||"没有公开数据")}</span>
       <span class="k">你要做什么</span><span><b>${esc(t.need||"接不了")}</b></span></div>
 </div></div>`;
     return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${main}</div></div>`;
   }
-  const tabs = [["movers","趋势"],["raw","全部数据"]];
+  if(it.src==="youtube"){
+    if((!YT.loaded||Date.now()-YT.loaded>60000)&&!YT.loading) loadYoutube();
+    return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${main}${youtubeView()}</div></div>`;
+  }
+  const tabs = PLAT.src==="bvideo" ? [["raw","关键词"],["movers","增长趋势"],["videos","采集情况"]] : [["fresh","新冒头"],["movers","刚起势"],["raw","全部数字"]];
+  if(HAS_BOARD[PLAT.src]) tabs.push(["board","每周 / 每月新增"]);
+  if(PLAT.src==="steam") tabs.push(["releases","近期发行追踪"],["hist","历史对照"]);
   if(!tabs.some(x=>x[0]===PLAT.tab)) PLAT.tab = tabs[0][0];
   let h = main + `<div class="toolbar">${seg(tabs,"ptab",PLAT.tab)}</div>`;
   if(PLAT.src==="bvideo") h += videoView(false);
-  else if(PLAT.tab==="movers") h += risingView(PLAT.src);
+  else if(PLAT.tab==="videos") h += videoView(false);
+  else if(PLAT.tab==="releases") h += releasePoolView();
+  else if(PLAT.tab==="board"){
+    if(PLAT.src==="tapmaker") h += `<div class="toolbar">${seg([["maker","TapTap 制造"],["workshop","创意工坊（v18 起只更新以前发现的）"]],"mkscope",MKSCOPE)}</div>`;
+    h += boardView(curBoard());
+  }
+  else if(PLAT.tab==="fresh") h += freshView(PLAT.src);
+  else if(PLAT.tab==="movers") h += sproutView(PLAT.src);
+  else if(PLAT.tab==="hist") h += histView();
   else { if(RAW.source!==PLAT.src && !(RAW.source||"").startsWith(PLAT.src+"_")){ RAW.source=PLAT.src; RAW.data=null; } h += rawView(); }
   return `<div class="pl">${platDir(PLAT.src)}<div class="pl-main">${h}</div></div>`;
 }
-function platformAccess(it,st){
-  if(it.soc&&!SOC.data)return SOC.ts?"读取失败":"读取中";
-  if(st.k!=="todo")return "已接入";
-  if(st.t==="待验证")return "未验证";
-  if(st.t==="已关")return "已关闭";
-  return st.t==="缺密钥"?"缺密钥":"未接入";
-}
-function platformStatusBody(group){
-  const items=PLAT_ITEMS.filter(it=>it.g===group);
-  const connected=items.filter(it=>platformAccess(it,itemState(it))==="已接入").length;
-  const clock=ts=>ts?`<span title="${esc(new Date(ts*1000).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"}))}">${esc(dtm(ts))}</span><div class="g-alt">${esc(ago(ts))}</div>`:"未记录";
-  const rows=items.map(it=>{
-    const st=itemState(it),v=st.v||{},access=platformAccess(it,st);
-    let ok=v.ok_ts,failed=v.err_ts;
-    let note=v.error||v.warn||v.sample_progress||st.todo?.why||"";
-    let state=it.src==="bvideo"?st.t:v.state_text||(st.k==="ok"?"正常":st.k==="err"?"失败":st.k==="wait"?st.t:st.t);
-    if(it.src==="bvideo"&&S.video_hotspots?.stream?.pause_seconds){
-      note=`风控暂停剩余 ${Math.ceil(S.video_hotspots.stream.pause_seconds/60)} 分钟${note?"；"+note:""}`;
-    }
-    if(it.soc){
-      const jobs=(SOC.data?.jobs||[]).filter(j=>SOC_ITEMS[it.soc].jobs.includes(j.job));
-      const successes=jobs.map(j=>j.ok_ts).filter(Boolean),failures=jobs.map(j=>j.err_ts).filter(Boolean);
-      ok=successes.length?Math.max(...successes):null;
-      failed=failures.length?Math.max(...failures):null;
-      note=jobs.map(j=>!j.on?`${j.name}：已停用`:!j.ready?`${j.name}：${j.ready_reason||"来源尚未验证"}`:
-        socJobErr(j)?`${j.name}：${j.error||"最近请求失败"}`:j.note?`${j.name}：${j.note}`:"").filter(Boolean).join("；")||note;
-      if(!SOC.data)note=SOC.ts?"平台状态读取失败":"正在读取平台状态";
-    }
-    if(!note&&v.count!=null)note=`最近一批 ${fmt(v.count)} 条`;
-    return `<tr><td><a class="lnk" href="#platform-${encodeURIComponent(it.id)}" data-plat="${esc(it.id)}">${esc(itemName(it))}</a></td><td>${esc(access)}</td><td><span class="dot ${st.k}"></span>${esc(state)}</td><td>${clock(ok)}</td><td>${clock(failed)}</td><td class="platform-status-note">${esc(note||"-")}</td></tr>`;
-  }).join("");
-  return `<div class="platform-status-head"><h3>平台接入状态</h3><span>${connected} / ${items.length} 已接入</span></div><div class="scroll-x"><table class="dense platform-status-table"><thead><tr><th>平台</th><th>接入</th><th>当前状态</th><th>最近成功</th><th>最近失败</th><th>最近情况 / 原因</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-function platformStatusView(group){
-  const collector=group==="video"?`<details data-hub-collector><summary>B站采集详情</summary><div data-bili-collector></div></details>`:"";
-  return `<section class="platform-status" data-platform-status="${esc(group)}"><div data-platform-status-body="${esc(group)}">${platformStatusBody(group)}</div>${collector}</section>`;
-}
-document.addEventListener("toggle",e=>{
-  if(!e.target.hasAttribute?.("data-hub-collector"))return;
-  const body=e.target.querySelector("[data-bili-collector]");
-  if(body)body.innerHTML=e.target.open?biliStreamView()+biliDailyView()+biliGrowthSamplingView():"";
-  if(e.target.open&&!BGR.data)loadBiliGrowth();
-},true);
 
-/* ---------- 视频平台大厅 + 抖音 / 抖音指数 / 哔哩指数 / 快手 / 小红书 / TikTok（数据在 radar/social/） ---------- */
+/* ---------- 视频平台大厅 + 抖音 / 快手 / 小红书 / TikTok（数据在 radar/social/） ---------- */
 const SOC_ITEMS = {
-  douyin:{jobs:["douyin_kw","douyin_open"], about:"关键词视频查询暂停"},
-  douyin_index:{group:"index",jobs:["douyin_index_hot","douyin_index_kw"], about:"实时热点、飙升热点；热点指数为平台相对值"},
-  bili_index:{group:"index",jobs:["bili_index_home","bili_index_kw"], about:"榜单与关键词指数来源尚未验证"},
-  kuaishou:{jobs:["kuaishou_hot","kuaishou_kw"], about:"热榜与视频搜索来源待验证"},
-  xiaohongshu:{jobs:["xiaohongshu_kw"], about:"笔记搜索来源待验证"},
-  tiktok:{jobs:["tiktok_hashtag","tiktok_ads"], about:"热门话题与广告查询来源待验证"},
+  douyin:{jobs:["douyin_hot","douyin_kw","douyin_open"], about:"抖音热榜每小时读一次；新游戏名去抖音搜索，看视频数、点赞、多少是 7 天内发的。填了抖音开放平台密钥再加官方视频搜索"},
+  kuaishou:{jobs:["kuaishou_hot","kuaishou_kw"], about:"快手热榜；新游戏名去快手搜索，看视频数和点赞"},
+  xiaohongshu:{jobs:["xiaohongshu_kw"], about:"新游戏名去小红书搜索，看笔记数和点赞（小红书没有公开热榜）"},
+  tiktok:{jobs:["tiktok_kw","tiktok_hashtag","tiktok_ads"], about:"TikTok 创意中心热门话题（要能上外网）；填了 Commercial Content API 密钥再查欧盟广告库里这个游戏投了多少广告"},
 };
-let SOC = {data:null, ts:0, loading:false, b:"new", h:null, term:null, termData:null, termGroup:"video"};
+let SOC = {data:null, ts:0, loading:false, b:"new", h:null, term:null, termData:null};
 const SOC_LABELS = [["game","是游戏"],["gameplay","玩法词"],["old","老游戏"],["not","不是游戏"]];
-function safeSocialData(d){
-  if(!d) return null;
-  d={jobs:[],hot:{},lookups:[],buckets:{},bucket_names:[],settings:{},...d};
-  d.jobs=d.jobs.filter(j=>j.job!=="douyin_hot");
-  d.hot=Object.fromEntries(Object.entries(d.hot).filter(([k])=>k!=="douyin_hot"));
-  d.buckets=Object.fromEntries(Object.entries(d.buckets).map(([k,rows])=>[k,rows.filter(r=>
-    r.label||!(r.sources||[]).includes("douyin_hot")||(r.sources||[]).some(s=>s!=="douyin_hot"))]));
-  if(d.validation_version===1) return d;
-  return {...d,integrity_pending:true,ai:{},queue:[],lookups:[],
-    jobs:(d.jobs||[]).map(j=>({...j,ready:false,ready_reason:"后台尚未加载来源校验",ok_ts:null,count:null,error:"",note:""})),
-    hot:Object.fromEntries(Object.entries(d.hot||{}).map(([k,h])=>[k,{name:h.name,items:[],ts:null}])),
-    buckets:Object.fromEntries((d.bucket_names||[]).map(([k])=>[k,[]]))};
-}
-function socJobKeys(group){
-  return Object.values(SOC_ITEMS).filter(it=>(it.group||"video")===group).flatMap(it=>it.jobs);
-}
-function scopedSocialData(d,group){
-  if(!d) return d;
-  const keys=new Set(socJobKeys(group));
-  return {...d,jobs:(d.jobs||[]).filter(j=>keys.has(j.job)),
-    lookups:(d.lookups||[]).filter(x=>keys.has(x.platform)),
-    hot:Object.fromEntries(Object.entries(d.hot||{}).filter(([k])=>keys.has(k))),
-    buckets:Object.fromEntries(Object.entries(d.buckets||{}).map(([k,rows])=>[k,rows.filter(r=>
-      r.label||(r.sources||[]).some(s=>keys.has(s)||s==="watch"))]))};
-}
 async function loadSoc(force){
   if(SOC.loading || (!force && SOC.ts && Date.now()-SOC.ts < 55000)) return;
   SOC.loading = true;
   const d = await getJSON("/api/social/state");
   SOC.loading = false; SOC.ts = Date.now();
-  if(d) SOC.data = safeSocialData(d);
+  if(d) SOC.data = d;
   if(page==="plat") renderContent();
 }
-function socJobErr(j){ return j.last_ok===false || (j.error && (!j.ok_ts || (j.err_ts||0) >= j.ok_ts)); }
+let YT = {state:null, videos:[], offset:0, loading:false, after:"", before:""};
+async function loadYoutube(){
+  if(YT.loading) return;
+  YT.loading=true;
+  try{
+    const [state, data]=await Promise.all([
+      getJSON("/api/youtube/state"),
+      getJSON(`/api/youtube/videos?offset=${YT.offset}&limit=50${YT.after?`&after=${encodeURIComponent(YT.after)}`:""}${YT.before?`&before=${encodeURIComponent(YT.before)}`:""}`)
+    ]);
+    if(state) YT.state=state;
+    if(data) YT.videos=data.videos||[];
+  }finally{
+    YT.loading=false;YT.loaded=Date.now();
+    if(page==="plat"&&PLAT.src==="youtube") renderContent();
+    if(["running","paused","quota_limited","details_pending"].includes(YT.state?.window?.status))
+      setTimeout(loadYoutube,5000);
+  }
+}
+function youtubeView(){
+  const s=YT.state||S.youtube||{}, w=s.window||{}, f=s.fields||{}, feed=s.feed||{}, run=feed.progress||{};
+  const localInput=v=>{if(!v)return "";const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
+  const inputAfter=localInput(YT.after);
+  const inputBefore=localInput(YT.before);
+  const controls=`<div class="toolbar"><label>从 <input class="sel" type="datetime-local" data-yt-after value="${inputAfter}"></label>
+    <label>到 <input class="sel" type="datetime-local" data-yt-before value="${inputBefore}"></label>
+    <button class="btn sm" data-yt-run>采集时间段</button><button class="btn sm ghost" data-yt-clear>显示全部</button></div>`;
+  const statusText=w.status==="pagination_exhausted"?"API 分页结束（不等于已证明全站无遗漏）":w.status||"尚无采集记录";
+  const stats=`<div class="kv"><span class="k">API Key</span><span>${s.api_key_configured?"已配置":"未配置"}</span><span class="k">已保存视频</span><span>${fmt(s.stored_video_count||0)}</span><span class="k">热榜 / 频道采集</span><span>${esc(run.stage||"等待状态")}${run.running?" · 采集中":""}${run.ts?" · "+ago(run.ts):""}${run.error?" · "+esc(run.error):""}</span><span class="k">最近窗口</span><span>${esc(statusText)}${w.published_after?` · ${esc(w.published_after)} 至 ${esc(w.published_before)}`:""}${w.error?` · ${esc(w.error)}`:""}</span>
+    <span class="k">窗口视频</span><span>${fmt(s.window_video_count||0)}</span>
+    <span class="k">Tag</span><span>${fmt(f.nonempty_tags||0)} 有 Tag · ${fmt(f.empty_tags||0)} 空 Tag · ${fmt(f.tags_not_enriched||0)} 详情待补</span>
+    <span class="k">统计</span><span>播放量 ${fmt(f.with_views||0)} · 点赞 ${fmt(f.with_likes||0)} · 评论 ${fmt(f.with_comments||0)}（有值条数）</span>
+    <span class="k">API 配额</span><span>${s.search_calls_today_pacific??0} / 100 次搜索请求（太平洋时间日额度）</span>
+    <span class="k">覆盖说明</span><span>YouTube 搜索接口分页结果；搜索索引不保证等于全站全量</span></div>`;
+  const rows=YT.videos.map(v=>`<tr><td><a href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}" target="_blank" rel="noopener">${esc(v.title||v.video_id)}</a>
+    <div class="t2">${esc(v.channel_title||"")} · ${esc(v.published||"")}</div></td>
+    <td>${v.tags?.length?v.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join(" "):v.tags===null?"详情待补":"无 Tag"}</td>
+    <td class="r num">${fmt(v.views)}</td><td class="r num">${fmt(v.likes)}</td><td class="r num">${fmt(v.comments)}</td><td>${esc(v.duration||"-")}</td></tr>`).join("");
+  return controls+panel("采集情况","Tag 与各指标按接口实际返回统计",stats)+panel("视频数据",`${YT.offset+1}–${YT.offset+YT.videos.length}`,
+    rows?`<div class="scroll-x"><table class="tbl"><thead><tr><th>视频 / 频道 / 发布时间</th><th>全部 Tag</th><th class="r">播放</th><th class="r">点赞</th><th class="r">评论</th><th>时长</th></tr></thead><tbody>${rows}</tbody></table></div>`:empty("当前窗口还没有已保存视频",""))+
+    `<div class="toolbar"><button class="btn sm" data-yt-page="-50" ${YT.offset<=0?"disabled":""}>上一页</button><button class="btn sm" data-yt-page="50" ${YT.videos.length<50?"disabled":""}>下一页</button></div>`;
+}
+function socJobErr(j){ return j.error && (!j.ok_ts || (j.err_ts||0) > j.ok_ts); }
 function socState(key){
   const d = SOC.data, it = SOC_ITEMS[key];
   if(!d){ if(!SOC.ts) loadSoc(); return {k:"wait", t:SOC.ts?"读不到":"读取中"}; }
   if(!d.enabled) return {k:"todo", t:"已关", todo:{why:"settings.json 里 SOCIAL_ENABLED 是 false", need:"改成 true 后重开雷达"}};
   const all = d.jobs.filter(j=>it.jobs.includes(j.job));
   const js = all.filter(j=>j.on && j.ready);
-  if(!js.length) return {k:"todo", t:all.some(j=>!j.on)?"已关":"待验证",
-    todo:{why:all.find(j=>j.ready_reason)?.ready_reason||"尚无通过来源校验的采集入口",need:""}};
+  if(!js.length) return {k:"todo", t:all.some(j=>!j.on)?"已关":"缺密钥", todo:{why:"这个平台在 settings.json 的 SOCIAL_PLATFORMS 里关掉了", need:"改成 true 后重开雷达"}};
   const ok = js.filter(j=>j.ok_ts && !socJobErr(j)), bad = js.filter(socJobErr);
   const v = {ok_ts: ok.length ? Math.max(...ok.map(j=>j.ok_ts)) : null,
              err_ts: bad.length ? Math.max(...bad.map(j=>j.err_ts||0)) : null,
              error: bad.map(j=>j.name+"："+j.error).join("；")};
   if(ok.length && !bad.length) return {k:"ok", t:ago(v.ok_ts), v};
-  if(ok.length) return {k:"err", t:"部分失败", v:{ok_ts:v.ok_ts,err_ts:v.err_ts,error:v.error}};
+  if(ok.length) return {k:"ok", t:"部分失败", v:{ok_ts:v.ok_ts, warn:v.error}};
   if(bad.length) return {k:"err", t:"失败", v};
   return {k:"wait", t:d.browser?"等第一次抓取":"浏览器没开", v:{}};
 }
@@ -763,15 +679,14 @@ function socSumm(p, s){
   if(!s) return "";
   if(s.metrics) return s.metrics.slice(0,3).map(m=>`${esc(String(m.metric).split(".").pop())}：最近 7 天平均 ${fmt(m.avg7)}，之前 30 天 ${fmt(m.avg_prev30)}（${m.days} 天）`).join("<br>");
   if(p==="tiktok_ads") return `${s.n} 条广告${s.capped?"（只读了前 30）":""}，投放中 ${s.active}，最早 ${esc(s.first_shown||"-")}，覆盖 ${fmt(s.reach_sum)} 人`+(s.advertisers||[]).slice(0,3).map(a=>` <span class="tag">${esc(a[0])}×${a[1]}</span>`).join("");
-  return `本次搜索样本 ${s.n} 条，7 天内发布 ${s.n_7d ?? "-"} 条，样本点赞合计 ${fmt(s.likes_sum)}，最高 ${fmt(s.likes_max)}${s.plays_sum?`，样本播放合计 ${fmt(s.plays_sum)}`:""}${s.latest_ts?`，最新 ${ago(s.latest_ts)}`:""}`;
+  return `${s.n} 条，7 天内发布 ${s.n_7d ?? "-"} 条，点赞合计 ${fmt(s.likes_sum)}，最高 ${fmt(s.likes_max)}${s.plays_sum?`，播放合计 ${fmt(s.plays_sum)}`:""}${s.latest_ts?`，最新 ${ago(s.latest_ts)}`:""}`;
 }
 function socBanner(d){
-  const btns = `<button class="btn sm" data-socact="browser">检查浏览器连接</button> <button class="btn sm" data-socact="run">刷新已验证热榜</button>`;
+  const btns = `<button class="btn sm" data-socact="browser">打开雷达专用浏览器</button> <button class="btn sm" data-socact="run">马上读一遍热榜</button>`;
   if(!d) return `<div class="notice">${SOC.ts?"读不到社交平台的数据（雷达版本太旧，或后台出错）":"读取中…"}</div>`;
   let h = "";
-  if(d.integrity_pending) h += `<div class="notice">后台尚未加载来源校验，旧榜单与查询记录已暂停展示。请从托盘退出 GameRadar 后重新打开。</div>`;
   if(!d.enabled) h += `<div class="notice">社交平台关着（settings.json 里 SOCIAL_ENABLED 是 false）。</div>`;
-  else if(!d.browser) h += `<div class="notice">现有浏览器连接不可用（CDP ${d.port}）。<div style="margin-top:6px">${btns}</div></div>`;
+  else if(!d.browser) h += `<div class="notice">雷达专用浏览器现在没开（端口 ${d.port}）。雷达到时间会自己在后台把它打开（最小化），不用你管。第一次用要点下面的按钮，在弹出的窗口里登录一次抖音、快手、小红书、B站，以后不用再登录。<div style="margin-top:6px">${btns}</div></div>`;
   if(d.error) h += `<div class="notice">后台出错：${esc(d.error)}</div>`;
   if(d.busy) h += `<div class="t2" style="margin-bottom:8px">正在：${esc(d.busy)}</div>`;
   return h || `<div class="toolbar">${btns}</div>`;
@@ -780,21 +695,19 @@ function socJobsGrid(jobs){
   return `<div class="soc-jobs">${jobs.map(j=>{
     const off = !j.on || !j.ready, err = socJobErr(j);
     const k = off ? "todo" : err ? "err" : j.ok_ts ? "ok" : "wait";
-    const line = !j.on ? `<span class="muted">已停用</span>` : !j.ready ? `<span class="muted">${esc(j.ready_reason||"采集入口待验证")}</span>`
+    const line = !j.on ? `<span class="muted">已关（SOCIAL_PLATFORMS）</span>` : !j.ready ? `<span class="muted">没填密钥，不查</span>`
       : err ? `<span class="soc-err">${esc(j.error)}</span>` : j.ok_ts ? `${ago(j.ok_ts)}成功 · ${esc(j.note||"")}` : `<span class="muted">还没轮到</span>`;
-    const fix = err && j.url && /人机验证|要登录|要求登录/.test(j.error||"") ? `<div style="margin-top:4px"><button class="btn sm" data-socact="open" data-url="${esc(j.url)}">${/人机验证/.test(j.error)?"打开去验证":"打开去登录"}</button></div>` : "";
+    // 平台弹了人机验证 / 要登录：点一下在雷达专用浏览器里把那个页面打开，拖一下滑块或登录，完了关掉
+    const fix = err && j.url && /人机验证|要登录/.test(j.error||"") ? `<div style="margin-top:4px"><button class="btn sm" data-socact="open" data-url="${esc(j.url)}">${/人机验证/.test(j.error)?"打开去验证":"打开去登录"}</button></div>` : "";
     return `<div class="soc-job"><b><span class="dot ${k}"></span>${esc(j.name)}</b>${line}${fix}</div>`; }).join("")}</div>`;
 }
 function socHotTable(H){
-  if(!H || H.validation_version!==1 || !(H.items||[]).length) return empty("暂无已验证榜单", "");
-  const rising=PLAT.tab==="movers"&&!PLAT.src.startsWith("hub:");
-  const items=rising?H.items.filter(i=>!i.old&&!["not","old"].includes(i.classification)&&i.delta>0).sort((a,b)=>(b.growth||0)-(a.growth||0)):H.items;
-  if(!items.length) return empty("暂无已验证增长","已采到的全部数字仍保留在另一栏");
-  return `<div class="scroll-x"><table class="tbl"><thead><tr><th>榜单</th><th class="r">官方名次</th><th>词</th><th class="r">指数 / 热度</th><th class="r">增量</th><th class="r">涨幅</th></tr></thead><tbody>${items.map(i=>`<tr>
-    <td>${esc(i.name||i.list)}</td><td class="r num">${fmt(i.rank)}</td><td>${i.url?`<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.text)}</a>`:esc(i.text)}</td><td class="r num">${fmt(i.value)}</td><td class="r num">${i.delta==null?"待基线":fmt(i.delta)}</td><td class="r num">${i.growth==null?"待基线":(i.growth*100).toFixed(1)+"%"}</td></tr>`).join("")}</tbody></table></div>`;
+  if(!H || !(H.items||[]).length) return empty("还没读到", "");
+  return `<div class="scroll-x"><table class="tbl"><thead><tr><th class="r">名次</th><th>词</th><th class="r">热度</th></tr></thead><tbody>${H.items.map(i=>`<tr>
+    <td class="r num">${i.rank}</td><td>${i.url?`<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.text)}</a>`:esc(i.text)}</td><td class="r num">${fmt(i.value)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function socLookupTable(L, withPlat){
-  if(!L.length) return empty("暂无已验证查询记录", "");
+  if(!L.length) return empty("还没查过", `漏斗里有了新游戏 / 玩法词，或者你加了每天要查的词，就会一个一个去查（每个平台每天最多 ${(SOC.data.settings||{}).per_day} 个）。`);
   return `<div class="scroll-x"><table class="tbl"><thead><tr><th>时间</th>${withPlat?"<th>平台</th>":""}<th>词</th><th>结果</th></tr></thead><tbody>${L.map(x=>`<tr>
     <td class="t2 nowrap">${ago(x.ts)}</td>${withPlat?`<td class="t2">${esc(x.name)}</td>`:""}
     <td><span class="soc-term" data-socopen="${esc(x.term)}">${esc(x.term)}</span></td>
@@ -808,8 +721,8 @@ function socTermPanel(){
   else {
     const ser = Object.entries(d.series||{});
     body = ser.length ? ser.map(([k],i)=>`<div class="t2" style="margin-top:8px">${esc(k)}</div>${chartBox("socser"+i, 160)}`).join("")
-      : `<div class="muted">暂无已验证归属于这个词的指数曲线。</div>`;
-    body += `<div style="margin-top:12px">` + ((d.lookups||[]).length ? `<table class="tbl"><tbody>${d.lookups.map(x=>`<tr><td class="t2 nowrap">${ago(x.ts)}</td><td class="t2">${esc(x.name)}</td><td>${x.ok?socSumm(x.platform,x.summary):`<span class="soc-err">${esc(x.note||"失败")}</span>`}${x.ok&&x.summary&&x.summary.top?`<details><summary class="t2">点赞最多的几条</summary>${x.summary.top.map(v=>`<div>${v.url?`<a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.title)}</a>`:esc(v.title)} <span class="muted">赞 ${fmt(v.likes)}${v.ts?" · "+ago(v.ts):""}</span></div>`).join("")}</details>`:""}</td></tr>`).join("")}</tbody></table>` : `<div class="muted">暂无已验证的查询记录。</div>`) + `</div>`;
+      : `<div class="muted">还没有已保存的趋势曲线。</div>`;
+    body += `<div style="margin-top:12px">` + ((d.lookups||[]).length ? `<table class="tbl"><tbody>${d.lookups.map(x=>`<tr><td class="t2 nowrap">${ago(x.ts)}</td><td class="t2">${esc(x.name)}</td><td>${x.ok?socSumm(x.platform,x.summary):`<span class="soc-err">${esc(x.note||"失败")}</span>`}${x.ok&&x.summary&&x.summary.top?`<details><summary class="t2">点赞最多的几条</summary>${x.summary.top.map(v=>`<div>${v.url?`<a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.title)}</a>`:esc(v.title)} <span class="muted">赞 ${fmt(v.likes)}${v.ts?" · "+ago(v.ts):""}</span></div>`).join("")}</details>`:""}</td></tr>`).join("")}</tbody></table>` : `<div class="muted">各平台还没查过这个词。</div>`) + `</div>`;
   }
   return panel(esc(t), "各平台查到的数字和指数曲线", body, `<button class="btn sm ghost" data-socact="closeterm">关闭</button>`);
 }
@@ -817,31 +730,16 @@ function socMountTerm(){
   const ser = Object.entries((SOC.termData||{}).series||{});
   ser.forEach(([k,pts],i)=>mountChart("socser"+i, miniLine(pts.map(p=>[Date.parse(p[0]+"T00:00:00")/1000, p[1]]))));
 }
-function socHubView(group="video"){
-  const d = scopedSocialData(SOC.data,group),title=group==="index"?"趋势指数":"视频平台大厅";
-  let h = `<div class="ph"><div class="ph-t"><h2>${title}</h2></div></div>`;
-  h += platformStatusView(group);
-  if(group==="video"){
-    h += `<div class="toolbar"><span class="tag">B站视频</span>${seg([["movers","趋势"],["raw","全部数据"]],"ptab",PLAT.tab)}</div>`+(PLAT.tab==="movers"?biliGrowthView():biliTermsView());
-  } else {
-    h += socBanner(d);
-  }
-  if(!d || group==="video") return h;
-  if(SOC.termGroup===group) h += socTermPanel();
-  if(group==="index"){
-    h+=panel("采集状态","",socJobsGrid(d.jobs));
-    h+=panel("指数查询记录","",socLookupTable(d.lookups||[],true));
-    for(const H of Object.values(d.hot)) h+=panel(H.name,H.ts?"最近采集："+ago(H.ts):"",socHotTable(H));
-    return h;
-  }
-  const hasOtherTerms=Object.values(d.buckets||{}).some(rows=>rows.length);
-  if(!hasOtherTerms){
-    if((d.lookups||[]).length) h+=panel("其他平台查询结果","",socLookupTable(d.lookups,true));
-    for(const H of Object.values(d.hot)) if((H.items||[]).length)
-      h+=panel(H.name,H.ts?"最近采集："+ago(H.ts):"",socHotTable(H));
-    return h;
-  }
-  const bn = d.bucket_names||[], rows = (d.buckets||{})[SOC.b]||[];
+function socHubView(){
+  const d = SOC.data;
+  let h = `<div class="ph"><div class="ph-t"><h2>视频平台大厅</h2><span class="ph-g">视频平台</span></div>
+    <div class="ph-d">抖音、快手、小红书、TikTok 汇总：热榜上的词先判断是不是游戏、新不新，新游戏再去各平台查热度。</div></div>`;
+  h += socBanner(d);
+  if(!d) return h;
+  h += socTermPanel();
+  h += panel("各平台", `热榜每 ${d.settings.hot_minutes} 分钟读一次；关键词每个平台每天最多 ${d.settings.per_day} 个，一个一个来`, socJobsGrid(d.jobs) +
+    `<div class="t2" style="margin-top:8px">${d.ai&&d.ai.error?`<span class="soc-err">AI 判词失败：${esc(d.ai.error)}</span>（2 小时后再试）`:(d.ai&&d.ai.ok_ts?`AI 判词（一天一次，判过的词不再判）：${ago(d.ai.ok_ts)} · ${esc(d.ai.note||"")}`:"AI 判词：一天一次，还没轮到（判不出来的词留在“待判断”）")}</div>`);
+  const bn = d.bucket_names, rows = d.buckets[SOC.b]||[];
   let fb = `<div class="toolbar">${seg(bn.map(([k,t])=>[k,t,(d.buckets[k]||[]).length]),"socb",SOC.b)}</div>`;
   fb += rows.length ? `<div class="scroll-x"><table class="tbl"><thead><tr><th>词</th><th class="r">最好名次</th><th>上了哪些榜</th><th>为什么这么分</th><th>分错了就改</th></tr></thead><tbody>${rows.map(r=>`<tr>
       <td><span class="soc-term" data-socopen="${esc(r.term)}">${esc(r.term)}</span>${r.label?` <span class="tag blue">你标的</span>`:""}</td>
@@ -853,36 +751,55 @@ function socHubView(group="video"){
   const w = d.settings.watch||[];
   fb += `<div class="toolbar" style="margin-top:10px"><span class="t2">每天都要查的词：</span>${w.map(t=>`<span class="tag">${esc(t)} <a href="#" data-socunwatch="${esc(t)}">×</a></span>`).join("")}
     <input id="socWatchIn" class="sel" placeholder="游戏名" style="width:160px"> <button class="btn sm" data-socact="watchadd">加入</button></div>`;
-  h += panel("其他平台关键词", "", fb);
-  if((d.lookups||[]).length) h += panel("其他平台查询结果", "", socLookupTable(d.lookups, true));
-  const hk = Object.keys(d.hot).filter(k=>(d.hot[k].items||[]).length);
-  if(!hk.includes(SOC.h)) SOC.h = hk[0];
-  if(hk.length) h += panel("其他平台榜单", d.hot[SOC.h]&&d.hot[SOC.h].ts?"最近一次读到："+ago(d.hot[SOC.h].ts):"", `<div class="toolbar">${seg(hk.map(k=>[k,d.hot[k].name,(d.hot[k].items||[]).length]),"soch",SOC.h)}</div>` + socHotTable(d.hot[SOC.h]));
+  h += panel("关键词漏斗", "热榜上的词 → 是不是游戏 → 老不老；分错了点按钮改，以后都按你标的", fb);
+  h += panel("查询结果", "点词看各平台的数字和指数曲线", socLookupTable(d.lookups||[], true));
+  const hk = Object.keys(d.hot);
+  if(!SOC.h || !d.hot[SOC.h]) SOC.h = hk.find(k=>(d.hot[k].items||[]).length) || hk[0];
+  h += panel("热榜原样", d.hot[SOC.h]&&d.hot[SOC.h].ts?"最近一次读到："+ago(d.hot[SOC.h].ts):"", `<div class="toolbar">${seg(hk.map(k=>[k,d.hot[k].name,(d.hot[k].items||[]).length]),"soch",SOC.h)}</div>` + socHotTable(d.hot[SOC.h]));
+  h += panel("第一次用要做的事", "", `<ol class="t2" style="margin:0;padding-left:18px">
+    <li>点“打开雷达专用浏览器”：会开一个单独的 Edge / Chrome 窗口（和你平时的浏览器分开，资料存在 radar_data/browser）。</li>
+    <li>在它打开的几个页面里分别登录一次：抖音、快手、小红书、B站、TikTok 创意中心。登录完可以关掉，以后雷达自己在后台开它。</li>
+    <li>平台偶尔会弹人机验证：上面对应的格子里会出现“打开去验证”按钮，点一下拖个滑块就行；没出现就不用管。</li>
+    <li>TikTok 要能上外网。</li>
+    <li>官方接口（可选，审核通过后）：在 radar_data/settings.json 填 DOUYIN_OPEN_CLIENT_KEY / DOUYIN_OPEN_CLIENT_SECRET（抖音开放平台“抖音视频垂搜”权限）、TIKTOK_CCAPI_CLIENT_KEY / TIKTOK_CCAPI_CLIENT_SECRET（TikTok Commercial Content API），改完退出雷达再打开。</li>
+    <li>哪一项一直失败：把 radar_data/social_debug/ 里同名的文件发给助手。</li></ol>`);
   return h;
 }
 function socItemView(key){
   const d = SOC.data, it = SOC_ITEMS[key];
-  if(!d) return empty("正在读取平台数据","");
-  let h = "";
+  if(!d) return socBanner(d);
+  let h = d.browser ? "" : socBanner(d);
+  h += panel("这个平台读什么", "", socJobsGrid(d.jobs.filter(j=>it.jobs.includes(j.job))));
   for(const j of it.jobs) if(d.hot[j]) h += panel(d.hot[j].name, d.hot[j].ts?"最近一次读到："+ago(d.hot[j].ts):"", socHotTable(d.hot[j]));
-  h += panel("查过的词", "", socLookupTable((d.lookups||[]).filter(x=>it.jobs.includes(x.platform)), it.jobs.length>1));
+  h += panel("查过的词", "点词去视频平台大厅看详细", socLookupTable((d.lookups||[]).filter(x=>it.jobs.includes(x.platform)), it.jobs.length>1));
   return h;
 }
 async function socOpen(term){
   SOC.term = term; SOC.termData = null;
-  SOC.termGroup=PLAT.src==="hub:index"||SOC_ITEMS[PLAT.src.slice(4)]?.group==="index"?"index":"video";
-  PLAT.src="hub:"+SOC.termGroup; contentPage=null;
+  if(PLAT.src!=="hub:video"){ PLAT.src = "hub:video"; contentPage = null; }
   renderContent(); const m=document.querySelector("main"); if(m) m.scrollTop = 0;
   const d = await getJSON("/api/social/term?term="+encodeURIComponent(term));
   if(SOC.term!==term) return;
-  const keys=new Set(socJobKeys(SOC.termGroup));
-  SOC.termData = d?.validation_version===1
-    ? {...d,lookups:(d.lookups||[]).filter(x=>keys.has(x.platform))}
-    : {series:{},lookups:[]};
+  SOC.termData = d || {series:{}, lookups:[]};
   renderContent();
 }
 async function socPost(u, b){ try{ const r = await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})}); return await r.json(); }catch(e){ return {ok:false, note:String(e)}; } }
 document.addEventListener("click", async e=>{
+  const yt=e.target.closest&&e.target.closest("[data-yt-run],[data-yt-clear],[data-yt-page]");
+  if(yt){
+    e.preventDefault();
+    const ds=yt.dataset;
+    if(ds.ytClear!==undefined){YT.after="";YT.before="";YT.offset=0;loadYoutube();return;}
+    if(ds.ytPage){YT.offset=Math.max(0,YT.offset+Number(ds.ytPage));loadYoutube();return;}
+    const a=document.querySelector("[data-yt-after]")?.value,b=document.querySelector("[data-yt-before]")?.value;
+    if(!a||!b){toast("请填写开始和结束时间");return;}
+    const after=new Date(a).toISOString(),before=new Date(b).toISOString();
+    if(after>=before){toast("结束时间必须晚于开始时间");return;}
+    YT.after=after;YT.before=before;YT.offset=0;
+    const result=await socPost("/api/youtube/run",{after,before});
+    toast(result.status==="started"?"YouTube 采集已启动":result.error||"启动失败");
+    loadYoutube();return;
+  }
   const t = e.target.closest && e.target.closest("[data-socact],[data-soclab],[data-socb],[data-soch],[data-socopen],[data-socunwatch]");
   if(!t) return;
   e.preventDefault();
@@ -997,7 +914,7 @@ function mountHist(c){
     series});
 }
 
-/* ---------- 热度 ---------- */
+/* ---------- 必看 ---------- */
 function aiLine(){
   const a = S.ai||{};
   if(!a.enabled) return `<span class="muted">AI 读评论：没填密钥，按标签判断</span>`;
@@ -1249,298 +1166,31 @@ function releasePoolView(){
     rows.map(r=>`<tr><td><a class="lnk" data-game="steam:${esc(r.id)}" data-name="${esc(r.name)}">${esc(r.name)}</a><div class="g-alt">steam:${esc(r.id)}</div></td><td>${ymd(r.released)}</td><td class="r num">${fmt(r.reviews)}</td><td class="r num">${fmt(r.players)}</td><td>${r.sampled?ago(r.sampled):"等待首次采样"}</td></tr>`).join("")+`</tbody></table></div>`:empty("等待近期发行扫描","");
   return panel("近期发行追踪",`${rows.length} 款 · 扫描 ${ago(d.ts)}`,body+(d.error?`<div class="notice">${esc(d.error)}</div>`:""));
 }
-function loadHeat(force=false){
-  if(HEAT.loading) return HEAT.loading;
-  if(!force && HEAT.loaded && Date.now()-HEAT.loaded<60000) return Promise.resolve();
-  HEAT.loading=(async()=>{
-    const [data,matches]=await Promise.all([
-      getJSON("/api/bili-growth"),getJSON("/api/bili-terms?matched=1")]);
-    if(data && Array.isArray(data.groups)){
-      HEAT.data.bvideo=data;
-      delete HEAT.failed.bvideo;
-    }else HEAT.failed.bvideo="视频指数读取失败，保留上次数据";
-    if(matches && Array.isArray(matches.rows)){
-      HEAT.matches=matches.rows;
-      delete HEAT.failed.matches;
-    }else HEAT.failed.matches="关键词关联读取失败，保留已有游戏档案";
-    HEAT.loaded=Date.now();
-    if(page==="heat") render();
-    // Store snapshots are reference columns only; never inputs to video ranking.
-    const sources=new Set();
-    for(const row of heatRows("all","")){
-      if(row.card) continue;
-      for(const member of heatMembers(row)){
-        const source=member.split(":")[0];
-        if(source && source!=="btopic" && source!=="bvideo") sources.add(source);
-      }
-    }
-    const queue=[...sources];
-    async function worker(){
-      while(queue.length){
-        const source=queue.shift();
-        const data=await getJSON("/api/raw?source="+encodeURIComponent(source));
-        if(data && Array.isArray(data.rows)){
-          HEAT.references[source]=Object.fromEntries(data.rows.map(r=>[r.key,r]));
-          delete HEAT.failed["reference:"+source];
-        }else HEAT.failed["reference:"+source]="商店参考数据读取失败";
-      }
-    }
-    await Promise.all([worker(),worker(),worker()]);
-    if(force || Date.now()-HEAT.historyLoaded>600000) await loadHeatHistory();
-  })().finally(()=>{
-    HEAT.loading=null;
-    if(page==="heat") render();
-  });
-  return HEAT.loading;
+function platDiag(){
+  const d = S.plat_diag||[];
+  if(!d.length) return "";
+  const rows = d.map(r=>`<tr><td>${esc(SRC[r.src]||r.src)}</td><td class="r num">${fmt(r.seen)}</td><td class="r num">${fmt(r.scored)}</td><td class="r num">${fmt(r.zero)}</td><td class="r num">${r.best!=null?"第 "+r.best:"-"}</td><td class="r num">${r.best_raw!=null?"第 "+r.best_raw:"-"}</td></tr>`).join("");
+  return `<details class="panel"><summary class="pbody">各平台</summary><div class="scroll-x"><table class="dense"><thead><tr><th>平台</th><th class="r">32 小时内抓到</th><th class="r">有分数</th><th class="r">大作 / 大厂</th><th class="r">降分开最好名次</th><th class="r">降分关最好名次</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
-function videoHeatConfig(){
-  const overrides=S.config?.video_heat||{};
-  return {...VIDEO_HEAT_CONFIG,...overrides,
-    weights:{...VIDEO_HEAT_CONFIG.weights,...overrides.weights}};
+// v92：必看的排名（列表和详情里的"第几名"共用）
+function mustOrder(){
+  const key = MUST.raw ? "raw" : "final";
+  const dx = c => ((c.heat||{}).down||{}).x||0;
+  const hideBig = !MUST.showBig;
+  return (S.cards||[]).filter(c=>!(hideBig && c.big)).sort((a,b)=>((b[key]??-1e9)-(a[key]??-1e9))||(dx(b)-dx(a)));
 }
-function heatDay(offset=0){
-  return new Date(Date.now()+8*3600000-offset*86400000).toISOString().slice(0,10);
-}
-function heatFresh(data){
-  // Only complete days from the active collection baseline may carry a live rank.
-  const yesterday=heatDay(1);
-  return !!data?.day && data.day===yesterday &&
-    (!data.baseline_started || data.baseline_started<Date.parse(data.day+"T00:00:00+08:00")/1000+86400) &&
-    (!data.baseline_started || !data.updated || data.updated>=data.baseline_started);
-}
-function heatKey(value){
-  return String(value||"").normalize("NFKC").toLowerCase().replace(/\s+/g,"").replace(/^#/,"");
-}
-function heatIdentity(group,source){
-  return group.archive?.gid ? "game:"+group.archive.gid :
-    source+":"+(group.id||heatKey(group.name));
-}
-function heatNames(group){
-  return [...new Set([group.name,...(group.aliases||[])].filter(Boolean))];
-}
-function heatCard(row){
-  if(row.card) return row.card;
-  const gid=row.archive?.gid, member=row.archive?.member;
-  return gid ? findCard(gid)||cardOf(member) : null;
-}
-function heatMembers(row){
-  return [...new Set([row.archive?.member,...(heatCard(row)?.members||[])].filter(Boolean))];
-}
-function heatIndex(contributions){
-  const valid=contributions.filter(c=>Number.isFinite(c.index)&&c.index>=0);
-  if(!valid.length) return null;
-  const weights=videoHeatConfig().weights;
-  return 1+valid.reduce((total,c)=>{
-    const weight=Number.isFinite(weights[c.source])&&weights[c.source]>=0?weights[c.source]:0;
-    return total+weight*Math.max(c.index-1,0);
-  },0);
-}
-async function loadHeatHistory(){
-  const data=HEAT.data.bvideo;
-  if(!data?.day) return;
-  const config=videoHeatConfig(), queue=[];
-  const activeBaseline=data.baseline_started||0;
-  for(let offset=0;offset<config.historyDays;offset++){
-    const day=heatDay(offset+1);
-    if(Date.parse(day+"T00:00:00+08:00")/1000+86400<=activeBaseline) continue;
-    if(day===data.day){HEAT.history["bvideo:"+day]=data;continue;}
-    queue.push(day);
-  }
-  async function worker(){
-    while(queue.length){
-      const day=queue.shift(), value=await getJSON("/api/bili-growth?day="+day);
-      if(value?.day===day && Array.isArray(value.groups) &&
-          (value.baseline_started||0)===activeBaseline){
-        HEAT.history["bvideo:"+day]=value;
-        delete HEAT.failed["history:"+day];
-      }else HEAT.failed["history:"+day]="历史视频指数读取失败";
-    }
-  }
-  await Promise.all([worker(),worker(),worker()]);
-  HEAT.historyLoaded=Date.now();
-}
-function heatRecurrence(row){
-  const config=videoHeatConfig(), first=heatDay(config.historyDays), last=heatDay(1);
-  const names=new Set(heatNames(row).map(heatKey)), days=new Map();
-  for(const data of Object.values(HEAT.history)){
-    if(!data.day || data.day<first || data.day>last ||
-      (data.baseline_started||0)!==(HEAT.data.bvideo?.baseline_started||0)) continue;
-    const matches=(data.groups||[]).filter(g=>{
-      if(g.archive?.gid && row.archive?.gid) return g.archive.gid===row.archive.gid;
-      return heatNames(g).some(name=>names.has(heatKey(name)));
-    });
-    const indexes=matches.map(g=>g.index).filter(Number.isFinite);
-    if(indexes.length) days.set(data.day,Math.max(days.get(data.day)||0,...indexes));
-  }
-  return {days:[...days.values()].filter(v=>v>config.recurrenceThreshold).length,
-    measured:days.size, window:config.historyDays, threshold:config.recurrenceThreshold};
-}
-function heatMetrics(source, row, now=Date.now()/1000){
-  const preferred=REFERENCE_METRICS[source]||[];
-  const available=Object.keys(row.cur||{}).filter(m=>Number.isFinite(row.cur[m])&&row.cur[m]>=0&&(
-    ["reviews","store_reviews","players","visits","downloads","fans","reserves"].includes(m)||
-    m.startsWith("rank_")&&row.cur[m]>=1));
-  const metrics=[...new Set([...preferred,...available])].filter(m=>available.includes(m));
-  return metrics.map(metric=>{
-    const value=row.cur[metric], previous=row.prev?.[metric];
-    const sampled=row.sampled?.[metric], previousAt=row.previous_at?.[metric];
-    const hours=sampled!=null&&previousAt!=null?(sampled-previousAt)/3600:null;
-    const rank=metric.startsWith("rank_"), level=metric==="players";
-    let state=sampled==null?"pending":now-sampled>32*3600?"stale":"baseline";
-    const unverified=source==="steam"&&level&&(
-      (row.unverified_zero||[]).includes(metric)||
-      (previous===0&&!(row.extra?.players_zero_verified||[]).includes(previousAt)));
-    let delta=null;
-    if(state==="baseline" && previous!=null && hours>=1 && hours<=36){
-      if(unverified) state="unverified";
-      else if(!rank&&!level&&value<previous) state="reset";
-      else{
-        state="measured";
-        delta=rank?previous-value:value-previous;
-      }
-    }
-    const mark=row.extra?.marks?.[metric];
-    if(state==="baseline" && rank && Number.isFinite(mark)){
-      state="published";
-      delta=mark;
-    }
-    return {metric,value,previous,sampled,previousAt,hours,rank,level,state,delta,
-      rate:state==="measured"?delta/hours:null};
-  }).sort((a,b)=>(a.state==="stale")-(b.state==="stale"));
-}
-function heatRows(source=HEAT.source, query=HEAT.q){
-  const q=query.trim().toLowerCase(), games=new Map();
-  const cards=allCards(), byGid=new Map(cards.map(c=>[c.gid,c]));
-  const byMember=new Map(cards.flatMap(c=>(c.members||[]).map(m=>[m,c])));
-  const visible=c=>!c?.label?.blocked && !c?.label?.dismissed;
-  function add(group,src){
-    const card=byGid.get(group.archive?.gid)||byMember.get(group.archive?.member);
-    if(card&&!visible(card)) return null;
-    const archive=card?{gid:card.gid,member:group.archive?.member||card.members?.[0]}:group.archive;
-    const key=heatIdentity({...group,archive},src);
-    if(!games.has(key)) games.set(key,{...group,key,archive,card,aliases:[],
-      contributions:[],evidence:[],matches:[]});
-    const row=games.get(key);
-    row.aliases=[...new Set([...heatNames(row),...heatNames(group),
-      card?.name_en,card?.name_cn,...(card?.label?.aliases||[])].filter(Boolean))]
-      .filter(n=>n!==row.name);
-    return row;
-  }
-  // Game identity and presentation survive missing or reset trend windows.
-  for(const card of S.cards||[]){
-    if(visible(card)) add({name:card.name,archive:{gid:card.gid,member:card.members?.[0]}},"bvideo");
-  }
-  for(const term of HEAT.matches||[]){
-    if(!term.archive?.gid || !(term.seed_videos>0)) continue;
-    const row=add(term,"bvideo");
-    if(row) row.matches.push(term);
-  }
-  for(const [src,data] of Object.entries(HEAT.data)){
-    if(!Object.hasOwn(VIDEO_HEAT_NAMES,src)) continue;
-    for(const group of data.groups||[]){
-      const row=add(group,src);
-      if(!row) continue;
-      row.evidence.push({source:src,group});
-      const index=heatFresh(data)&&Number.isFinite(group.index)&&group.index>=0?group.index:null;
-      const contribution={source:src,index,day:data.day,group,stale:!heatFresh(data)};
-      const old=row.contributions.findIndex(c=>c.source===src);
-      // Multiple alias groups for one game are not independent platform signals.
-      if(old<0) row.contributions.push(contribution);
-      else if(index!=null&&(row.contributions[old].index==null||index>row.contributions[old].index))
-        row.contributions[old]=contribution;
-    }
-  }
-  const rows=[...games.values()].map(row=>{
-    const observations=(row.card?.heat?.videos||[]).filter(v=>Number.isFinite(v.recent??v.value));
-    // An observed video rate is a provisional ordering only, never a growth ratio.
-    const observed=observations.reduce((total,v)=>total+Math.max(0,v.recent??v.value),0);
-    return {...row,observations,observed,index:heatIndex(row.contributions)};
-  });
-  rows.sort((a,b)=>(a.index==null)-(b.index==null)||(b.index??0)-(a.index??0)||
-    (a.index==null?b.observed-a.observed:0)||
-    a.name.localeCompare(b.name)||a.key.localeCompare(b.key));
-  let rank=0,position=0;
-  for(const row of rows){
-    row.position=++position;
-    row.rank=row.index==null?null:++rank;
-  }
-  return rows.filter(r=>(source==="all"||r.contributions.some(c=>c.source===source))&&(!q||
-    [...heatNames(r),...heatMembers(r),r.card?.label?.note,...(r.card?.devs||[])]
-      .some(n=>String(n||"").toLowerCase().includes(q))));
-}
-function heatChange(item){
-  const states={pending:"待首次采样",baseline:"待可比基线",stale:"采样过期",
-    reset:"累计值回退，待核验",unverified:"历史零值待核验"};
-  if(!["measured","published"].includes(item.state)) return `<span class="muted">${states[item.state]||"-"}</span>`;
-  const change=item.rank?rankChange(item.delta):`${item.delta>0?"+":""}${fmt(item.delta)}`;
-  return `<span class="num ${item.delta>0?"up":item.delta<0?"down":""}">${change}</span><div class="g-alt">${item.state==="published"?"平台公布变化":item.hours.toFixed(1)+" 小时观测"}</div>`;
-}
-function heatView(){
-  const rows=heatRows(), shown=rows.slice(0,HEAT.limit);
-  const ready=rows.filter(r=>r.index!=null).length;
-  const observed=rows.filter(r=>r.observations.length||r.matches.length||r.evidence.length).length;
-  let h=`<div class="toolbar"><input class="search" data-heatq aria-label="搜索热度游戏" placeholder="搜索游戏、别名、工作室或备注" value="${esc(HEAT.q)}"><button class="btn sm" data-heatreload title="刷新视频热度" aria-label="刷新视频热度" ${HEAT.loading?"disabled":""}>↻</button><span class="info">${rows.length.toLocaleString()} 款 · 有视频关联 ${observed.toLocaleString()} · 已算趋势 ${ready.toLocaleString()}${HEAT.loading?" · 读取中":""}</span></div>`;
-  const errors=Object.entries(HEAT.failed);
-  if(errors.length) h+=`<div class="notice">${[...new Set(errors.map(([,text])=>text))].map(esc).join("；")}</div>`;
-  if(!rows.length) return h+panel(HEAT.loading?"读取游戏中":HEAT.q?"没有匹配游戏":"尚未采集游戏档案","","");
-  const body=shown.map(r=>{
-    const c=r.card;
-    const number=v=>v==null?"-":v.toLocaleString("zh-CN",{maximumFractionDigits:2})+"×";
-    const drivers=r.contributions.map(v=>`<div>${esc(VIDEO_HEAT_NAMES[v.source])} <span class="num">${number(v.index)}</span>${v.stale?'<div class="g-alt">历史统计日</div>':""}</div>`);
-    for(const v of r.observations) drivers.push(`<div>${esc(v.name||v.p)} · 观察值 ${fmt(v.recent??v.value)} / 天</div><div class="g-alt">${fmt(v.n)} 条视频${v.trend_known?"":" · 趋势历史不足"}</div>`);
-    if(!drivers.length && r.matches.length){
-      const videos=Math.max(...r.matches.map(t=>t.seed_videos||0));
-      const authors=Math.max(...r.matches.map(t=>t.seed_authors||0));
-      drivers.push(`<div>B站 · 已关联 ${fmt(videos)} 条视频 / ${fmt(authors)} 位 UP 主</div><div class="g-alt">历史发现样本，非当日增量</div>`);
-    }
-    const member=r.archive?.member;
-    const name=member?`<a class="lnk" data-game="${esc(member)}" data-name="${esc(r.name)}">${esc(r.name)}</a>`:esc(r.name);
-    const detail=r.evidence.map(e=>`<div><b>${esc(VIDEO_HEAT_NAMES[e.source])}</b>${biliGrowthDetail(e.group,false)}</div>`).join("");
-    const metadata=c?`<div class="g-alt">${esc((c.devs||[]).join("、")||"工作室未知")} · ${esc(c.gid)}</div><div>${listTags(c)}</div>${c.label?.note?`<div class="g-alt">${esc(c.label.note)}</div>`:""}`:`<div class="g-alt">${member?"已关联游戏档案 · "+esc(r.archive.gid):"Tag 组 · 商店身份待确认"}</div>`;
-    const refs=c?scaleValues(c):heatReferences(r).html;
-    return `<tr ${c?'class="click" data-gid="'+esc(c.gid)+'"':""} data-videoheat="${esc(r.key)}"><td class="r t2 num">${r.position}</td><td><div class="g-name">${name} ${c?.fast?'<span class="tag solid">增长异常</span>':""}</div>${r.aliases.length?`<div class="g-alt">（${r.aliases.map(esc).join("、")}）</div>`:""}${metadata}${detail?`<details data-heatdetail="${esc(r.key)}" ${HEAT.opened.has(r.key)?"open":""}><summary>视频证据</summary>${detail}</details>`:""}</td><td class="r num">${number(r.index)}${r.index==null?`<div class="g-alt">${r.observations.length?"按视频观察值暂排":"视频趋势未取得"}</div>`:""}</td><td>${drivers.join("")||'<span class="muted">暂无视频数据</span>'}</td><td class="t2">${refs}</td><td class="nowrap hide-sm">${c?launchCell(c):"-"}</td><td class="nowrap muted hide-sm">${c?ago(c.first_seen):"-"}</td></tr>`;
-  }).join("");
-  h+=`<div class="panel"><div class="scroll-x"><table class="dense heat-table"><thead><tr><th class="r">#</th><th>游戏</th><th class="r">视频热度指数</th><th>视频平台</th><th>商店数据（参考）</th><th class="hide-sm">上线</th><th class="hide-sm">首次发现</th></tr></thead><tbody>${body}</tbody></table></div>${rows.length>shown.length?`<div class="pbody"><button class="btn sm" data-heatmore>继续显示 200 条（剩余 ${(rows.length-shown.length).toLocaleString()}）</button></div>`:""}</div>`;
+function mustView(){
+  const tot = (S.totals||{}).cards;
+  // v85：大厂游戏开关，默认"隐藏"（只是不显示，不删除；关掉就照常排名）
+  const hideBig = !MUST.showBig;
+  const nBig = ((S.totals||{}).big) ?? (S.cards||[]).filter(c=>c.big).length;
+  const pool = mustOrder();
+  const list = pool.slice(0,400).map(c=>MUST.raw?{...c, final:c.raw}:c);
+  const shown = tot!=null ? (hideBig ? Math.max(0, tot-nBig) : tot) : pool.length;
+  let h = (S.restored_snapshot?`<div class="banner">当前为恢复的历史快照，采集仍在继续；不是当前实时排名。</div>`:"") + `<div class="toolbar"><button class="btn${MUST.raw?"":" primary"}" data-rawtoggle title="开：带「剧情」「3A」标签的游戏，视频量先打折再排名（这类游戏很少有手机版，不好跟）；关：不打折">剧情/3A 打折：${MUST.raw?"关":"开"}</button><button class="btn${hideBig?" primary":""}" data-bigtoggle title="大厂 / 大作：开发或发行是大厂、名字在大作名单、标签 3A、Steam 售价高、安装包大">大厂游戏：${hideBig?"隐藏":"显示"}</button><span class="info">${fmt(shown)} 款新游戏（上线不超过 ${fmt((S.config||{}).new_max_days)} 天）${nBig?` · ${hideBig?"已藏":"含"} ${fmt(nBig)} 款大厂 / 大作`:""}</span></div>`;
+  h += platDiag();
+  h += listPanel(list, "还没有游戏", "", "rank");
   return h;
-}
-function launchCell(c){
-  const ts=c.info?.launch_ts;
-  if(!ts) return '<span class="muted">-</span>';
-  const days=Math.max(0,Math.round((Date.now()/1000-ts)/86400));
-  return `<span class="num">${ymd(ts)}</span><div class="g-alt">${days} 天前 · ${esc(SRC[c.info.launch_src]||c.info.launch_src||"")}</div>`;
-}
-function heatReferences(row){
-  const lines=[], tap=[];
-  for(const member of heatMembers(row)){
-    const source=member.split(":")[0], record=HEAT.references[source]?.[member];
-    if(record){
-      const metrics=heatMetrics(source,record).slice(0,3);
-      lines.push(`<div>${esc(SRC[source]||source)} · ${esc(record.name||member)}</div>`+
-        metrics.map(m=>`<div class="g-alt">${esc(metName(m.metric,source))} ${fmt(m.value)} · ${heatChange(m)} · ${m.sampled?ago(m.sampled):"待采样"}</div>`).join(""));
-      if(["taptap","tapmaker"].includes(source))
-        tap.push(`${esc(record.name||member)}${record.release?" · 上线 "+ymd(record.release):" · 上线时间未核实"}`);
-    }else if(source!=="btopic"){
-      lines.push(`<div class="g-alt">${esc(SRC[source]||source)} · ${esc(member)} · 参考数字未取得</div>`);
-    }
-  }
-  return {html:lines.join("")||'<span class="muted">商店身份待确认</span>',
-    tap:tap.length?"已关联："+tap.join("<br>"):'<span class="muted">未核实有无同类</span>'};
-}
-function scaleValues(c){
-  const values=(c.heat?.scale||[]).filter(r=>r.metric==="players"||r.cumulative);
-  const order={players:0,reviews:1,downloads:2,visits:3,fans:4,reserves:5};
-  values.sort((a,b)=>(order[a.metric]??9)-(order[b.metric]??9)||a.src.localeCompare(b.src));
-  const seen=new Set();
-  return values.filter(r=>{
-    const key=r.src+"/"+r.metric;
-    if(seen.has(key)) return false;
-    seen.add(key); return true;
-  }).slice(0,4).map(r=>{
-    const source=SRC[r.src]||r.src;
-    const label=r.metric==="downloads"&&/^tap/.test(r.src)?"官方热度":(RAWMET[r.metric]||MET[r.metric]||r.metric);
-    const value=r.cumulative?r.total:r.value;
-    return `<div>${esc(source)} ${esc(label)} ${value==null?"未取得":fmt(value)}${r.sampled_at?`<span class="muted"> · ${ago(r.sampled_at)}</span>`:""}</div>`;
-  }).join("")||'<span class="muted">未取得</span>';
 }
 function signalTags(c){
   return (c.signals||[]).filter(s=>s.z!=null && s.g24!=null).slice(0,3).map(s=>{
@@ -1552,7 +1202,7 @@ function flagTags(c){ return (c.flags||[]).map(f=>`<span class="tag ${f.c||""}">
 const TAG_DROP = /能和陌生人对战|朋友联机型|单人也能玩|搜到同名|个主播在播|人在看|个视频标题写了它|没查到上线时间|你点过先不看/;
 function shortTag(t){ return String(t).replace(/（[^（）]*）/g,"").replace(/\(([^()]*)\)/g,"").replace(/\s+/g," ").trim(); }
 function listTags(c){
-  const fl = (c.flags||[]).filter(f=>!TAG_DROP.test(f.t));
+  const fl = (c.flags||[]).filter(f=>!TAG_DROP.test(f.t) && f.k!=="big");
   const rank = f => f.k==="sprout"?0:(f.c==="hot"?1:(/^上线|^老游戏|^老牌/.test(f.t)?2:(f.c==="warn"?3:4)));
   let out = fl.slice().sort((a,b)=>rank(a)-rank(b)).slice(0,4);
   let h = out.map(f=>`<span class="tag ${f.c||""}">${esc(shortTag(f.t))}</span>`).join("");
@@ -1561,6 +1211,52 @@ function listTags(c){
     if(s) h = `<span class="tag ${s.hot>0.3?"hot":""}">${SRC[s.source]||s.source} ${MET[s.metric]||s.metric} 比昨天 ${pct(s.g24)}</span>` + h;
   }
   return h;
+}
+function heatItem(x){
+  if(!x) return '<span class="muted">-</span>';
+  const src = x.src==="bili_video" ? "B站视频" : (SRC[x.src]||x.src);
+  const rank = /^rank_/.test(x.metric), cum = /^(downloads|reserves|reviews|visits|fans|views_eq)$/.test(x.metric);
+  const met = x.metric==="views_eq" ? "播放" : (RAWMET[x.metric]||MET[x.metric]||x.metric);
+  const v = rank ? `第 ${Math.round(x.value)} 名 / 正常第 ${Math.round(x.normal)} 名` : `${cum?"每天 +":""}${fmt(Math.round(x.value))} / 正常 ${cum?"+":""}${fmt(Math.round(x.normal))}`;
+  return `${esc(src)} ${esc(met)} <b class="num">${x.x>=10?Math.round(x.x):x.x.toFixed(2)} 倍</b><div class="g-alt">${v}</div>`;
+}
+function videoRow(r, raw){
+  const z = raw ? r.z : r.zf;
+  return `${esc(r.name)} <b class="num">${fmtZ(z)}</b><div class="g-alt">每天 ${fmt(Math.round(r.value))} / 正常 ${fmt(Math.round(r.normal))} · ${fmt(r.n)} 条视频${r.full?"":" · 不满 7 天"}</div>`;
+}
+function videoItem(h, raw){
+  const v = (h||{}).videos||[];
+  if(!v.length) return '<span class="muted">-</span>';
+  return videoRow(v[0], raw) + (v.length>1?`<div class="g-alt">另 ${v.length-1} 个平台</div>`:"");
+}
+function launchCell(c){
+  const ts = c.info?.launch_ts; if(!ts) return '<span class="muted">-</span>';
+  const d = Math.max(0, Math.round((Date.now()/1000-ts)/86400));
+  return `<span class="num">${ymd(ts)}</span><div class="g-alt">${d} 天前 · ${esc(SRC[c.info.launch_src]||c.info.launch_src||"")}</div>`;
+}
+function listPanel(list, t, h, mode){
+  if(!list || !list.length) return `<div class="panel">${empty(t,h)}</div>`;
+  const act = c => "";
+  const rankMove = c => {
+    const d = Math.round(c.rank_change||0);
+    return d ? `<span class="${d>0?"up":"down"}" title="较前一日排名变化">${d>0?"↑":"↓"}${Math.abs(d)}</span>` : "";
+  };
+  const rows = list.map((c,i)=>`<tr class="click" data-gid="${esc(c.gid)}">
+      <td class="r t2 num">${i+1} ${rankMove(c)}</td>
+      <td><div class="g-name">${esc(c.name)} ${c.fast?'<span class="tag solid" title="最近有效采样显示增长明显偏高">增长异常</span>':""}</div>
+          <div class="g-alt">${esc((c.devs||[]).join("、")||"工作室未知")} · ${esc(c.gid)}</div>
+          <div class="g-alt">${esc([c.name_en,c.name_cn].filter(x=>x&&x!==c.name).join(" / "))}</div>
+          <div>${c.big?`<span class="tag warn">${esc(c.big)}</span>`:""}${listTags(c)}</div></td>
+      <td class="r"><span class="score ${scoreCls(c.final)} num">${fmtZ(c.final)}</span></td>
+      <td class="t2">${heatItem((c.heat||{}).down)}</td>
+      <td class="t2">${videoItem(c.heat, MUST.raw)}</td>
+      <td class="nowrap hide-sm">${launchCell(c)}</td>
+      <td class="nowrap muted hide-sm">${ago(c.first_seen)}</td>
+      <td class="r">${act(c)}</td>
+    </tr>`).join("");
+  return `<div class="panel"><div class="scroll-x"><table>
+    <thead><tr><th class="r">#</th><th>游戏</th><th class="r">分数</th><th>下载</th><th>视频平台</th><th class="hide-sm">上线</th><th class="hide-sm">首次发现</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>`;
 }
 
 /* ---------- 大盘（TapTap 制造 / 创意工坊 / TapTap 榜单） ---------- */
@@ -1627,7 +1323,7 @@ function gamesPanel(sc){
   const th = GCOLS.map(([k,t,n])=>`<th class="${n?"r ":""}sortable ${b.sort.k===k?"sorted":""}" data-gsort="${k}">${t}${b.sort.k===k?(b.sort.d<0?" ↓":" ↑"):""}</th>`).join("");
   const body = shown.map(r=>`<tr class="click" data-game="${esc(r.key)}" data-name="${esc(r.name)}"><td><input type="checkbox" data-pick="${esc(r.key)}" ${b.picked.has(r.key)?"checked":""}></td>
     <td><a class="lnk" data-game="${esc(r.key)}" data-name="${esc(r.name)}">${esc(r.name)}</a><div class="g-alt">${esc((r.tags||[]).join("、"))}</div></td>
-    <td class="r num">${fmt(r.downloads)}</td><td class="r num ${r.new24>0?"up":"t2"}">${r.new24!=null?(r.new24>0?"+":"")+fmt(r.new24):"-"}${r.span!=null&&r.span<22?`<div class="g-alt">只隔 ${r.span} 小时</div>`:""}</td>
+    <td class="r num">${fmt(r.downloads)}</td><td class="r num ${r.new24>0?"up":r.new24<0?"down":"t2"}">${r.new24!=null?(r.new24>0?"↑":r.new24<0?"↓":"")+(r.new24?fmt(Math.abs(r.new24)):"0"):"-"}${r.span!=null&&r.span<22?`<div class="g-alt">只隔 ${r.span} 小时</div>`:""}</td>
     <td class="r num t2">${fmt(r.prev)}</td><td class="r num">${fmt(r.fans)}</td><td class="r num">${r.score!=null?(+r.score).toFixed(1):"-"}</td><td class="r num">${fmt(r.reviews)}</td><td class="r num t2">${r.release?ymd(r.release):"-"}</td></tr>`).join("");
   return `<div class="panel" id="gpanel"><div class="panel-h"><h2>全部游戏</h2><span class="sub">共 ${rows.length.toLocaleString()} 款${b.q?"（已筛选）":""}</span>
     <span class="act"><input class="search" id="gq" data-gq="${sc}" placeholder="搜索游戏名或标签" value="${esc(b.q)}">
@@ -1760,7 +1456,7 @@ function hotRows(ms, src){
     let best = null; for(const q of p){ const dt = Math.abs(q[0] - (t1 - 86400)); if(dt <= 6*3600 && (!best || dt < best.dt)) best = {dt, v:q[1]}; }
     let ch = '<span class="muted">还没有 24 小时前的数</span>', cls = "t2";
     if(best){
-      if(k==="rank"){ const d = Math.round(best.v - v1); ch = rankChange(d); cls = d>0 ? "up" : (d<0 ? "down" : "t2"); }
+      if(k==="rank"){ const d = Math.round(best.v - v1); ch = d>0 ? "往前 " + d + " 名" : (d<0 ? "往后 " + (-d) + " 名" : "没变"); cls = d>0 ? "up" : (d<0 ? "down" : "t2"); }
       else if(k==="cum"){ const d = v1 - best.v; ch = (d>0 ? "+" : "") + fmt(d) + "（24 小时新增）"; cls = d>0 ? "up" : "t2"; }
       else { ch = chg(v1, best.v); cls = v1 > best.v*1.01 ? "up" : (v1 < best.v*0.99 ? "down" : "t2"); }
     }
@@ -1781,57 +1477,53 @@ async function openGame(key, name){
   if(gameKey!==key) return;
   renderEntity(key, name, data||{}, det||{});
 }
+// v92：和必看详情同一个样子：顶上一句话 + 一张合成图，下面标签页
 function renderEntity(key, name0, data, d){
   const src = key.slice(0, key.indexOf(":")), id = key.slice(key.indexOf(":")+1);
-  const x = d.extra||{}, ms = data[key]||{}, name = d.name || name0, l = d.label || {}, hm = d.hist_meta;
+  const x = d.extra||{}, ms = data[key]||{}, name = d.name || name0, hm = d.hist_meta;
   const url = x.url || rawLink(src, src==="bvideo" ? name : id) || appUrl(key);
   const sp = ((S.sprouts||{})[src]||[]).find(r=>r.key===key);
   const rel = x.release_ts || x.released_time || x.created_ts;
   const kv = [];
-  if(x.full_name && x.full_name!==name) kv.push(["全名", esc(x.full_name)]);
-  if(x.name_cn && x.name_cn!==name) kv.push(["中文名", esc(x.name_cn)]);
-  if(x.name_local && x.name_local!==name) kv.push(["本地化名", esc(x.name_local)]);
-  kv.push(["上线", rel ? ymd(rel) + "，" + Math.max(0, Math.round((Date.now()/1000 - rel)/86400)) + " 天前" : "没查到"]);
-  if(x.preorder || x.coming_soon) kv.push(["状态", "还没上线（预约中 / 即将推出）"]);
-  const devs = [...new Set([...(x.developers||[]), ...(x.publishers||[]), x.dev, x.creator].filter(Boolean))];
-  if(devs.length) kv.push(["开发 / 发行", esc(devs.join("、"))]);
-  if(x.genre) kv.push(["类型", esc(x.genre)]);
-  if((x.tags||[]).length) kv.push(["标签", esc(x.tags.slice(0, 12).join("、"))]);
-  if((x.lists||[]).length) kv.push(["在哪些榜", esc(x.lists.slice(0, 8).join("、"))]);
-  if((x.sorts||[]).length) kv.push(["在哪些榜", esc(x.sorts.slice(0, 8).join("、"))]);
+  kv.push(["上线", rel ? `<span class="num">${ymd(rel)}</span>（${Math.max(0, Math.round((Date.now()/1000 - rel)/86400))} 天前）` : ((x.preorder || x.coming_soon) ? "还没上线" : '<span class="muted">没查到</span>')]);
+  const devs = [...new Set([...(x.developers||[]), ...(x.publishers||[]), x.dev, x.publisher, x.creator].filter(v=>v && typeof v==="string"))];
+  kv.push(["开发 / 发行", devs.length ? esc(devs.join("、")) : '<span class="muted">平台没给</span>']);
+  kv.push(["安装包", x.size_gb!=null ? `<span class="num">${(+x.size_gb)>=1 ? (+x.size_gb).toFixed(1)+" GB" : Math.round(x.size_gb*1024)+" MB"}</span>` : '<span class="muted">平台没给</span>']);
+  kv.push(["平台", esc(platText([key]))]);
+  if(x.price_usd!=null) kv.push(["价格", x.price_usd>0 ? "$" + (+x.price_usd).toFixed(2) + (x.discount?`（正在打 ${100-x.discount} 折）`:"") : "免费"]);
+  const tags = [...(x.tags||[]), ...(x.genre?[x.genre]:[])].filter(t=>typeof t==="string");
+  if(tags.length) kv.push(["标签", esc(tags.slice(0, 10).join("、"))]);
   if(x.score) kv.push(["评分", esc(x.score)]);
-  if(x.price_usd!=null) kv.push(["价格", x.price_usd>0 ? "$" + (+x.price_usd).toFixed(2) : "免费"]);
-  if(x.discount) kv.push(["商店打折", "-" + x.discount + "%"]);
-  if(hm && hm.reviews!=null) kv.push(["评论数", fmt(hm.reviews) + "（历史库里记的）"]);
-  if(x.top_title) kv.push(["最热的直播间", esc((x.top_nick ? x.top_nick + "：" : "") + x.top_title)]);
-  if(x.desc || x.rec_text) kv.push(["简介", esc(x.rec_text || x.desc)]);
-  kv.push(["雷达记录", d.first_seen ? "第一次抓到 " + ymd(d.first_seen) + "，最近一次 " + ago(d.last_seen) : (hm ? "只在 Steam 历史库里（后台补历史对照时收的），雷达没有抓过它的热度" : "-")]);
+  if(hm && hm.reviews!=null) kv.push(["评论数", fmt(hm.reviews)]);
+  if(x.rec_text || x.desc) kv.push(["简介", esc(x.rec_text || x.desc)]);
+  kv.push(["雷达发现", d.first_seen ? ago(d.first_seen) : (hm ? "只在 Steam 历史库里，雷达没抓过它的热度" : "-")]);
   const items = sortMets(Object.keys(ms)).map(m=>({src, m, pts:ms[m]}));
-  const blocks = dayBlocks(items, "gg_");
+  const blk = combBlock(items, "gg_all");
   const hr = hotRows(ms, src);
   const alt = [x.name_en, x.name_cn].filter(v=>v && v!==name).join(" / ");
   const card = {hist:d.hist, members:[key]};
+  DPANE = {};
   disposeIn($("drawer"));
   $("drawer").innerHTML = '<div class="dh">' + imgTag(d.image) +
-    '<div><div class="n">' + esc(name) + '</div><div class="g-alt">' + esc(alt) + '</div>' +
-    '<div>' + (url ? '<a class="tag" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(SRC[src]||src) + '</a>' : '<span class="tag">' + esc(SRC[src]||src) + '</span>') + '</div></div>' +
+    '<div><div class="n">' + esc(name) + '</div>' + (alt ? '<div class="g-alt">' + esc(alt) + '</div>' : "") +
+    '<div>' + (url ? '<a class="tag" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(SRC[src]||src) + ' ↗</a>' : '<span class="tag">' + esc(SRC[src]||src) + '</span>') + '</div></div>' +
     '<button class="btn ghost close" data-close>关闭</button></div>' +
     '<div class="db">' +
-    (sp ? '<div class="sec"><h3>增长记录</h3><div class="why"><b>刚起势：</b>' + esc(sproutText(sp)) + '</div><div style="margin-top:6px">' + spark(sp.series, sp.kind==="rank", 220, 48) + '</div></div>' : "") +
-    '<div class="sec"><h3>历史对照</h3>' + histBlock(card) + '</div>' +
-    '<div class="sec"><h3>在哪里火</h3>' +
-      (hr ? '<div class="mini"><table><thead><tr><th>指标</th><th class="r">现在</th><th class="r">比 24 小时前</th><th class="r">抓到的时间</th></tr></thead><tbody>' + hr + '</tbody></table></div>' : '<div class="muted">雷达还没抓到它的数字</div>') + '</div>' +
-    '<div class="sec"><h3>最近 90 天（按天）</h3>' + (blocks.n ? blocks.html : '<div class="muted">数据还不够，至少要抓到一天</div>') + '</div>' +
-    judgeSec(l, null) +
-    '<div class="sec"><h3>基本信息</h3><div class="kv">' + kv.map(([k,v])=>'<span class="k">' + k + '</span><span>' + v + '</span>').join("") + '</div></div>' +
+    '<div class="sec"><div class="hero"><div class="big">不在必看里</div><div class="sub">必看只放上线 ' + fmt((S.config||{}).new_max_days||180) + ' 天内、对上了视频数据的新游戏。</div>' +
+      (sp ? '<div class="sub"><b>刚起势：</b>' + esc(sproutText(sp)) + '</div>' : "") + '</div></div>' +
+    '<div class="sec"><h3>最近 90 天热度<span class="sub">每一项和它自己平时比，一样重；1 = 平时（到昨天为止）</span></h3>' + blk.html + '</div>' +
+    dTabs([["info","基本信息"],["hist","历史对照"]]) +
+    dPane("info", kvHtml(kv) + (hr ? '<div class="why" style="margin-top:14px">现在的数字</div><div class="mini"><table><thead><tr><th>指标</th><th class="r">现在</th><th class="r">比 24 小时前</th><th class="r">抓到的时间</th></tr></thead><tbody>' + hr + '</tbody></table></div>' : "")) +
+    dPane("hist", histBlock(card)) +
     '</div>';
-  judgeInit(key, l);
-  withCharts(()=>{ blocks.mount(); if(card.hist) mountHist(card); });
+  if(card.hist) DPANE.hist = ()=>withCharts(()=>mountHist(card));
+  withCharts(()=>{ blk.mount(); if(DPANE[DTAB]) DPANE[DTAB](); });
 }
 
-/* ---------- Growth ---------- */
+/* ---------- 刚起势（浮萍榜） ---------- */
 function sproutText(r){
-  return `${r.label}：${fmt(r.then)} → ${fmt(r.now)}${r.growth==null?" · 从 0 起量":" · +"+(r.growth*100).toFixed(1)+"%"}${r.hours?" · "+r.hours.toFixed(1)+" 小时":""}`;
+  if(r.kind==="rank") return `${r.label}：连着 ${r.streak} 天往前升，${r.then?"第 "+Math.round(r.then)+" 名":"榜外"} → 第 ${Math.round(r.now)} 名；按“第 40 名到第 20 名算大了一倍”换算，每天 ×${(+r.daily).toFixed(2)}，一共 ×${(+r.total).toFixed(1)}。`;
+  return `${r.label}：连涨 ${r.streak} 天，${fmt(r.then)} → ${fmt(r.now)}，每天 ×${(+r.daily).toFixed(2)}，一共 ×${(+r.total).toFixed(1)}；现在在本平台第 ${r.pos} 名${r.days!=null?`，照这个速度约 ${Math.max(1,Math.round(r.days))} 天进前 10`:""}。`;
 }
 function spark(series, isRank, w, hgt){
   w = w||96; hgt = hgt||26;
@@ -1846,48 +1538,19 @@ function spark(series, isRank, w, hgt){
   return `<svg width="${w}" height="${hgt}" viewBox="0 0 ${w} ${hgt}" style="display:block"><path d="${d}" fill="none" stroke="#dc2626" stroke-width="1.6"/>${last!=null?`<circle cx="${X(n-1)}" cy="${Y(last)}" r="2.4" fill="#dc2626"/>`:""}</svg>`;
 }
 function sproutView(src){
-  return risingView(src);
-}
-const RISING={};
-let RISING_SORT="growth";
-function risingView(src){
-  const cache=RISING[src];
-  if(!cache || Date.now()-cache.at>60000){
-    if(!cache?.loading){
-      RISING[src]={...(cache||{}),loading:true};
-      getJSON("/api/rising?source="+encodeURIComponent(src)).then(data=>{
-        if(!data) throw new Error("后台未返回数据");
-        RISING[src]={data,at:Date.now(),loading:false};
-        if(page==="plat"&&PLAT.src===src&&PLAT.tab==="movers") renderContent();
-      }).catch(e=>{RISING[src]={error:String(e),at:Date.now(),loading:false};if(PLAT.src===src)renderContent();});
-    }
-  }
-  if(!cache?.data) return `<div class="panel">${empty(cache?.error?"读取失败":"加载中",cache?.error||"")}</div>`;
-  const d=cache.data, pending=(d.rows||[]).filter(r=>r.state==="baseline_pending"||r.state==="sample_pending");
-  const rows=(d.rows||[]).filter(r=>r.state==="growth"||r.state==="zero_baseline");
-  if(RISING_SORT==="delta") rows.sort((a,b)=>(b.delta??-1)-(a.delta??-1));
-  const states={baseline_pending:"待第二次采样",sample_pending:"待首次采样",no_positive_growth:"本期未增长",zero_baseline:"从 0 起量"};
-  const body=rows.map((r,i)=>`<tr><td class="r num">${i+1}</td><td><a class="lnk" data-game="${esc(r.key)}" data-name="${esc(r.name)}">${esc(r.name)}</a><div class="g-alt">${esc(r.why)}${r.stale?" · 旧样本":""}</div></td>
-    <td>${esc(metName(r.metric||"",src))}</td><td class="r num">${r.previous==null?"待基线":fmt(r.previous)}</td><td class="r num">${r.value==null?"未采到":fmt(r.value)}</td>
-    <td class="r num">${r.delta==null?"未计算":r.kind==="rank"?rankChange(r.delta):"+"+fmt(r.delta)}</td>
-    <td class="r num">${r.growth==null?esc(states[r.state]||"未计算"):"+"+(r.growth*100).toFixed(1)+"%"}</td>
-    <td>${r.hours?r.hours.toFixed(1)+" 小时":r.evidence==="platform_rank_change"?"平台公布的排名变化":"待基线"}<div class="g-alt">${r.sampled?dtm(r.sampled):""}${r.error?" · "+esc(r.error):""}</div></td></tr>`).join("");
-  return `<div class="toolbar"><span class="info">已发现 ${fmt(d.total)} 款 · 近 ${d.days} 天 · ${d.measured} 款已测增长 · ${pending.length} 款待基线 · 本期未增长 ${d.no_growth_count||0} 款 · 排除旧游戏 ${d.excluded?.old||0}、大厂 ${d.excluded?.big||0}</span>
-    <select class="sel" id="rising-sort"><option value="growth" ${RISING_SORT==="growth"?"selected":""}>增长幅度</option><option value="delta" ${RISING_SORT==="delta"?"selected":""}>增长量</option></select></div>
-    <div class="panel"><div class="scroll-x"><table class="dense hl growth-table"><thead><tr><th>#</th><th>游戏</th><th>指标</th><th>基线</th><th>当前</th><th>增量</th><th>涨幅</th><th>采样</th></tr></thead><tbody>${body||'<tr><td colspan="8">暂无已验证增长</td></tr>'}</tbody></table></div></div>
-    ${pending.length?`<details style="margin-top:16px"><summary>待首次采样或增长基线 · ${pending.length} 款</summary><div class="scroll-x"><table class="dense"><thead><tr><th>游戏</th><th>已采到</th><th>状态</th></tr></thead><tbody>${pending.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.value==null?"未采到":fmt(r.value)}</td><td>${esc(states[r.state])}${r.error?" · "+esc(r.error):""}</td></tr>`).join("")}</tbody></table></div></details>`:""}`;
-}
-
-function steamTrendView(){
-  const p = S.steam_priority||{}, rows=p.trending||[], feed=(p.feeds||{}).trending||{};
-  const status = feed.error ? `趋势榜读取失败：${feed.error}` : p.ts ? `${p.running?"采样中":"已采样"} · ${ago(p.ts)}${p.stale?" · 数据过期":""}` : "等待首次趋势采样";
-  const body = rows.length ? `<div class="scroll-x"><table class="dense hl"><thead><tr><th>游戏</th><th class="r">Steam 实时在线</th><th class="r">SteamCharts 快照在线</th><th class="r">SteamCharts 24h 涨幅</th><th>快照时间</th></tr></thead><tbody>`+
-    rows.map(r=>`<tr><td><a class="lnk" data-game="${esc(r.key)}" data-name="${esc(r.name)}">${esc(r.name)}</a></td>
-    <td class="r num">${r.players==null?"未取到":fmt(r.players)}<div class="g-alt">${r.sampled?ago(r.sampled):""}</div></td>
-    <td class="r num">${fmt(r.provider_players)}</td><td class="r num up">${r.provider_g24>0?"+":""}${(r.provider_g24*100).toFixed(1)}%</td>
-    <td>${r.provider_sampled_at?ago(r.provider_sampled_at):"时间未知"}${r.stale?' <span class="tag">过期快照</span>':""}</td></tr>`).join("")+
-    `</tbody></table></div>` : `<div class="muted" style="padding:12px">${esc(status)}</div>`;
-  return panel("24 小时在线涨幅", "SteamCharts Trending · "+status, body);
+  const rows = (S.sprouts||{})[src]||[];
+  const head = `<div class="notice">找“还小、但已经连着几天按比例往上涨”的游戏（浮萍原理）：每天翻一倍的浮萍，铺满池塘前一天才盖住一半，榜首那种已经铺满了。所以这里<b>已经在本平台前 10 名的不放</b>；某一天突然跳一下的不算，要<b>连着 2 天以上、每天都涨 15% 以上</b>。按“连涨期间一共涨了几倍”排。每天涨 25% 以上的会同时进必看。</div>`;
+  if(!rows.length) return head + `<div class="panel">${empty(`${SRC[src]||src}现在没有刚起势的`, "")}</div>`;
+  const rk = r => r.kind==="rank";
+  const nowTxt = r => rk(r) ? "第 "+Math.round(r.now)+" 名" : fmt(r.now);
+  const thenTxt = r => rk(r) ? (r.then?"第 "+Math.round(r.then)+" 名":"榜外") : fmt(r.then);
+  const body = rows.map((r,i)=>`<tr class="click" data-game="${esc(r.key)}" data-name="${esc(r.name)}"><td class="r t2 num">${i+1}</td>
+    <td><a class="lnk" data-game="${esc(r.key)}" data-name="${esc(r.name)}">${esc(r.name)}</a>${cardOf(r.key)?' <span class="tag ok">必看里有</span>':""}<div class="g-alt">${esc(r.label)}</div></td>
+    <td>${spark(r.series, rk(r))}</td>
+    <td class="r num nowrap">${thenTxt(r)} → <b>${nowTxt(r)}</b></td>
+    <td class="r num up nowrap">连涨 ${r.streak} 天<div class="g-alt">每天 ×${(+r.daily).toFixed(2)}，共 ×${(+r.total).toFixed(1)}</div></td>
+    <td class="r num nowrap">${rk(r)?"-":"第 "+r.pos+" 名"}${r.gap!=null?`<div class="g-alt">离前 10 还差 ×${r.gap}${r.days!=null?`，约 ${Math.max(1,Math.round(r.days))} 天`:""}</div>`:""}</td></tr>`).join("");
+  return head + `<div class="panel"><div class="scroll-x"><table class="dense hl"><thead><tr><th class="r">#</th><th>游戏</th><th>最近 7 天</th><th class="r">连涨前 → 现在</th><th class="r">涨得多快</th><th class="r">在本平台排第几</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
 
 /* ---------- 其他页 ---------- */
@@ -2001,25 +1664,18 @@ function freshView(src){
   const nm = r => `<a class="lnk" data-game="${esc(r.key)}" data-name="${esc(r.name)}">${esc(r.name)}</a>`;
   const link = r => { const u = r.url || rawLink(FRESH.src, r.id); return u?`<a class="ext" href="${esc(u)}" target="_blank" rel="noopener">打开原网页</a>`:""; };
   const rk = rows[0].metric==="rank";
-  const dtxt = r => r.delta==null?"-":(rk?(r.delta>0?"往前 "+r.delta+" 名":(r.delta<0?"往后 "+(-r.delta)+" 名":"没变")):(r.delta>0?"+":"")+fmt(r.delta));
+  const dtxt = r => {
+    if(r.delta==null || !r.delta) return '<span class="t2">-</span>';
+    const up = rk ? r.delta > 0 : r.delta > 0;
+    return `<span class="${up?"up":"down"}" title="${rk?(up?"上升":"下降")+" "+Math.abs(r.delta)+" 名":fmt(r.delta)}">${up?"↑":"↓"}${fmt(Math.abs(r.delta))}</span>`;
+  };
   const body = rows.map((r,i)=>`<tr class="click" data-game="${esc(r.key)}" data-name="${esc(r.name)}"><td class="r t2 num">${i+1}</td><td>${nm(r)}</td><td><span class="tag blue">${esc(r.why)}</span></td><td class="r num">${rk?"第 "+Math.round(r.value):fmt(r.value)}</td><td class="r num ${r.delta>0?"up":(r.delta<0?"down":"t2")}">${dtxt(r)}${r.span!=null&&r.span<22?`<div class="g-alt">只隔 ${r.span} 小时</div>`:""}</td><td>${link(r)}</td></tr>`).join("");
   return `<div class="toolbar"><span class="info">${rows.length} 个 · 每 5 分钟更新一次；最近 6 小时没再抓到的不显示${rk?" · 这个平台只有名次，没有下载数":""}</span></div>
     <div class="panel"><div class="scroll-x"><table class="dense hl"><thead><tr><th class="r">#</th><th>名字</th><th>为什么算新</th><th class="r">现在的${rk?"最好名次":(MET[rows[0].metric]||rows[0].metric)}</th><th class="r">变化（对比约 24 小时前）</th><th></th></tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
 
 /* ---------- 数据核对 ---------- */
-const RAW_LOADING={};
-function loadRaw(){
-  const src=RAW.source;
-  if(RAW_LOADING[src]) return RAW_LOADING[src];
-  RAW_LOADING[src]=(async()=>{
-    const data=(await getJSON("/api/raw?source="+encodeURIComponent(src))) || {rows:[], metrics:[], sources:[]};
-    if(RAW.source!==src)return;
-    RAW.data=data;
-    if(page==="plat" && PLAT.tab==="raw") renderContent();
-  })().finally(()=>{delete RAW_LOADING[src];});
-  return RAW_LOADING[src];
-}
+async function loadRaw(){ RAW.data = (await getJSON("/api/raw?source="+encodeURIComponent(RAW.source))) || {rows:[], metrics:[], sources:[]}; if(page==="plat" && PLAT.tab==="raw") renderContent(); }
 function rawLink(src, id){
   const e = encodeURIComponent(id);
   if(src==="taptap"||src==="tapmaker") return "https://www.taptap.cn/app/"+id;
@@ -2039,7 +1695,6 @@ function rawLink(src, id){
 }
 function rawRows(){
   const d = RAW.data; let rows = d.rows||[];
-  if(RAW.days==="15") rows=rows.filter(r=>r.release && Date.now()/1000-r.release>=0 && Date.now()/1000-r.release<=15*86400);
   const q = RAW.q.trim().toLowerCase(); if(q) rows = rows.filter(r=>(r.name||"").toLowerCase().includes(q) || String(r.id).includes(q));
   const k = RAW.sort || ["downloads","players","heat","viewers","videos"].find(m=>d.metrics.includes(m)) || d.metrics[0];
   if(k && isRank(k)) return rows.slice().sort((a,b)=>(a.cur[k]??1e9)-(b.cur[k]??1e9));   // 名次：第 1 名在最上面
@@ -2052,22 +1707,19 @@ function rawView(){
   const opts = srcs.map(s=>`<option value="${esc(s)}" ${s===RAW.source?"selected":""}>${esc(SRC[s]||s)}</option>`).join("");
   const err = st.error && (!st.ok_ts || (st.err_ts||0) > st.ok_ts);
   let h = `<div class="toolbar">${srcs.length>1?`<select class="sel" data-rawsrc>${opts}</select>`:""}<input class="search" data-rawq placeholder="搜索名字或编号" value="${esc(RAW.q)}">
-    <select class="sel" data-rawdays><option value="all" ${RAW.days==="all"?"selected":""}>全部已发现游戏</option><option value="15" ${RAW.days==="15"?"selected":""}>近15天上线</option></select>
-    <span class="info">已发现 ${(d.entities||0).toLocaleString()} 款 · 有数字 ${d.sampled_count||0} 款 · 待采样 ${d.pending_count||0} 款${d.ts?" · 最近更新 "+dtm(d.ts):""}</span>
+    <span class="info">${d.ts?"最近一次抓取 "+dtm(d.ts)+(d.prev_ts?"，上一次 "+dtm(d.prev_ts):"，只抓过一次"):"还没有抓到数据"} · 一共抓过 ${d.fetches||0} 次 · 本次 ${(d.rows||[]).length.toLocaleString()} 条，记录过 ${(d.entities||0).toLocaleString()} 个</span>
     <span class="right"><button class="btn sm" data-rawreload>刷新</button></span></div>`;
   if(err && RAW.source!==PLAT.src) h += `<div class="notice">这个数据源最近一次抓取失败：${esc(st.error)}（${ago(st.err_ts)}）</div>`;
   if(!(d.rows||[]).length) return h + `<div class="panel">${empty("这个数据源还没有数据", err?"见上面的失败原因":"等它抓一次")}</div>` + rawNote();
   const rows = rawRows(), shown = rows.slice(0, RAW.limit);
   const th = d.metrics.map(m=>`<th class="r sortable ${RAW.sort===m?"sorted":""}" data-rawsort="${m}">${esc(metName(m, RAW.source))}</th>`).join("");
   const td = r => d.metrics.map(m=>{ const v=r.cur[m], p=r.prev[m]; const rk=isRank(m); const dd=(v!=null&&p!=null)?(rk?p-v:v-p):null;
-    const dt = dd?(rk?rankChange(dd):(dd>0?"+":"")+Math.round(dd).toLocaleString()):"";
-    const stamp=r.sampled?.[m];
-    const zero=(r.unverified_zero||[]).includes(m)?" · 历史零值待复核":v===0&&m==="players"&&RAW.source==="steam"?" · 官方返回0":"";
-    return `<td class="r num" title="${stamp?esc(dtm(stamp)):"该来源未提供这个指标，或尚未采到"}">${v!=null?Number(v).toLocaleString(undefined,{maximumFractionDigits:2}):r.error?"采集失败":"未采到"}${dd?`<div class="g-alt ${dd>0?"up":"down"}">${dt}</div>`:""}${stamp?`<div class="g-alt">${ago(stamp)}${Date.now()/1000-stamp>36*3600?" · 旧样本":""}${zero}</div>`:""}</td>`; }).join("");
+    const dt = dd?(rk?(dd>0?"往前 "+Math.round(dd)+" 名":"往后 "+Math.round(-dd)+" 名"):(dd>0?"+":"")+Math.round(dd).toLocaleString()):"";
+    return `<td class="r num">${v!=null?Math.round(v).toLocaleString():"-"}${dd?`<div class="g-alt ${dd>0?"up":"down"}">${dt}</div>`:""}</td>`; }).join("");
   const link = r => { const u = r.url || rawLink(RAW.source, RAW.source==="bvideo"?r.name:r.id); return u?`<a class="ext" href="${esc(u)}" target="_blank" rel="noopener">打开原网页</a>`:""; };
-  const nm = r => `<a class="lnk" data-game="${esc(r.key)}" data-name="${esc(r.name)}">${esc(r.name)}</a><div class="g-alt">${r.release?"上线 "+ymd(r.release):"上线日期未核实"}${r.error?" · "+esc(r.error):""}</div>`;
-  h += `<div class="panel"><div class="panel-h"><h2>${esc(SRC[RAW.source]||RAW.source)}：全部数据 · ${rows.length.toLocaleString()} 款</h2></div>
-    <div class="scroll-x"><table class="dense hl raw-table"><thead><tr><th>名字</th><th>编号</th>${th}<th></th></tr></thead><tbody>${shown.map(r=>`<tr class="click" data-game="${esc(r.key)}" data-name="${esc(r.name)}"><td>${nm(r)}</td><td class="t2 num">${esc(r.id)}</td>${td(r)}<td>${link(r)}</td></tr>`).join("")}</tbody></table></div>
+  const nm = r => `<a class="lnk" data-game="${esc(r.key)}" data-name="${esc(r.name)}">${esc(r.name)}</a>`;
+  h += `<div class="panel"><div class="panel-h"><h2>${esc(SRC[RAW.source]||RAW.source)}：最近一次抓到的数字</h2></div>
+    <div class="scroll-x"><table class="dense hl"><thead><tr><th>名字</th><th>编号</th>${th}<th></th></tr></thead><tbody>${shown.map(r=>`<tr class="click" data-game="${esc(r.key)}" data-name="${esc(r.name)}"><td>${nm(r)}</td><td class="t2 num">${esc(r.id)}</td>${td(r)}<td>${link(r)}</td></tr>`).join("")}</tbody></table></div>
     ${rows.length>RAW.limit?`<div style="padding:10px 16px"><button class="btn sm" data-rawmore>再显示 300 条（还有 ${(rows.length-RAW.limit).toLocaleString()} 条）</button></div>`:""}</div>`;
   return h + rawNote();
 }
@@ -2079,22 +1731,23 @@ function rawNote(){
 function nowText(){
   const s = ACT.state||{};
   if(s.busy){ const sec = s.started?Math.round(Date.now()/1000-s.started):0; return {busy:true, title:"正在"+s.task, sub:[s.detail, "已用 "+sec+" 秒"].filter(Boolean).join("  ·  ")}; }
-  if(s.task==="空闲" && s.next_live){ const nxt=S.sampling?.next||Math.min(...[s.next_live,s.next_slow].filter(Boolean)); return {busy:false, title:"空闲，等待下一轮", sub:"下次抓取 "+new Date(nxt*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",timeZone:"Asia/Shanghai"})+" · 每天北京时间 08:00、20:00 · 关机错过后开机补采"}; }
+  if(s.task==="空闲" && s.next_live){ const nxt=Math.min(...[s.next_live,s.next_slow].filter(Boolean)); return {busy:false, title:"空闲，等待下一轮", sub:"下次抓取 "+new Date(nxt*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})+"  ·  直播平台每 "+(S.config?.fast_minutes||30)+" 分钟一次，其他平台每小时一次"}; }
   return {busy:false, title:s.task||"连接中", sub:""};
 }
 function nowCard(){
   const n = nowText(), s = ACT.state||{}; const p = s.total? Math.round(100*s.done/s.total):null;
-  return `<div class="panel" id="nowcard"><div style="padding:16px 18px"><div class="nowcard"><span class="pulse ${n.busy?"on":""}"></span><div><div class="big">${esc(n.title)}</div><div class="t2" style="font-size:12px">${esc(n.sub)}</div></div><button class="btn sm" style="margin-left:auto" id="refresh2">立即刷新数据</button></div>${p!=null?`<div class="prog"><i style="width:${p}%"></i></div>`:""}</div></div>`;
+  const tasks = (s.tasks||[]).map(t=>{ const pct=t.total?Math.max(0,Math.min(100,Math.round(100*t.done/t.total))):null; return `<div class="activity-task"><div class="activity-task-head"><strong>${esc(t.task)}</strong><span>${esc(t.detail||"")}</span></div>${pct!=null?`<div class="prog"><i style="width:${pct}%"></i></div>`:""}</div>`; }).join("");
+  return `<div class="panel" id="nowcard"><div style="padding:16px 18px"><div class="nowcard"><span class="pulse ${n.busy?"on":""}"></span><div><div class="big">${esc(n.title)}</div><div class="t2" style="font-size:12px">${esc(n.sub)}</div></div><button class="btn sm" style="margin-left:auto" id="refresh2">立即刷新数据</button></div>${tasks|| (p!=null?`<div class="prog"><i style="width:${p}%"></i></div>`:"")}</div></div>`;
 }
 function termHtml(){
   if(!LOG.length) return '<span class="m">还没有日志</span>';
   return LOG.map(l=>{ const m=esc(l.msg); const cls=/失败|错误|Error|Traceback|Exception/.test(l.msg)?"e":(/完成/.test(l.msg)?"g":""); return cls?`<span class="${cls}">${m}</span>`:m; }).join("\n");
 }
 function statusView(){
-  const src = sourceRows();
+  const src = Object.entries(S.sources||{});
   let h = nowCard() + histPanel() + `<div class="panel"><div class="panel-h"><h2>实时日志</h2></div><div class="term" id="term">${termHtml()}</div></div>`;
   h += `<div class="panel"><div class="panel-h"><h2>数据源</h2>${(S.todo||[]).length?``:""}</div><div class="scroll-x"><table><thead><tr><th>平台</th><th>状态</th><th class="r">条目数</th><th>最近成功</th><th>错误信息</th></tr></thead><tbody>` +
-    (src.length ? src.map(([k,v])=>{ const st=sourceState(v); return `<tr><td class="g-name">${SRC[k]||k}</td><td><span class="tag ${st==="ok"?"ok":(st==="err"?"hot":"")}">${esc(v.state_text||(st==="ok"?"正常":(st==="err"?"失败":"未运行")))}</span></td><td class="r num">${fmt(v.count)}</td><td class="t2">${ago(v.ok_ts)}</td><td class="muted">${esc(v.error||(v.warn?"部分失败："+v.warn:""))}</td></tr>`; }).join("") : `<tr><td colspan="5" class="muted">还没有运行过</td></tr>`) + `</tbody></table></div></div>`;
+    (src.length ? src.map(([k,v])=>{ const st=sourceState(v); return `<tr><td class="g-name">${SRC[k]||k}</td><td><span class="tag ${st==="ok"?"ok":(["err","stale"].includes(st)?"hot":"")}">${({ok:"正常",err:"失败",paused:"已暂停",stale:"超时未成功"})[st]||"未运行"}</span></td><td class="r num">${fmt(v.count)}</td><td class="t2">${ago(v.ok_ts)}</td><td class="muted">${esc(v.error||(v.warn?"部分失败："+v.warn:""))}</td></tr>`; }).join("") : `<tr><td colspan="5" class="muted">还没有运行过</td></tr>`) + `</tbody></table></div></div>`;
 
   if(STATS===null){ loadStats(); h += `<div class="panel">${empty("图表加载中","")}</div>`; }
   else {
@@ -2192,79 +1845,282 @@ function aiBlock(c){
     ${r.risk?`<div class="why"><b>最大的问题：</b>${esc(r.risk)}</div>`:""}
     <div class="why muted">读了 ${esc(a.src||"")}${a.reviews?`（当时共 ${fmt(a.reviews)} 条评论）`:""} · ${ago(a.ts)}${a.cost!=null?` · 花费 ${(a.cost*100).toFixed(1)} 分钱`:""}</div>`;
 }
+function calcNote(c){
+  const P = ((S.heat_meta||{}).platforms)||{}, rows = (c.heat||{}).videos||[];
+  const lines = Object.entries(P).map(([k,m])=>{
+    const r = rows.find(x=>x.p===k);
+    if(!m.games) return `<div class="g-alt">${esc(m.name)}：没有数据</div>`;
+    const w = Object.entries(m.weights||{}).map(([f,x])=>`${esc(f)} ×${x}`).join(" + ");
+    const base = `${esc(m.name)}：每天综合量 = ${esc(m.unit)}${w?" + "+w:""}；正常值 ${fmt(Math.round(m.normal))}（${fmt(m.pool_n||m.games)} 款${esc(m.pool||"")}的中位数），离散 ${m.s!=null?m.s:"-"}`;
+    return `<div class="g-alt">${base}${r?`；这款 ${fmt(Math.round(r.value))}，(ln(1+${fmt(Math.round(r.value))}) − ln(1+${fmt(Math.round(m.normal))})) ÷ ${m.s} = ${fmtZ(r.z)}`:"；这款没有视频数据"}</div>`;
+  });
+  const k = rows.length;
+  return lines.join("") + (k>1?`<div class="g-alt">${k} 个平台：Σz ÷ √${k}</div>`:"") || '<span class="muted">-</span>';
+}
+// v92 详情顶上：一句人话的热度（不再显示 1.77 这种异常值），算法放进"怎么算的"手册
+function wanTxt(n){ n = +n||0; return n>=10000 ? (n/10000).toFixed(n>=100000?0:1)+" 万" : fmt(Math.round(n)); }
+function fmtX(x){ return x==null||!isFinite(x) ? "-" : (x>=10 ? fmt(Math.round(x)) : (+x).toFixed(1)); }
+// v93：顶上写真实的每天播放（以前写的是"综合量"，把评论点赞折成播放加进去，大了好几倍）；倍数换成"比 N% 的新游戏热"
+const PART_ORDER = ["播放","评论","点赞","转发","收藏"];
+// v96：视频平台 + 直播平台；顶上的百分比是所有平台合起来的
+function heatLines(c){
+  return ((c.heat||{}).videos||[]).map(r=>{
+    const parts = r.parts||{}, live = r.kind==="live";
+    const main = live ? Object.keys(parts)[0] : PART_ORDER.find(k=>parts[k]!=null);
+    return {name:r.name, live, main, v:main ? parts[main] : null, parts, cnt:r.n, full:r.full};
+  });
+}
+function lineTxt(a){
+  if(!a.main) return `${esc(a.name)} 有数据`;
+  return a.live ? `${esc(a.name)} 最近 7 天每天最高 ${wanTxt(a.v)} ${esc(a.main)}` : `${esc(a.name)} 每天新增 ${wanTxt(a.v)} ${esc(a.main)}`;
+}
+function pctTxt(p){ return p==null ? null : (p>=99 ? "99%" : Math.floor(p)+"%"); }
+function partsTxt(a){ return a.live ? "" : PART_ORDER.filter(k=>k!==a.main && a.parts[k]!=null).map(k=>`${k} ${wanTxt(a.parts[k])}`).join(" · "); }
+function manualHtml(){
+  return `<div class="manual">
+    <b>顶上的数字是真实的</b>：视频平台（B站、抖音、快手、小红书，以后 YouTube 有数据也自动算）= 这款游戏所有相关视频最近 7 天平均每天新增多少播放、评论、点赞；直播平台（虎牙、斗鱼、B站直播、Twitch、Kick）= 最近 7 天每天最高多少人在看（没有观看人数的平台用直播热度）。<br>
+    <b>每个平台只和自己比</b>：B站 的游戏和 B站 的比，YouTube 的和 YouTube 的比，所以平台之间量级差十倍也没关系。<br>
+    <b>几个平台合起来</b>：取"最好的那个平台"和"所有平台合起来"里高的那个。几个平台都火 → 更高；多一个不火的平台 → 不扣分；没数据的平台不算。<br>
+    <b>"比 N% 的新游戏热"</b>：上线 ${fmt((S.config||{}).new_max_days||180)} 天内、至少一个平台有数据的新游戏里，有百分之多少不如它。<br>
+    <b>视频的排名用"综合量"</b>：播放 + 评论、点赞、转发、收藏折成播放（按全平台的比例）。只用来排，不显示。<br>
+    <b>不进排名的</b>：下载、在线人数这些画在下面的图里看走势。<br>
+    <b>两个开关</b>：带「剧情」「3A」标签的打折再排（这类很少有手机版）；大厂 / 大作默认藏起来。</div>`;
+}
 function scoreHtml(c){
-  return `<h3>热度数据</h3>${scaleValues(c)}${(c.heat?.videos||[]).map(r=>
-    `<div>${esc(r.name)} · ${fmt(r.n)} 条已关联视频</div>`).join("")}`;
+  const l = c.label||{}, h = c.heat||{}, L = heatLines(c);
+  const pos = mustOrder().findIndex(x=>x.gid===c.gid);
+  let s = `<div class="hero">${pos>=0?`<span class="rank">必看第 ${pos+1} 名</span>`:""}`;
+  if(l.blocked) s += `<div class="veto">你标记了不做</div>`;
+  if(L.length){
+    const a = L[0], pt = pctTxt(MUST.raw ? h.pct : (h.pct_f!=null ? h.pct_f : h.pct)), ot = partsTxt(a);
+    s += `<div class="big">${lineTxt(a)}</div>`;
+    s += pt ? `<div class="mult">比 ${pt} 的新游戏热</div>` : "";
+    if(ot) s += `<div class="sub">每天还有：${ot}</div>`;
+    s += L.slice(1).map(b=>`<div class="sub">${lineTxt(b)}</div>`).join("");
+    const nv = L.filter(x=>!x.live).reduce((n,x)=>n+(x.cnt||0), 0);
+    s += `<div class="sub">${nv?`来自 ${fmt(nv)} 条相关视频 · `:""}${L.length>1?`${L.length} 个平台合起来`:"只有这一个平台有数据"}${h.pool_new?`，和 ${fmt(h.pool_new)} 款有数据的新游戏比`:""}</div>`;
+  } else {
+    s += `<div class="big">还没有视频和直播数据</div><div class="sub">视频平台还没对上它的视频，直播平台也没有它的分区，所以没进排名。下面的图是它在自己平台上的走势。</div>`;
+  }
+  const cut = h.cut||[];
+  if(cut.length && !MUST.raw) s += `<div class="sub">带「${cut.map(([k])=>esc(k)).join("」「")}」标签，排名时打了 ${fmtX(cut.reduce((a,[k,x])=>a*x,1)*10)} 折（上面的百分比是打折后的；播放数是真实的）</div>`;
+  if(c.big) s += `<div class="sub"><span class="tag warn">${esc(c.big)}</span>"大厂游戏：隐藏"时不在必看里显示</div>`;
+  s += `<details class="how"><summary>怎么算的</summary>${manualHtml()}</details></div>`;
+  return s;
 }
 // v51：定时刷新时只换分数这一块，不重画整个详情（以前整块重画，看到一半会跳回顶上，没保存的字也会丢）
 function refreshScore(c){ const e = $("d_score"); if(e) e.innerHTML = scoreHtml(withLocal(c)); }
+// v92 详情：标签页（基本信息 / 同类竞品 / 历史对照 / AI / 游戏档案）左右切换，不用往下翻
+let DTAB = "info";
+let DPANE = {};                  // 标签页第一次打开时才画的图：{标签: 函数}
+function dTabs(tabs){
+  if(!tabs.some(([k])=>k===DTAB)) DTAB = tabs[0][0];
+  return `<div class="dtabs">${tabs.map(([k,t])=>`<button data-dtab="${k}" class="${k===DTAB?"on":""}">${t}</button>`).join("")}</div>`;
+}
+function dPane(k, html){ return `<div class="dpane${k===DTAB?" on":""}" data-pane="${k}">${html}</div>`; }
+function showPane(k){
+  DTAB = k;
+  const root = $("drawer"); if(!root) return;
+  root.querySelectorAll("[data-dtab]").forEach(b=>b.classList.toggle("on", b.dataset.dtab===k));
+  root.querySelectorAll(".dpane").forEach(p=>p.classList.toggle("on", p.dataset.pane===k));
+  if(DPANE[k]) DPANE[k]();
+  for(const ch of Object.values(CHARTS)){ try{ const d = ch.getDom(); if(d && root.contains(d)) ch.resize(); }catch(e){} }
+}
+const PLAT_KIND = {taptap:"手机", tapmaker:"手机", appcn:"手机", appus:"手机", haoyou:"手机", mistore:"手机",
+  steam:"电脑", itch:"电脑 / 网页", poki:"网页小游戏", crazygames:"网页小游戏", wxmini:"微信小游戏", dymini:"抖音小游戏",
+  roblox:"Roblox 地图", fortnite:"Fortnite 地图"};
+// v93：只放有这款游戏专属页面的平台（B站 视频 / 话题只是搜索结果，不放）
+function platLinks(members, urls, name){
+  return (members||[]).map(m=>{ const i=m.indexOf(":"), s=m.slice(0,i), id=m.slice(i+1);
+    if(s==="bvideo" || s==="btopic") return "";
+    const u=(urls||{})[m]||rawLink(s, id)||appUrl(m);
+    return u?`<a class="tag" href="${esc(u)}" target="_blank" rel="noopener">${esc(SRC[s]||s)} ↗</a>`:""; }).join("");
+}
+function platText(members){
+  const by = {};
+  for(const m of members||[]){ const s = m.split(":")[0], k = PLAT_KIND[s]; if(!k) continue; (by[k] = by[k]||[]); if(!by[k].includes(SRC[s]||s)) by[k].push(SRC[s]||s); }
+  return Object.entries(by).map(([k,v])=>`${k}（${v.join("、")}）`).join(" · ") || "-";
+}
+function kvHtml(rows){ return `<div class="kv big">${rows.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join("")}</div>`; }
+function infoHtml(c){
+  const info = c.info||{}, rows = [];
+  const ts = info.launch_ts;
+  const soon = info.steam_coming_soon || (c.age||{}).how==="soon";
+  rows.push(["上线", ts ? `<span class="num">${ymd(ts)}</span>（${Math.max(0, Math.round((Date.now()/1000-ts)/86400))} 天前${info.launch_src?"，"+esc(SRC[info.launch_src]||info.launch_src):""}）` : (soon ? "还没上线" : '<span class="muted">没查到</span>')]);
+  const devs = [...new Set([...(c.devs||[]), info.launch_dev].filter(Boolean))];
+  rows.push(["开发 / 发行", devs.length ? esc(devs.join("、")) : '<span class="muted">平台没给</span>']);
+  rows.push(["安装包", info.size_gb!=null ? `<span class="num">${(+info.size_gb)>=1 ? (+info.size_gb).toFixed(1)+" GB" : Math.round(info.size_gb*1024)+" MB"}</span>` : '<span class="muted">平台没给</span>']);
+  rows.push(["平台", esc(platText(c.members))]);
+  if(info.price_usd!=null) rows.push(["价格", info.price_usd>0 ? "$"+(+info.price_usd).toFixed(2)+(info.discount?`（正在打 ${100-info.discount} 折）`:"") : "免费"]);
+  if((c.tags||[]).length) rows.push(["标签", esc(c.tags.slice(0, 10).join("、"))]);
+  if(c.launch) rows.push(["上线以来", `平均每天 ${fmt(c.launch.rate)} ${esc(c.launch.unit)}，同平台新游戏前 ${c.launch.top}%`]);
+  if(info.cn_share!=null) rows.push(["中文玩家", `Steam 评论里 ${Math.round(info.cn_share*100)}% 是中文`]);
+  rows.push(["雷达发现", ago(c.first_seen)]);
+  const fl = (c.flags||[]).filter(f=>f.k!=="big" && !/同名\/近名/.test(f.t||""));   // v98：按名字搜的同类不再显示
+  return kvHtml(rows) + (fl.length ? `<div class="why" style="margin-top:14px">其他说明</div><div>${fl.map(f=>`<span class="tag ${f.c||""}">${esc(f.t)}</span>`).join("")}</div>` : "");
+}
+// v98 同类竞品：同一条 B站 视频同时打了它和另一款游戏的标签（不看名字像不像）
+function rivalRow(x, own){
+  const links = (x.keys||[]).map(k=>{ const i = k.indexOf(":"), s = k.slice(0,i), u = rawLink(s, k.slice(i+1));
+    return u ? `<a class="tag" href="${esc(u)}" target="_blank" rel="noopener">${esc(SRC[s]||s)} ↗</a>` : ""; }).join("");
+  const k0 = (x.keys||[])[0];
+  const nm = k0 ? `<a class="lnk" data-game="${esc(k0)}" data-name="${esc(x.name)}"><b>${esc(x.name)}</b></a>` : `<b>${esc(x.name)}</b>`;
+  return `<div class="target"><div class="h">${nm}${x.official?' <span class="tag">开发商一样，可能是同一个游戏 / 官方版</span>':""}</div>` +
+    `<div style="margin:4px 0">${links || '<span class="t2">雷达没抓到它的商店页</span>'}</div>` +
+    `<div class="g-alt">${fmt(x.videos)} 条视频、${fmt(x.ups)} 个 UP 主同时打了两款的标签${x.bvid?` · 例：<a class="lnk" href="https://www.bilibili.com/video/${esc(x.bvid)}" target="_blank" rel="noopener">${esc(x.title||x.bvid)}</a>`:""}</div></div>`;
+}
+function supplyHtml(c){
+  const r = c.rivals;
+  if(!r || r.mode!=="tag") return '<div class="muted">还没检查（下一轮分析后出来）</div>';
+  const own = new Set(r.own||[]), f = r.found||[];
+  const other = [...new Set(f.flatMap(x=>x.plats||[]).filter(p=>!own.has(p)))];
+  let h = f.length
+    ? `<div class="big" style="font-size:16px;font-weight:600;color:var(--hot)">已经有同类：${f.length>=8?"8 款以上":f.length+" 款"}${other.length?`，在 ${other.map(p=>esc(SRC[p]||p)).join("、")}`:""}</div>`
+    : `<div class="big" style="font-size:16px;font-weight:600">还没发现同类</div>`;
+  h += `<div class="g-alt" style="margin:4px 0 12px">怎么找的：同一条 B站 视频同时打了它和另一款游戏的标签，而且至少 2 个 UP 主都这么打（盘点 / 合集视频、大厂游戏、"模拟器"这种泛标签不算）。不看名字像不像。` +
+    `雷达抓到 ${fmt(r.tagged||0)} 条打了它标签的视频${f.length?"":"，没发现 ≠ 没有，视频越多越准"}。</div>`;
+  return h + f.map(x=>rivalRow(x, own)).join("");
+}
+
+// v93：所有平台合成一条线（v92 每天只拿当天抓到的项平均，哪天只抓到 Kick 那天就变成 Kick，不成立）。
+// 1) 每一项先和它自己平时（中位数）比，得到"几倍"；某天没抓到或是 0 不算，前后 8 天内有数就按前后连起来。
+// 2) 90 天里抓到的天数不到 40%（至少 3 天）的项不进（偶尔才抓到的，比如 Kick），列在图下面。
+// 3) 同一个平台的几项取平均 = 这个平台；平台之间一样重取平均 = 红线。浅红色带 = 各平台里最高和最低。
+const COMB_SKIP = /pct|ratio|percent|positive|score|rating|price|discount/i;   // 好评率这类比例不是热度
+function dayAdd(d, n){ const t = new Date(d+"T12:00:00"); t.setDate(t.getDate()+n); return ymd(t.getTime()/1000); }
+function combineDays(items){
+  const today = ymd(Date.now()/1000), mets = [];
+  for(const x of items){
+    if(DAY_HIDE.has(x.m) || COMB_SKIP.test(x.m)) continue;
+    const k = x.days ? "cum" : metKind(x.m);         // x.days = 已经按天算好的（B站 等视频平台每天新增播放）
+    const val = r => k==="rank" ? (r.v>0 ? 1/r.v : null) : (r.v>0 ? r.v : null);
+    const rows = (x.days ? x.days.map(([d,v])=>({d, v})) : byDay(x.pts, k)).filter(r=>!r.partial && r.d!==today && val(r)!=null);
+    if(rows.length) mets.push({plat:x.prefix||SRC[x.src]||x.src, label:x.label||dayLabel(x.m, x.src, k).replace(/（.*）$/, ""), k, rows, val});
+  }
+  if(!mets.length) return null;
+  const all = mets.flatMap(m=>m.rows.map(r=>r.d)).sort(), days = [];
+  for(let d = all[0], i = 0; d<=all[all.length-1] && i<120; d = dayAdd(d, 1), i++) days.push(d);
+  if(days.length<2) return null;
+  // v96：只有一个平台时不嫌数据少（至少 2 天就画）；几个平台时，抓到不到四成天数的项才不进
+  const multi = new Set(mets.map(m=>m.plat)).size>1;
+  const at = new Map(days.map((d,i)=>[d,i])), need = multi ? Math.max(3, Math.ceil(days.length*0.4)) : 2, keep = [], drop = [];
+  for(const m of mets){
+    if(m.rows.length<need){ drop.push(m); continue; }
+    const vs = m.rows.map(m.val).sort((a,b)=>a-b), n = vs.length;
+    m.base = n%2 ? vs[(n-1)/2] : (vs[n/2-1]+vs[n/2])/2;
+    m.by = new Map();
+    const ps = m.rows.map(r=>({i:at.get(r.d), x:m.val(r)/m.base, r})).filter(p=>p.i!=null);
+    ps.forEach((p, j)=>{
+      m.by.set(days[p.i], {x:p.x, r:p.r});
+      const q = ps[j+1];
+      if(q && q.i-p.i>1 && q.i-p.i<=8) for(let i=p.i+1; i<q.i; i++) m.by.set(days[i], {x:p.x+(q.x-p.x)*(i-p.i)/(q.i-p.i), fill:true});
+    });
+    keep.push(m);
+  }
+  if(!keep.length) return {days:[], drop};
+  const plats = [...new Set(keep.map(m=>m.plat))].map(p=>({p, ms:keep.filter(m=>m.plat===p)}));
+  const avg = v => v.reduce((a,b)=>a+b,0)/v.length;
+  const per = days.map(d=>plats.map(({ms})=>{ const xs = ms.map(m=>m.by.get(d)).filter(Boolean).map(o=>o.x); return xs.length ? avg(xs) : null; }));
+  const ok = per.map(xs=>xs.filter(x=>x!=null));
+  return {days, plats, per, drop,
+    pts: ok.map(v=>v.length ? +avg(v).toFixed(2) : null),
+    lo: ok.map(v=>v.length>1 ? +Math.min(...v).toFixed(2) : null),
+    hi: ok.map(v=>v.length>1 ? +Math.max(...v).toFixed(2) : null)};
+}
+function combVal(m, o){
+  if(o.fill) return '<span style="color:#98a2b3">这天没抓到，按前后连起来</span>';
+  const r = o.r;
+  if(m.k==="rank") return `第 ${Math.round(r.v)} 名（平时第 ${Math.round(1/m.base)} 名）`;
+  return (m.k==="cum"?"+":"") + fmt(Math.round(r.v)) + `（平时 ${m.k==="cum"?"+":""}${fmt(Math.round(m.base))}）`;
+}
+function combChart(cb){
+  const band = cb.plats.length>1;
+  const series = [];
+  if(band){
+    series.push({type:"line", name:"lo", data:cb.lo, stack:"band", symbol:"none", connectNulls:true, lineStyle:{opacity:0}, silent:true, tooltip:{show:false}});
+    series.push({type:"line", name:"hi", data:cb.hi.map((v,i)=>v!=null && cb.lo[i]!=null ? +(v-cb.lo[i]).toFixed(2) : null), stack:"band", symbol:"none", connectNulls:true,
+      lineStyle:{opacity:0}, areaStyle:{color:"rgba(220,38,38,.13)"}, silent:true, tooltip:{show:false}});
+  }
+  series.push({type:"line", name:"综合", data:cb.pts, connectNulls:true, symbol:"circle", symbolSize:5, z:3,
+    lineStyle:{width:2.2, color:"#dc2626"}, itemStyle:{color:"#dc2626"},
+    markLine:{silent:true, symbol:"none", data:[{yAxis:1}], label:{formatter:"平时", color:"#667085", fontSize:11}, lineStyle:{color:"#98a2b3", type:"solid", width:1}}});
+  return {tooltip:{trigger:"axis", formatter:ps=>{ const i = ps[0].dataIndex, d = cb.days[i];
+      let s = `<b>${d}</b><br>综合：平时的 <b>${fmtX(cb.pts[i])}</b> 倍`;
+      cb.plats.forEach(({p, ms}, j)=>{
+        const x = cb.per[i][j];
+        s += `<br><b>${esc(p)}</b>：${x==null ? '<span style="color:#98a2b3">这天没有数据，不算</span>' : "平时的 "+fmtX(x)+" 倍"}`;
+        for(const m of ms){ const o = m.by.get(d); if(o) s += `<br>　${esc(m.label)}：${combVal(m, o)}`; }
+      });
+      return s; }},
+    grid:{left:8, right:40, top:14, bottom:8, containLabel:true},
+    xAxis:{type:"category", data:cb.days.map(d=>d.slice(5)), boundaryGap:false, axisLabel:{color:"#98a2b3", fontSize:11}},
+    yAxis:{type:"value", min:0, axisLabel:{formatter:v=>"×"+v, fontSize:11, color:"#98a2b3"}, splitLine:{lineStyle:{color:"#eef0f3"}}},
+    series};
+}
+function combBlock(items, id){
+  const cb = combineDays(items);
+  const dropTxt = cb && cb.drop.length ? `<div class="g-alt">数据太少没放进来（90 天里抓到不到四成的天）：${cb.drop.map(m=>esc(m.plat+" "+m.label)).join("、")}</div>` : "";
+  if(!cb || !cb.days.length) return {html:'<div class="muted">数据还不够：每一项至少要抓到 3 天</div>' + dropTxt, mount:()=>{}};
+  const used = cb.plats.map(({p, ms})=>`${esc(p)}（${ms.map(m=>esc(m.label)).join("、")}）`).join(" · ");
+  return {html: chartBox(id, 230) +
+      `<div class="g-alt" style="margin-top:6px">合在一起的：${used}。每个平台一样重；某天没抓到或是 0 就不算，按前后连起来。${cb.plats.length>1?"浅红色带 = 各平台里最高和最低，越窄说明各平台越一致。":""}鼠标放上去看每一项当天的数字。</div>` + dropTxt,
+    mount:()=>mountChart(id, combChart(cb))};
+}
+function chartSec(){ return `<div class="sec"><h3>最近 90 天热度<span class="sub">每个平台和它自己平时比，平台之间一样重；1 = 平时（到昨天为止）</span></h3><div id="charts"><div class="muted">加载中</div></div></div>`; }
+
 function renderDrawer(c, fetchSeries){
   withLocal(c);
-  const l = c.label||{}, info = c.info||{};
-  const sig = (c.signals||[]).map(s=>`<tr><td>${SRC[s.source]||s.source}</td><td class="t2">${MET[s.metric]||s.metric}</td><td class="r num">${fmt(s.value)}</td><td class="r num ${pcls(s.g24)}">${pct(s.g24)}</td><td class="r num ${pcls(s.gshort)}">${pct(s.gshort)}</td><td class="r num">${s.z!=null?s.z.toFixed(1):"-"}</td></tr>`).join("");
-  let supply = "";
-  for(const [mk,m] of Object.entries(c.markets||{})) for(const t of m.targets||[]){
-    supply += `<div class="target"><div class="h"><b>${esc(mkName(mk))} / ${esc(tgName(t.target))}</b><span class="t2">${esc(t.why.split("：").slice(1).join("：")||t.why)}</span></div>` +
-      (t.items?.length ? `<div class="mini"><table><thead><tr><th>名称</th><th>开发商</th><th>状态</th><th class="r">上线</th><th class="r">数据</th></tr></thead><tbody>` +
-      t.items.map(x=>`<tr><td>${x.key?`<a class="lnk" data-game="${esc(x.key)}" data-name="${esc(x.name)}">${esc(x.name)}</a>`:esc(x.name)} ${x.maybe_official?'<span class="tag">可能是官方</span>':""}</td><td class="t2">${esc(x.dev||"-")}</td><td>${x.status==="launched"?"已上线":'<span class="t2">预约中</span>'}</td><td class="r num">${x.age_days!=null?Math.round(x.age_days)+" 天前":"-"}</td><td class="r num t2">${esc(x.strength_label)}</td></tr>`).join("") + `</tbody></table></div>` : "") + `</div>`;
-  }
+  DPANE = {};
   disposeIn($("drawer"));
+  const alt = [c.name_en, c.name_cn].filter(x=>x && x!==c.name).join(" / ");
   $("drawer").innerHTML = `
     <div class="dh">${imgTag(c.image)}
-      <div><div class="n">${esc(c.name)}</div><div class="g-alt">${esc([c.name_en,c.name_cn].filter(x=>x&&x!==c.name).join(" / "))}</div>
-      <div class="g-alt">${esc((c.devs||[]).join("、")||"工作室未知")} · ${esc(c.gid)}</div>
-      <div>${c.fast?'<span class="tag solid" title="最近有效采样显示增长明显偏高">增长异常</span>':""}<span class="tag">首次发现 ${ago(c.first_seen)}</span>${(c.members||[]).map(m=>{ const i=m.indexOf(":"), s=m.slice(0,i), id=m.slice(i+1); const u=(c.urls||{})[m]||rawLink(s, s==="bvideo"?c.name:id); return u?`<a class="tag" href="${esc(u)}" target="_blank" rel="noopener">${SRC[s]||s}</a>`:`<span class="tag">${SRC[s]||s}</span>`; }).join("")}</div></div>
+      <div><div class="n">${esc(c.name)}</div>${alt?`<div class="g-alt">${esc(alt)}</div>`:""}
+      <div>${platLinks(c.members, c.urls, c.name)}</div></div>
       <button class="btn ghost close" data-close>关闭</button></div>
     <div class="db">
       <div class="sec" id="d_score">${scoreHtml(c)}</div>
-      <div class="sec"><h3>游戏档案</h3><div id="d_arc"><div class="muted">加载中</div></div></div>
-      <div class="sec"><h3>历史对照</h3>${histBlock(c)}</div>
-      <div class="sec"><h3>AI 怎么看</h3>${aiBlock(c)}</div>
-      <div class="sec"><h3>在哪里火</h3>
-        <div class="mini"><table><thead><tr><th>平台</th><th>指标</th><th class="r">当前</th><th class="r">比昨天</th><th class="r">短期</th><th class="r">异常</th></tr></thead><tbody>${sig||'<tr><td colspan="6" class="muted">无</td></tr>'}</tbody></table></div></div>
-      <div class="sec"><h3>目标平台有没有同类</h3>${supply||'<div class="muted">还没检查</div>'}</div>
-      <div class="sec"><h3>最近 90 天（按天）</h3><div id="charts"><div class="muted">加载中</div></div></div>
-      ${judgeSec(l, c)}
-      <div class="sec"><h3>基本信息</h3><div class="kv">
-        <span class="k">上线</span><span class="num">${info.launch_ts?ymd(info.launch_ts)+"（"+esc(SRC[info.launch_src]||info.launch_src||"")+(info.launch_matched?"："+esc(info.launch_matched):"")+(info.launch_dev?"，"+esc(info.launch_dev):"")+"）":"没查到"}</span>
-        <span class="k">新游戏增速</span><span>${c.launch?`上线 ${c.launch.age} 天，平均每天 ${fmt(c.launch.rate)} ${esc(c.launch.unit)}，在 ${c.launch.n} 款同平台新游戏里排前 ${c.launch.top}%`:"-"}</span>
-        <span class="k">Steam 分类</span><span>${esc((c.categories||[]).join("、")||"-")}</span>
-        <span class="k">商店打折</span><span>${info.discount?"-"+info.discount+"%（只是说明，不影响分数）":"-"}</span>
-        <span class="k">标签</span><span>${esc((c.tags||[]).join("、")||"-")}</span>
-        <span class="k">开发商</span><span>${esc((c.devs||[]).join("、")||"-")}</span>
-        <span class="k">安装包</span><span class="num">${info.size_gb!=null?(+info.size_gb).toFixed(1)+" GB":"-"}</span>
-        <span class="k">价格</span><span class="num">${info.price_usd!=null?(info.price_usd>0?"$"+(+info.price_usd).toFixed(2):"免费"):"-"}</span>
-        <span class="k">中文评论占比</span><span class="num">${info.cn_share!=null?Math.round(info.cn_share*100)+"%":"-"}</span>
-        <span class="k">Steam 状态</span><span>${info.steam_coming_soon?"即将推出（还不能玩）":"-"}</span>
-      </div></div>
+      ${chartSec()}
+      ${dTabs([["info","基本信息"],["supply","同类竞品"],["hist","历史对照"],["ai","AI 怎么看"],["arc","游戏档案"]])}
+      ${dPane("info", infoHtml(c))}
+      ${dPane("supply", supplyHtml(c) + '<div id="d_cmp"></div>')}
+      ${dPane("hist", histBlock(c))}
+      ${dPane("ai", aiBlock(c))}
+      ${dPane("arc", '<div id="d_arc"><div class="muted">加载中</div></div>')}
     </div>`;
-  judgeInit(c.members[0], l, c);
-  if(c.hist) withCharts(()=>mountHist(c));
+  if(c.hist) DPANE.hist = ()=>withCharts(()=>mountHist(c));
+  if(DPANE[DTAB]) DPANE[DTAB]();
   if(fetchSeries){ loadCharts(c); loadArcGame(c); }
 }
 async function loadCharts(c){
   const sup = [];
-  for(const m of Object.values(c.markets||{})) for(const t of m.targets||[]) for(const x of t.items||[])
-    if(x.key && x.status==="launched" && !(c.members||[]).includes(x.key) && !sup.some(s=>s.key===x.key)) sup.push({key:x.key, name:x.name});
+  const rf = (c.rivals||{}).found;                                      // v98：TapTap 对比图用同类竞品里的 TapTap 游戏
+  for(const x of Array.isArray(rf) ? rf : []) for(const k of x.keys||[])
+    if(/^tap/.test(k) && !sup.some(s=>s.key===k)) sup.push({key:k, name:x.name});
   const keys = [...(c.members||[]), ...sup.slice(0,6).map(s=>s.key)];
-  const data = (await getJSON("/api/series?days=90&keys="+encodeURIComponent(keys.join(",")))) || {};
+  const [data0, hv0] = await Promise.all([getJSON("/api/series?days=90&keys="+encodeURIComponent(keys.join(","))),
+                                          getJSON("/api/heat/series?days=90&gid="+encodeURIComponent(c.gid))]);
+  const data = data0 || {}, hv = hv0 || {};
   if(openGid!==c.gid) return;
-  // v51：按天画，不画每小时的点
   const items = [];
+  // v96：B站（和其他视频平台）每天新增播放也进图：有视频就有图
+  for(const [p, o] of Object.entries(hv)) if((o.days||[]).length) items.push({src:"v_"+p, m:"plays", days:o.days, prefix:o.name||p, label:"每天新增播放"});
   for(const key of c.members||[]){ const s = key.split(":")[0], ms = data[key]||{}; for(const m of sortMets(Object.keys(ms))) items.push({src:s, m, pts:ms[m], prefix:SRC[s]||s}); }
-  const blocks = dayBlocks(items, "dc_");
+  const blk = combBlock(items, "dc_all");
+  const el = $("charts"); if(!el) return;
+  disposeIn(el);
+  el.innerHTML = blk.html;
+  withCharts(blk.mount);
+  // 和 TapTap 同类比：放在"同类竞品"标签页里
   const lastOf = pts => { const m = new Map(); for(const [t,v] of pts) m.set(ymd(t), v); return [...m.entries()].map(([d,v])=>[new Date(d+"T12:00:00").getTime(), v]); };
   const own = (c.members||[]).filter(k=>/^tap/.test(k) && (data[k]?.downloads||[]).length>=2).map(k=>({key:k, name:c.name+"（本作）"}));
   const others = sup.filter(s=>(data[s.key]?.downloads||[]).length>=2);
-  let h = blocks.html;
-  if(others.length) h += '<div class="chart"><div class="l"><span>和 TapTap 上的同类比（累计热度，每天一个点）</span></div>' + chartBox("dc_cmp", 280) + '</div>';
-  const el = $("charts"); if(!el) return;
-  disposeIn(el);
-  el.innerHTML = h || '<div class="muted">数据还不够，至少要抓到一天</div>';
-  withCharts(()=>{
-    blocks.mount();
-    if(others.length) mountChart("dc_cmp", timeLine([...own, ...others].map(s=>({name:s.name, type:"line", showSymbol:false, data:lastOf(data[s.key].downloads)})), "热度"));
-  });
+  const box = $("d_cmp");
+  if(others.length && box){
+    box.innerHTML = '<div class="chart" style="margin-top:14px"><div class="l"><span>和 TapTap 上的同类比（累计热度，每天一个点）</span></div>' + chartBox("dc_cmp", 260) + '</div>';
+    DPANE.supply = ()=>withCharts(()=>mountChart("dc_cmp", timeLine([...own, ...others].map(s=>({name:s.name, type:"line", showSymbol:false, data:lastOf(data[s.key].downloads)})), "热度")));
+    if(DTAB==="supply") DPANE.supply();
+  }
 }
 
 /* ---------- 实时运行情况 ---------- */
@@ -2379,10 +2235,18 @@ function renderLive(){
   $("liveText").textContent = txt;
   $("live").title = n.title + (n.sub?"\n"+n.sub:"");
 }
+let activityPolling = false;
 async function pollActivity(){
+  if(activityPolling) return;
+  activityPolling = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(()=>controller.abort(), 5000);
   try{
-    const r = await (await fetch("/api/activity?after="+ACT.seq,{cache:"no-store"})).json();
+    const response = await fetch("/api/activity?after="+ACT.seq,{cache:"no-store",signal:controller.signal});
+    if(!response.ok) throw new Error("activity HTTP "+response.status);
+    const r = await response.json();
     ACT.state = r.state; ACT.seq = r.seq;
+    S.health = r.health; renderHealth();
     if(r.lines && r.lines.length){ LOG.push(...r.lines); if(LOG.length>1000) LOG = LOG.slice(-1000); }
     renderLive();
     if(page==="status"){
@@ -2390,56 +2254,42 @@ async function pollActivity(){
       if(term){ const atBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 40; term.innerHTML = termHtml(); if(atBottom) term.scrollTop = term.scrollHeight; }
       const nc = $("nowcard"); if(nc) nc.outerHTML = nowCard();
     }
+    if(lastRev!==null && r.state.rev < lastRev){ load(); }   // 程序重启过（可能是自动更新）
     if(lastRev!==null && r.state.rev!==lastRev){ runs = null; STATS = null; IDX = null; ARC.data = null; FRESH.data = null; for(const b of Object.values(BD)){ b.stale = true; } load(); }
     lastRev = r.state.rev;
   }catch(e){
     $("pulse").className = "pulse"; $("liveText").textContent = "连接不上雷达程序（可能已退出）";
+    S.health = {alerts:[{title:"雷达连接中断",detail:"无法确认采集是否继续，当前展示的游戏结果可能已过期。"}]}; renderHealth();
+  }finally{
+    clearTimeout(timeout); activityPolling = false;
   }
 }
 
 /* ---------- 事件 ---------- */
 function splitList(s){ return s.split(/[,，、]/).map(x=>x.trim()).filter(Boolean); }
 async function afterChange(msg){ toast(msg + "，几秒后重新排名"); for(const t of [3000, 8000, 15000, 30000]) setTimeout(load, t); }
-function resolvePage(p){
-  if(p.startsWith("hub:")&&HUBS[p.slice(4)]){
-    PLAT={src:p,tab:"raw"};return "plat";
-  }
-  if(p==="maker" || p==="tapboard"){
-    PLAT={src:p==="maker"?"tapmaker":"taptap",tab:"movers"};
-    return "plat";
-  }
-  if(p==="kw"){ PLAT={src:"bvideo",tab:"raw"}; return "plat"; }
-  if(p==="bili-growth"){ PLAT={src:"bvideo",tab:"movers"}; return "plat"; }
-  if(p==="video"){ PLAT={src:"hub:video",tab:"raw"}; return "plat"; }
-  if(["must","revenue","trend","combined"].includes(p)) return "heat";
-  return PAGES.some(x=>x.k===p)?p:"heat";
-}
-function pageHash(){
-  if(page==="plat"&&PLAT.src==="hub:video") return "#video";
-  if(page==="plat"&&PLAT.src.startsWith("hub:")&&HUBS[PLAT.src.slice(4)])return "#"+PLAT.src;
-  if(page==="plat"&&PLAT.src==="bvideo"&&PLAT.tab==="movers") return "#bili-growth";
-  return page==="plat"&&PLAT.src==="bvideo"&&PLAT.tab==="raw"?"#kw":"#"+page;
-}
 function goPage(p){
-  page = resolvePage(p); history.replaceState(null,"",pageHash());
+  page = p; history.replaceState(null,"","#"+page);
   if(page==="status"){ runs=null; STATS=null; }
   if(page==="plat"){ FRESH.data=null; RAW.data=null; IDX=null; }
   const sc = curBoard(); if(sc && bstate(sc).stale){ const b=bstate(sc); b.stale=false; b.data=null; b.games=null; }
   contentPage = null; render(); document.querySelector("main").scrollTo(0,0); window.scrollTo(0,0);
 }
 document.addEventListener("click", async e=>{
-  const t = e.target.closest("[data-page],[data-heatreload],[data-heatmore],[data-dismiss],[data-undismiss],[data-unblock2],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],[data-split],[data-hit],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
+  const t = e.target.closest("[data-dtab],[data-page],[data-rawtoggle],[data-bigtoggle],[data-dismiss],[data-undismiss],[data-unblock2],[data-mustab],[data-kwtab],[data-sttab],[data-mkscope],[data-gid],[data-game],[data-block],[data-close],[data-stars],[data-save],[data-blockcard],[data-unblock],[data-period],[data-reload-board],[data-gsort],[data-cmp],[data-unpick],[data-more],[data-cmpclose],[data-reload-idx],[data-rawreload],[data-rawsort],[data-rawmore],[data-freshsrc],[data-plat],[data-pgroup],[data-ptab],[data-split],[data-hit],#refresh,#refresh2,#mask,#reloadRuns,#reloadStats");
   if(!t) return;
   // v51：整行都能点开详情；行里的“打开原网页”链接、勾选框照常用
-  if(t.tagName==="TR" && e.target.closest("a[href],input,select,textarea,label,button,details")) return;
+  if(t.tagName==="TR" && e.target.closest("a[href],input,select,textarea,label,button")) return;
   const sc = curBoard();
   if(t.dataset.page){ goPage(t.dataset.page); return; }
-  if(t.dataset.heatreload!==undefined){ await loadHeat(true); return; }
-  if(t.dataset.heatmore!==undefined){ HEAT.limit+=200; renderContent(); return; }
-  if(t.dataset.plat){ e.preventDefault(); pickPlat(t.dataset.plat); return; }
+  if(t.dataset.dtab){ showPane(t.dataset.dtab); return; }
+  if(t.dataset.mustab){ MUST.tab=t.dataset.mustab; renderContent(); return; }
+  if(t.dataset.bigtoggle!==undefined){ MUST.showBig=!MUST.showBig; renderContent(); return; }
+  if(t.dataset.rawtoggle!==undefined){ MUST.raw=!MUST.raw; renderContent(); if(openGid){ const c=findCard(openGid); if(c) refreshScore(c); } return; }
+  if(t.dataset.plat){ pickPlat(t.dataset.plat); return; }
   if(t.dataset.split){ const ok = await post("/api/archive/split",{member:t.dataset.split}); toast(ok?"已拆出，重新打分后生效":"拆出失败：雷达程序可能没在运行"); if(ok && openGid){ const c=findCard(openGid); if(c) loadArcGame(c); } ARC.data=null; return; }
 if(t.dataset.hit){ loadHitGame(t.dataset.hit); return; }
-  if(t.dataset.ptab){ PLAT.tab=t.dataset.ptab; history.replaceState(null,"",pageHash()); if(PLAT.tab==="fresh") FRESH.data=null; else if(PLAT.tab==="movers") IDX=null; else if(PLAT.tab==="raw") RAW.data=null; contentPage=null; renderContent(); return; }
+  if(t.dataset.ptab){ PLAT.tab=t.dataset.ptab; if(PLAT.tab==="fresh") FRESH.data=null; else if(PLAT.tab==="movers") IDX=null; else if(PLAT.tab==="raw") RAW.data=null; contentPage=null; renderContent(); return; }
   if(t.dataset.mkscope){ MKSCOPE=t.dataset.mkscope; contentPage=null; renderContent(); return; }
   if(t.dataset.dismiss || t.dataset.undismiss || t.dataset.unblock2){
     e.stopPropagation();
@@ -2449,7 +2299,7 @@ if(t.dataset.hit){ loadHitGame(t.dataset.hit); return; }
     if(openGid===gid) closeDrawer();
     const from = t.dataset.dismiss ? "cards" : (t.dataset.undismiss ? "dismissed" : "blocked");
     S[from] = (S[from]||[]).filter(x=>x.gid!==gid); render();
-    afterChange(t.dataset.dismiss ? "已收进“先不看”，热度涨很多会回来" : "已放回热度"); return;
+    afterChange(t.dataset.dismiss ? "已收进“先不看”，热度涨很多会回来" : "已放回必看"); return;
   }
   if(t.dataset.game){ e.preventDefault();
     // v50：这个游戏在必看 / 老游戏 / 先不看 / 不做里有卡片，就打开和必看一样的完整详情；没有就打开它自己的资料和走势
@@ -2494,8 +2344,6 @@ if(t.dataset.hit){ loadHitGame(t.dataset.hit); return; }
 });
 document.addEventListener("change", e=>{
   const t = e.target;
-  if(t.id==="rising-sort"){ RISING_SORT=t.value; renderContent(); return; }
-  if(t.hasAttribute("data-rawdays")){ RAW.days=t.value; RAW.limit=300; renderContent(); return; }
   if(t.dataset && t.dataset.pick!==undefined){ const sc=curBoard(); if(!sc) return; const b=bstate(sc);
     if(t.checked){ if(b.picked.size>=10){ t.checked=false; toast("最多同时对比 10 款"); return; } b.picked.add(t.dataset.pick); } else b.picked.delete(t.dataset.pick);
     rerenderGames(sc); return; }
@@ -2506,15 +2354,6 @@ document.addEventListener("change", e=>{
 let gqTimer = null;
 document.addEventListener("input", e=>{
   const t = e.target;
-  if(t.hasAttribute("data-heatq")){
-    HEAT.q=t.value; HEAT.limit=200; clearTimeout(gqTimer);
-    const cursor=t.selectionStart;
-    gqTimer=setTimeout(()=>{
-      renderContent(); const input=document.querySelector("[data-heatq]");
-      if(input){input.focus();input.setSelectionRange(cursor,cursor);}
-    },250);
-    return;
-  }
   if(JUDGE && (t.id==="f_alias" || t.id==="f_kw" || t.id==="f_note")){
     judgeStatus("有改动，停手 1 秒后自动保存");
     clearTimeout(JUDGE.timer); JUDGE.timer = setTimeout(()=>flushJudge(), 1000); return;
@@ -2532,14 +2371,14 @@ document.addEventListener("input",e=>{
   if(input){input.focus();input.setSelectionRange(cursor,cursor);}
 });
 
-page=resolvePage(page);
-if(location.hash && location.hash!==pageHash()) history.replaceState(null,"",pageHash());
-render();
+if(page==="maker"){ page="plat"; PLAT={src:"tapmaker", tab:"board"}; }      // 旧书签
+else if(page==="tapboard"){ page="plat"; PLAT={src:"taptap", tab:"board"}; }
+if(!PAGES.some(p=>p.k===page)) page = "must";
 load();
 pollActivity();
 setInterval(load, 60000);
 setInterval(pollActivity, 2000);
-window.addEventListener("hashchange", ()=>{ const p=(location.hash||"").slice(1)||"heat"; if(p!==page) goPage(p); });
+window.addEventListener("hashchange", ()=>{ const p=(location.hash||"").slice(1); if(PAGES.some(x=>x.k===p) && p!==page) goPage(p); });
 loadEcharts();
 </script>
 </body>

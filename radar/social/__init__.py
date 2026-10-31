@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""社交平台：抖音 / 抖音指数 / 哔哩指数 / 快手 / 小红书 / TikTok + 关键词漏斗。
+"""社交平台：抖音 / 快手 / 小红书 / TikTok + 关键词漏斗。
 
 一个后台线程，一分钟看一次该干什么，一次只干一件（不同时开很多标签，免得被风控）：
   热榜到点了 → 读一个热榜 → 漏斗重新分类；
@@ -11,8 +11,8 @@ import threading
 import time
 import traceback
 
-from .. import db, sampling
-from . import funnel, jobs, page, settings, store, validation
+from .. import db
+from . import batch, funnel, jobs, page, settings, store
 
 SCHEMA = store.SCHEMA
 RUN_NOW = threading.Event()
@@ -43,8 +43,12 @@ def _loop(stop_event):
         _state["err"] = "建表失败：%s" % e
         return
     # 开机先等一分钟，让别的采集先跑
-    if stop_event.wait(60):
-        return
+    for _ in range(60):
+        if stop_event.wait(1):
+            return
+        if RUN_NOW.is_set():
+            RUN_NOW.clear()
+            break
     while not stop_event.is_set():
         try:
             _tick()
@@ -70,6 +74,30 @@ def _tick():
     if not settings.get("SOCIAL_ENABLED"):
         return
     now = time.time()
+    # The visible top-100 snapshot owns the keyword queue, before hot lists or AI.
+    batch.resume_verified_pages()
+    progress = batch.progress(now)
+    if progress["term_count"]:
+        task = batch.next_query(progress)
+        if task and page.available():
+            job, term = task
+            _state["busy"] = "%s：%s" % (store.JOB_NAMES[job], term)
+            try:
+                ok = jobs.run_kw(job, term)
+            except Exception as e:
+                store.save_lookup(job, term, False, note=str(e))
+                store.status(job, False, err=str(e))
+                ok = False
+            if ok:
+                _refresh_batch_ranking(progress["created"])
+            else:
+                batch.pause_if_required(job)
+            return
+        # A successful batch can outlive an interrupted ranking update.
+        if progress["complete"]:
+            ranking = progress["ranking"]
+            if ranking.get("created") != progress["created"] or ranking.get("state") != "complete":
+                _refresh_batch_ranking(progress["created"])
     # 1. 漏斗：30 分钟重算一次（只是本地整理，不花钱）
     if now - _state["funnel_ts"] > 1800:
         _state["busy"] = "整理关键词"
@@ -91,23 +119,28 @@ def _tick():
             store.status("funnel_ai", False, err=str(e))
 
     browser = page.available()
+    # 雷达专用浏览器没开就自己在后台开（最小化），不用你一直手动开着
+    if not browser and settings.get("SOCIAL_AUTO_BROWSER") and now - _state.get("launch_ts", 0) > 1800:
+        _state["launch_ts"] = now
+        _state["busy"] = "在后台打开雷达专用浏览器"
+        try:
+            page.launch_browser(background=True)
+        except Exception:                        # noqa: BLE001
+            pass
+        browser = page.available()
     # 2. 热榜
+    hot_gap = max(15, int(settings.get("SOCIAL_HOT_MINUTES") or 60)) * 60
     for job, plat, url_name, max_lists in jobs.HOT_JOBS:
         if not settings.platform_on(plat):
             continue
-        if not jobs.api_ready(job):
+        if job not in _forced and now - store.last_try(job) < hot_gap:
             continue
-        state = db.kv_get("sampling:social:" + job, {}) or {}
-        if job not in _forced and state.get("completed_slot", 0) >= sampling.latest_slot(now):
-            continue
-        force = job in _forced
         _forced.discard(job)
         if not browser:
-            store.status(job, False, err="现有浏览器的 CDP 9222 未连接")
+            store.status(job, False, err="雷达专用浏览器没开（各平台 → 视频平台大厅里点“打开雷达专用浏览器”）")
             continue
         _state["busy"] = store.JOB_NAMES.get(job, job)
-        sampling.run_due("social:" + job,
-                         lambda: jobs.run_hot(job, plat, url_name, max_lists), force=force)
+        jobs.run_hot(job, plat, url_name, max_lists)
         funnel.refresh()
         _state["funnel_ts"] = time.time()
         return
@@ -120,9 +153,12 @@ def _tick():
     if not q:
         return
     for job, plat, kind in jobs.KW_JOBS:
+        if progress["term_count"]:
+            # Do not duplicate batch attempts through the legacy 20-hour queue.
+            continue
         if not settings.platform_on(plat):
             continue
-        if not jobs.api_ready(job):
+        if kind == "api" and not jobs.api_ready(job):
             continue
         if kind != "api" and not browser:
             continue
@@ -142,30 +178,37 @@ def _tick():
         return
 
 
+def _refresh_batch_ranking(created):
+    from .. import analyze
+    db.kv_set("social_batch_ranking", {"created": created, "state": "running"})
+    try:
+        analyze.run(allow_network=False, send_notify=False, allow_ai=False)
+    except Exception as e:
+        db.kv_set("social_batch_ranking", {"created": created, "state": "failed",
+                                          "error": str(e)[:300]})
+        raise
+    db.kv_set("social_batch_ranking", {"created": created, "state": "complete",
+                                      "ts": int(time.time())})
+
+
 # ---------------- 给面板的接口 ----------------
 
 def api_state():
     ensure()
     s = settings.load(fill_missing=False)
-    st = {k: dict(v) for k, v in store.status_all().items()}
-    for job, *_ in jobs.HOT_JOBS:
-        item = st.setdefault(job, {})
-        if item.get("validation_version") != validation.VERSION:
-            item.update(ok_ts=None, count=None, note="旧结果未校验，已隔离")
+    st = store.status_all()
     hot = {}
     for job, plat, _, _ in jobs.HOT_JOBS:
-        h = store.latest_hot(job)
+        h = store.latest_hot(job, 60)
         h["name"] = store.JOB_NAMES[job]
         hot[job] = h
     return {
-        "validation_version": validation.VERSION,
-        "legacy_quarantined": store.legacy_counts(),
+        "pipeline_version": 7,
         "enabled": bool(s.get("SOCIAL_ENABLED")),
         "running": _state["started"], "busy": _state["busy"], "error": _state["err"],
         "browser": page.available(), "port": page.port(),
         "jobs": [{"job": j, "name": store.JOB_NAMES[j], "on": settings.platform_on(p),
-                  **(st.get(j) or {}), "ready": jobs.api_ready(j),
-                  "ready_reason": validation.reason(j)}
+                  "ready": jobs.api_ready(j), **(st.get(j) or {})}
                  for j, p, _ in [(a, b, c) for a, b, c, _ in jobs.HOT_JOBS] + list(jobs.KW_JOBS)],
         "ai": st.get("funnel_ai") or {},
         "settings": {"per_day": s.get("SOCIAL_KW_PER_DAY"), "gap": s.get("SOCIAL_KW_GAP_MINUTES"),
@@ -175,6 +218,7 @@ def api_state():
         "buckets": funnel.buckets(),
         "bucket_names": funnel.BUCKETS,
         "queue": funnel.queue()[:30],
+        "batch": funnel.batch_progress(),
         "hot": hot,
         "lookups": store.latest_lookups(80),
     }
@@ -182,8 +226,7 @@ def api_state():
 
 def api_term(term):
     ensure()
-    return {"validation_version": validation.VERSION, "term": term,
-            "lookups": store.lookups_for(term), "series": store.series_for(term)}
+    return {"term": term, "lookups": store.lookups_for(term), "series": store.series_for(term)}
 
 
 def api_label(term, label):
@@ -195,7 +238,7 @@ def api_label(term, label):
 
 def api_run():
     RUN_NOW.set()
-    return {"ok": True, "note": "马上去读一遍热榜（一个一个来，几分钟内读完）"}
+    return {"ok": True, "note": "已唤醒采集队列，优先处理必看前 100 名的名称和别名"}
 
 
 def api_browser():
@@ -207,6 +250,8 @@ def http_get(h, path, q):
     try:
         if path == "/api/social/state":
             h._json(api_state())
+        elif path == "/api/social/blank":
+            h._send("<!doctype html><title>GameRadar</title>", "text/html")
         elif path == "/api/social/term":
             h._json(api_term(q.get("term", [""])[0]))
         else:
@@ -221,6 +266,14 @@ def http_post(h, path, body):
             h._json(api_label(str(body.get("term") or ""), str(body.get("label") or "")))
         elif path == "/api/social/run":
             h._json(api_run())
+        elif path == "/api/social/resume":
+            if body.get("verified") is not True:
+                h._json({"ok": False, "error": "请先在平台完成登录或验证"})
+            else:
+                h._json(batch.resume(str(body.get("job") or "")))
+                RUN_NOW.set()
+        elif path == "/api/social/retry":
+            h._json(batch.retry_failed(str(body.get("job") or "")))
         elif path == "/api/social/browser":
             h._json(api_browser())
         elif path == "/api/social/open":

@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 from html import unescape
 
 from . import activity, bili_queue, bili_term_filter, bili_terms, config, db
-from .sources import bili
+from . import bili_realtime_client as bili
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS bd_days(
@@ -271,6 +271,8 @@ def enrich_video(bvid, persistent=False, timeout=None):
             if timeout is not None:
                 options["timeout"] = timeout
             _save_detail(bili.detail_with_tags(bvid, **options))
+            from .health import worker_result
+            worker_result("标签补齐")
         except bili.RiskError:
             raise
         except Exception as exc:
@@ -292,6 +294,8 @@ def enrich_video(bvid, persistent=False, timeout=None):
                     c.execute("""UPDATE bs_pending SET retry_after=?,attempts=?
                         WHERE bvid=?""", (retry, row["detail_attempts"] + 1, bvid))
             if not unavailable:
+                from .health import worker_result
+                worker_result("标签补齐", exc)
                 raise
         return True
 
@@ -523,9 +527,9 @@ def summary(day=None):
         out["coverage"] = "Selected dated directories; not a whole-site game census"
         out["counters"] = "Cumulative counters at detail retrieval, not daily increases"
         pause = max((bili.pause_info(scope) for scope in
-                     ("日期目录", "视频详情及标签")), key=lambda value: value["seconds"])
-        out["pause_seconds"], out["pause_until"] = pause["seconds"], pause["until"]
-        if pause["seconds"] and out["status"] not in ("complete", "partial"):
+                     ("日期目录", "视频详情及标签")), key=lambda value: value.get("seconds", 0))
+        out["pause_seconds"], out["pause_until"] = pause.get("seconds", 0), pause.get("until")
+        if pause.get("seconds", 0) and out["status"] not in ("complete", "partial"):
             out["status"] = "paused"
         return out
 

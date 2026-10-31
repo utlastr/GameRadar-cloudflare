@@ -2,10 +2,10 @@
 """每个平台怎么读。
 
 两类：
-- 热榜（每小时）：抖音指数热点榜、哔哩指数首页榜单、快手热榜、TikTok 创意中心热门话题。
+- 热榜（每小时）：抖音热榜、快手热榜、TikTok 创意中心热门话题。
   读到的词全部进漏斗（funnel.py）判断是不是游戏、新不新。
-- 关键词（每天每个平台最多 SOCIAL_KW_PER_DAY 个，词来自漏斗筛出的新游戏和 SOCIAL_WATCH_TERMS）：
-  抖音搜索、抖音指数逐日曲线、哔哩指数逐日曲线、快手搜索、小红书搜索；
+- 关键词（每天每个平台最多 SOCIAL_KW_PER_DAY 个，词来自雷达必看前 100 名）：
+  抖音和 TikTok 视频搜索、快手搜索、小红书搜索；
   有官方密钥时：抖音开放平台视频搜索、TikTok 广告库。
 
 浏览器那几项都在"雷达专用浏览器"（带调试端口、你登录过的）里打开一个后台标签读，读完关掉。
@@ -13,16 +13,17 @@
 """
 import json
 import random
+import re
 import time
+import unicodedata
 
 from .. import db
 from ..net import HttpError, get_json, post_form, post_json
-from . import extract, page, settings, store, validation
+from . import extract, page, settings, store
 
 HOT_JOBS = [
     # job, 平台开关名, 网址名, 每份最多存几个榜单
-    ("douyin_index_hot", "douyin_index", "douyin_index_hot", 6),
-    ("bili_index_home", "bili_index", "bili_index_home", 8),
+    ("douyin_hot", "douyin", "douyin_hot", 4),
     ("kuaishou_hot", "kuaishou", "kuaishou_hot", 4),
     ("tiktok_hashtag", "tiktok", "tiktok_hashtag", 3),
 ]
@@ -30,8 +31,7 @@ HOT_JOBS = [
 KW_JOBS = [
     # job, 平台开关名, 类型
     ("douyin_kw", "douyin", "videos"),
-    ("douyin_index_kw", "douyin_index", "series"),
-    ("bili_index_kw", "bili_index", "series"),
+    ("tiktok_kw", "tiktok", "videos"),
     ("kuaishou_kw", "kuaishou", "videos"),
     ("xiaohongshu_kw", "xiaohongshu", "videos"),
     ("douyin_open", "douyin", "api"),
@@ -40,9 +40,38 @@ KW_JOBS = [
 
 
 def _short_lists(found, max_lists):
-    """Compatibility helper: accept only source-validated lists."""
-    return [L for L in found.get("lists", [])
-            if L.get("validation_version") == validation.VERSION][:max_lists]
+    """热榜：词短（中位数 ≤ 40 字）、至少 5 条、带热度数字的榜单，按条数从多到少取前几个。
+
+    v79：页面里还有问卷、菜单、按钮文字这些"一串带数字的文字"，
+    所以要求：来源不像问卷/配置；带"您/请输入/满意/反馈/官网首页"这类字的条目去掉，去掉超过三成就整串不要；
+    热度数字最大的要 ≥ 100（问卷选项、菜单的数字都是 0/1/2）；同一个词只留一次。
+    """
+    good = []
+    for L in found["lists"]:
+        if extract.junk_src(L.get("src")):
+            continue
+        items = [it for it in L["items"] if not extract.junk_text(it["text"])]
+        if len(items) < 5 or len(items) < 0.7 * len(L["items"]):
+            continue
+        lens = sorted(len(it["text"]) for it in items)
+        if lens[len(lens) // 2] > 40:
+            continue
+        vals = [store.main_value(it["nums"]) for it in items]
+        vals = [v for v in vals if v is not None]
+        if not vals or max(vals) < 100:
+            continue
+        good.append(dict(L, items=items))
+    # 顶层的列表优先（嵌在别的列表里面的，多半是每个热点下挂的视频）
+    good.sort(key=lambda L: ((L.get("path") or "").count("[]"), -len(L["items"])))
+    seen, out = set(), []
+    for L in good:
+        items = [it for it in L["items"] if it["text"] not in seen]
+        seen.update(it["text"] for it in items)
+        if len(items) >= 5:
+            out.append(dict(L, items=items))
+        if len(out) >= max_lists:
+            break
+    return out
 
 
 def kind_of(job):
@@ -61,9 +90,6 @@ def _why_empty(d, job, what):
 
 
 def run_hot(job, platform, url_name, max_lists):
-    if validation.reason(job):
-        store.status(job, False, err=validation.reason(job))
-        return 0
     u = settings.url(url_name, region=settings.get("SOCIAL_TIKTOK_REGION") or "US")
     if not u:
         store.status(job, False, err="没有网址（settings.json 的 SOCIAL_URLS 里可以填）")
@@ -78,15 +104,10 @@ def run_hot(job, platform, url_name, max_lists):
         return 0
     found = extract.find(d["caps"])
     store.debug_dump(job, extract.debug_digest(d, found))
-    problem = page.problem(d)
-    if problem:
-        store.status(job, False, err=problem, url=d.get("url") or u)
-        return 0
-    lists = validation.hot_lists(found, job, d.get("url") or u)[:max_lists]
+    lists = _short_lists(found, max_lists)
     n = store.save_hot(platform, job, lists)
     if n:
-        store.status(job, True, n, note="%d 个已校验榜单" % len(lists),
-                     validation_version=validation.VERSION)
+        store.status(job, True, n, note="%d 个榜单" % len(lists))
     else:
         store.status(job, False, err=_why_empty(d, job, "榜单"), url=d.get("url") or u)
     return n
@@ -94,31 +115,51 @@ def run_hot(job, platform, url_name, max_lists):
 
 # ---------------- 关键词：浏览器 ----------------
 
-def run_kw(job, term):
-    store.status(job, False, err=validation.KEYWORD_REASON)
+def _search_text(text):
+    return "".join(c for c in unicodedata.normalize("NFKC", text or "").lower() if c.isalnum())
+
+
+def _matches_search_name(text, names):
+    text = unicodedata.normalize("NFKC", text or "").lower()
+    compact = _search_text(text)
+    for name in names:
+        key = _search_text(name)
+        if len(key) < 2 or key not in compact:
+            continue
+        # Single Latin words also occur in lessons, music and player names.
+        if re.fullmatch(r"[a-z0-9_'-]+", name.lower().strip()):
+            escaped = re.escape(name.lower().strip())
+            if not re.search(r"(?<![a-z0-9])" + escaped + r"(?![a-z0-9])", text):
+                continue
+            if not (re.search(r"[《【「(]\s*" + escaped + r"\s*[》】」)]", text)
+                    or re.search(r"游戏名[称]?\s*[:：]?\s*" + escaped
+                                 + r"(?=\s*(?:$|[，。；;#\n]))", text)
+                    or (re.search(r"#\s*" + escaped + r"(?=\s|#|$)", text)
+                        and any(word in text for word in
+                                ("steam", "独立游戏", "新游推荐", "新游上线", "游戏预告", "游戏测评")))):
+                continue
+        return True
     return False
 
 
-def _unverified_keyword_implementation(job, term):
+def run_kw(job, term):
     if job == "douyin_open":
         return _douyin_open(term)
     if job == "tiktok_ads":
         return _tiktok_ads(term)
-    after = None
-    if job == "bili_index_kw":
-        u = settings.url("bili_index_kw", kw=term)
-        if not u:
-            u = settings.url("bili_index_home")
-            after = page.type_search(term)
-    else:
-        u = settings.url(job, kw=term)
+    if kind_of(job) != "videos":
+        return False
+    u = settings.url(job, kw=term)
     if not u:
         store.status(job, False, err="没有网址")
+        store.save_lookup(job, term, False, note="没有网址")
         return False
     try:
-        d = page.open_capture(u, wait=9.0, after=after, scroll=2 if kind_of(job) == "videos" else 0)
+        d = page.open_capture(u, wait=6.0 if job == "tiktok_kw" else 9.0,
+                              scroll=max(1, min(40, int(settings.get("SOCIAL_KW_SCROLLS") or 12))))
     except page.NoBrowser as e:
         store.status(job, False, err=str(e))
+        store.save_lookup(job, term, False, note=str(e))
         return False
     except Exception as e:                       # noqa: BLE001
         store.status(job, False, err="打开页面失败：%s" % e)
@@ -126,41 +167,145 @@ def _unverified_keyword_implementation(job, term):
         return False
     found = extract.find(d["caps"])
     store.debug_dump(job, extract.debug_digest(d, found))
-    kind = kind_of(job)
-    if kind == "series":
-        series = [s for s in found["series"] if len(s["points"]) >= 7]
-        if not series:
-            note = page.problem(d) or "没认出逐日曲线（可能这个词没被收录）"
-            store.save_lookup(job, term, False, note=note)
-            store.status(job, False, err="「%s」：%s" % (term, _why_empty(d, job, "逐日曲线（可能这个词没被收录）")),
-                         url=d.get("url") or u)
-            return False
-        store.save_series(job, term, series)
-        summ = {"metrics": []}
-        for s in series[:8]:
-            vals = [v for _, v in s["points"]]
-            last7 = vals[-7:]
-            prev = vals[-37:-7] or vals[:-7]
-            summ["metrics"].append({
-                "metric": s["metric"], "days": len(vals), "from": s["points"][0][0], "to": s["points"][-1][0],
-                "last": vals[-1], "avg7": sum(last7) / len(last7),
-                "avg_prev30": (sum(prev) / len(prev)) if prev else None,
-                "first30_avg": sum(vals[:30]) / min(30, len(vals)),
-            })
-        store.save_lookup(job, term, True, summ)
-        store.status(job, True, len(series), note="「%s」%d 条曲线" % (term, len(series)))
-        return True
-    L = extract.best_video_list(found)
-    if not L:
+    problem = page.problem(d)
+    if job == "tiktok_kw":
+        L = _tiktok_search_list(d["caps"])
+    elif job == "douyin_kw":
+        L = _douyin_search_list(d["caps"])
+        allowed = set(d.get("result_video_ids") or [])
+        if L is not None:
+            captured_count = len(L["items"])
+            L["items"] = [v for v in L["items"] if v["url"].rsplit("/", 1)[-1] in allowed]
+            card_count = len(L["items"])
+            names = {term}
+            snapshot = db.kv_get("radar_social_batch", {}) or {}
+            gids = {g["gid"] for g in snapshot.get("games", []) if term in g.get("terms", [])}
+            for game in snapshot.get("games", []):
+                if game["gid"] in gids:
+                    names.update(game.get("terms", []))
+            L["items"] = [v for v in L["items"]
+                          if _matches_search_name(v.get("text"), names)]
+            L["captured_count"] = captured_count
+            L["card_count"] = card_count
+            # Only an exhausted, recognized search can establish zero matches.
+            exhausted = L.get("has_more") in (0, False, "0") and L.get("has_more") is not None
+            empty_page = not allowed and any(message in (d.get("text") or "") for message in
+                                            ("暂无搜索结果", "暂无相关视频", "未找到相关视频",
+                                             "没有找到相关视频", "搜索无结果"))
+            if not L["items"] and not (exhausted and (card_count or empty_page)):
+                L = None
+    else:
+        L = extract.best_video_list(found)
+    blocked = "人机验证" in problem or ("要登录" in problem and (L is None or not L["items"]))
+    if L is None or blocked:
         note = page.problem(d) or "没认出视频列表"
         store.save_lookup(job, term, False, note=note)
-        store.status(job, False, err="「%s」：%s" % (term, _why_empty(d, job, "视频列表")), url=d.get("url") or u)
+        store.status(job, False, err="「%s」：%s" % (term, _why_empty(d, job, "视频列表")),
+                     url=d.get("url") or u, target_id=d.get("target_id"))
         return False
     summ = extract.summarize_videos(L)
+    summ["coverage"] = "captured_search_results"
+    summ["has_more"] = L.get("has_more")
+    # Commit videos before reporting the query as successful.
+    count = store.save_videos(dict((j, p) for j, p, _ in KW_JOBS).get(job, job),
+                              term, L["items"], verified=job == "douyin_kw")
+    if count < len(L["items"]):
+        note = "搜索结果没有可保存的视频统计"
+        store.save_lookup(job, term, False, note=note)
+        store.status(job, False, err=note)
+        return False
+    summ["stored"] = count
+    if job == "douyin_kw":
+        summ["provenance_version"] = 5
+        summ["scope"] = "search_result_cards_with_archive_name"
+        summ["captured_count"] = L.get("captured_count", 0)
+        summ["card_count"] = L.get("card_count", 0)
     store.save_lookup(job, term, True, summ)
-    store.save_videos(dict((j, p) for j, p, _ in KW_JOBS).get(job, job), term, L["items"])
     store.status(job, True, summ["n"], note="「%s」%d 条" % (term, summ["n"]))
     return True
+
+
+def _tiktok_search_list(caps):
+    """Keep only video items from TikTok's search response, not audio-card lists."""
+    items, seen, recognized, more = [], set(), False, None
+    for cap in caps:
+        if "/api/search/general/full/" not in (cap.get("src") or ""):
+            continue
+        obj = cap.get("obj") or {}
+        if not isinstance(obj, dict) or obj.get("status_code", 0) != 0 or not isinstance(obj.get("data"), list):
+            continue
+        recognized = True
+        more = obj.get("has_more")
+        for row in obj["data"]:
+            if not isinstance(row, dict):
+                continue
+            item = row.get("item") or {}
+            vid = str(item.get("id") or "")
+            if not (item.get("isVideo") or row.get("type") == 1 and item.get("video")) or not vid or vid in seen:
+                continue
+            seen.add(vid)
+            stats = item.get("stats") or {}
+            nums = {
+                "playCount": extract.num(stats.get("playCount")),
+                "commentCount": extract.num(stats.get("commentCount")),
+                "diggCount": extract.num(stats.get("diggCount")),
+                "shareCount": extract.num(stats.get("shareCount")),
+                "collectCount": extract.num(stats.get("collectCount")),
+            }
+            items.append({
+                "rank": len(items) + 1,
+                "text": str(item.get("desc") or "")[:200],
+                "ts": extract.num(item.get("createTime")),
+                "url": "https://www.tiktok.com/video/" + vid,
+                "nums": {key: value for key, value in nums.items() if value is not None},
+            })
+    return {"path": "$.data", "src": "tiktok_search", "items": items,
+            "has_more": more} if recognized else None
+
+
+def _douyin_search_list(caps):
+    """Merge captured search pages by video ID, not by response list size."""
+    items, seen, recognized, more = [], set(), False, None
+    for cap in caps:
+        src = cap.get("src") or ""
+        network_search = any(path in src for path in
+                             ("/aweme/v1/web/search/item/", "/aweme/v1/web/general/search/"))
+        if not network_search and src != "parse":
+            continue
+        obj = cap.get("obj") or {}
+        if not isinstance(obj, dict) or obj.get("status_code", 0) != 0:
+            continue
+        data = obj.get("data")
+        if not isinstance(data, list):
+            data = obj.get("aweme_list")
+        if not isinstance(data, list):
+            continue
+        if not network_search and not any(
+                isinstance(row, dict) and isinstance(row.get("aweme_info"), dict)
+                and row["aweme_info"].get("aweme_id") and isinstance(row["aweme_info"].get("statistics"), dict)
+                for row in data):
+            # Parsed page data has no URL provenance; require actual video records.
+            continue
+        recognized, more = True, obj.get("has_more")
+        for row in data:
+            if not isinstance(row, dict):
+                continue
+            item = row.get("aweme_info", row)
+            if not isinstance(item, dict):
+                continue
+            vid = str(item.get("aweme_id") or "")
+            if not vid or vid in seen:
+                continue
+            seen.add(vid)
+            stats = item.get("statistics") or {}
+            nums = {key: extract.num(stats.get(key)) for key in
+                    ("play_count", "comment_count", "digg_count", "share_count", "collect_count")}
+            items.append({"rank": len(items) + 1, "text": str(item.get("desc") or "")[:4000],
+                          "ts": extract.num(item.get("create_time")),
+                          "url": "https://www.douyin.com/video/" + vid,
+                          "nums": {k: v for k, v in nums.items() if v is not None}})
+    return {"path": "$.data", "src": "douyin_search", "items": items,
+            "has_more": more} if recognized else None
 
 
 # ---------------- 关键词：抖音开放平台（官方） ----------------
@@ -311,8 +456,6 @@ def _tiktok_ads(term):
 
 
 def api_ready(job):
-    if validation.reason(job):
-        return False
     if job == "douyin_open":
         return bool(settings.get("DOUYIN_OPEN_CLIENT_KEY") and settings.get("DOUYIN_OPEN_CLIENT_SECRET"))
     if job == "tiktok_ads":

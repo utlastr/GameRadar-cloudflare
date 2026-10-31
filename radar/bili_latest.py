@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from . import activity, bili_queue, bili_stream as stream, bili_terms, config, db
-from .sources import bili
+from . import bili_realtime_client as bili
 
 SOURCE = "legacy_game_latest_web"
 REVISION = bili_queue.REVISION
@@ -125,6 +125,8 @@ def poll_once(force=False, stop_event=None):
             _write_state(c, current)
             c.execute("INSERT INTO bs_events VALUES(?,'discovered',?)", (received, current["new"]))
             c.execute("DELETE FROM bs_events WHERE ts<?", (received - 86400,))
+        from .collect import _status
+        _status("bvideo", True, len(rows), warn="实时列表出现断档" if gap else "")
         return current
     except Exception as exc:
         failed = state()
@@ -135,6 +137,8 @@ def poll_once(force=False, stop_event=None):
                       next_poll=now + max(10, pause), pid=os.getpid())
         with db.session() as c:
             _write_state(c, failed)
+        from .collect import _status
+        _status("bvideo", False, err=failed["error"])
         return failed
     finally:
         try:
@@ -265,7 +269,7 @@ def log_health():
     health = result["throughput"]["status"]
     signature = (result["status"], health, bool(result["gaps"]))
     previous = db.kv_get("bili_stream_health_log", {}) or {}
-    if previous.get("signature") == list(signature) and now - previous.get("ts", 0) < 300:
+    if previous.get("signature") == list(signature) and now - previous.get("ts", 0) < 60:
         return
     labels = {"empty": "无待补任务", "warming_up": "统计采样中", "growing": "积压增长",
               "draining": "积压减少", "balanced": "积压持平", "stalled": "补齐未推进",
@@ -279,6 +283,8 @@ def log_health():
 
 def register_gap_days():
     """Closed days with observed gaps join the existing durable daily backfill."""
+    if not config.BVIDEO_DAILY_ENABLED:
+        return []
     from . import bili_daily
     init()
     with db.session() as c:
@@ -302,6 +308,7 @@ def register_gap_days():
 
 def start(stop_event=None):
     global _runtime_started
+    from .health import worker_result
     init()
     with stream._lock:
         if stream._started:
@@ -315,10 +322,20 @@ def start(stop_event=None):
     register_gap_days()
 
     def latest_loop():
+        last_log = 0
         while not stop.is_set():
             try:
                 if config.BVIDEO_STREAM_ENABLED and config.source_on("bvideo"):
-                    poll_once(stop_event=stop)
+                    result = poll_once(stop_event=stop)
+                    if time.time() - last_log >= 60:
+                        if result.get("busy"):
+                            activity.say("B站最新投稿：等待上次请求租约释放，尚未发起新请求")
+                        else:
+                            activity.say("B站最新投稿：状态 %s，本次返回 %s 条，新增 %s 条；%s" % (
+                                result.get("status"), result.get("returned", 0),
+                                result.get("new", 0), result.get("error") or
+                                ("列表断档" if result.get("status") == "gap" else "实时轮询中")))
+                        last_log = time.time()
             except Exception as exc:
                 activity.say("B站最新投稿：" + str(exc)[:200])
             stop.wait(0.5)
@@ -331,7 +348,9 @@ def start(stop_event=None):
                         if stop.is_set():
                             break
                         drain_partition(tid)
+                    worker_result("入库")
             except Exception as exc:
+                worker_result("入库", exc)
                 activity.say("B站视频入库：" + str(exc)[:200])
             stop.wait(0.2)
 
@@ -359,7 +378,9 @@ def start(stop_event=None):
                         last_rescan = time.time()
                     register_gap_days()
                     log_health()
+                    worker_result("维护")
             except Exception as exc:
+                worker_result("维护", exc)
                 activity.say("B站采集维护：" + str(exc)[:200])
             stop.wait(60)
 
@@ -372,7 +393,9 @@ def start(stop_event=None):
                 if time.time() - last_refresh >= 5:
                     bili_terms.refresh_dirty(sweep=256)
                     last_refresh = time.time()
+                worker_result("本地分析")
             except Exception as exc:
+                worker_result("本地分析", exc)
                 activity.say("B站本地分析：" + str(exc)[:200])
             stop.wait(0.05 if completed else 1)
 

@@ -1,5 +1,6 @@
 """程序当前在做什么 + 最近的运行日志。给面板的"运行情况"和托盘图标显示用。"""
 import collections
+import re
 import sys
 import threading
 import time
@@ -10,6 +11,7 @@ _seq = 0
 _tasks = {}
 _state = {"busy": False, "task": "启动中", "detail": "", "done": 0, "total": 0, "started": None,
           "next_live": None, "next_slow": None, "rev": 0}
+_TRACE_LINE = re.compile(r'^(?:Traceback \(most recent call last\):|File ".+", line \d+|During handling of the above exception)')
 
 
 def log(msg):
@@ -20,8 +22,11 @@ def log(msg):
         return
     with _lock:
         for line in msg.splitlines():
+            # Keep actionable error summaries, not traceback frames or source snippets.
+            if not line.strip() or line[0].isspace() or _TRACE_LINE.match(line):
+                continue
             _seq += 1
-            _lines.append({"seq": _seq, "ts": time.time(), "msg": line})
+            _lines.append({"seq": _seq, "ts": time.time(), "msg": line.strip()})
 
 
 def say(msg):
@@ -38,14 +43,19 @@ def begin(task, detail=""):
 
 def progress(done, total, detail=None):
     with _lock:
-        _state["done"], _state["total"] = done, total
-        if detail is not None:
-            _state["detail"] = detail
         task = _tasks.get(threading.get_ident())
         if task is not None:
             task.update(done=done, total=total)
             if detail is not None:
                 task["detail"] = detail
+            if task is list(_tasks.values())[-1]:
+                _state["done"], _state["total"] = done, total
+                if detail is not None:
+                    _state["detail"] = detail
+        else:
+            _state["done"], _state["total"] = done, total
+            if detail is not None:
+                _state["detail"] = detail
 
 
 def end():
@@ -78,12 +88,12 @@ def idle(next_live, next_slow):
 
 def state():
     with _lock:
-        return dict(_state, tasks=list(_tasks.values()))
+        return dict(_state, tasks=[dict(task) for task in _tasks.values()])
 
 
 def snapshot(after=0):
     with _lock:
-        return {"state": dict(_state, tasks=list(_tasks.values())), "seq": _seq,
+        return {"state": dict(_state, tasks=[dict(task) for task in _tasks.values()]), "seq": _seq,
                 "lines": [l for l in _lines if l["seq"] > after][-500:]}
 
 

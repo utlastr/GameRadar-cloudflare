@@ -5,11 +5,12 @@ locally or in a web/cloud environment.
 
 ## Authoritative Base
 
-- The current integration branch is `master`.
-- GitHub's default branch is currently `main`. It has different history and must
-  not be assumed to contain the current project.
+- The current integration branch is `main`, as explicitly directed by the user
+  on 2026-10-28. It is also the GitHub default branch.
+- The legacy `master` branch has different history. Do not merge that history
+  into `main` as an incidental part of a task.
 - Unless the user explicitly changes the integration branch, start new work
-  from the latest fetched `origin/master`, not the default branch.
+  from the latest fetched `origin/main`.
 - Never replace `main` with `master`, or merge their histories, as an incidental
   part of another task.
 
@@ -47,7 +48,9 @@ locally or in a web/cloud environment.
 
 - Changes to `master` or `main` must go through a pull request. Do not push
   changes directly to either integration branch.
-- Target `master` unless the user explicitly requests another base.
+- Target `main` unless the user explicitly requests another base. When the user
+  asks to finish and merge the task, complete the pull request merge if checks
+  and repository permissions allow; do not describe an open PR as integrated.
 - Before merging, fetch the latest base and compare the full diff. Reconcile
   concurrent changes on the task branch using a normal merge when needed.
 - Resolve conflicts by understanding and preserving both intended behaviors.

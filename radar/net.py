@@ -130,6 +130,11 @@ def get_text(url, params=None, headers=None, retries=2, timeout=20):
                     continue          # 带上算好的 cookie 再请求一次
             return text
         except urllib.error.HTTPError as e:
+            host = urllib.parse.urlparse(url).hostname or ""
+            if (host == "bilibili.com" or host.endswith(".bilibili.com")) and e.code in (403, 412, 429):
+                # Let the Bilibili client stop the whole batch before any retry.
+                raise HttpError(e.code, host + urllib.parse.urlparse(url).path,
+                                retry_after=e.headers.get("Retry-After")) from e
             last_err = e
             body = ""
             try:
@@ -176,10 +181,11 @@ def get_json(url, params=None, headers=None, retries=2, timeout=20):
 
 
 class HttpError(RuntimeError):
-    def __init__(self, code, body):
+    def __init__(self, code, body, retry_after=None):
         super().__init__(f"HTTP {code}：{body[:200]}")
         self.code = code
         self.body = body
+        self.retry_after = retry_after
 
 
 def post_json(url, body, headers=None, timeout=90):

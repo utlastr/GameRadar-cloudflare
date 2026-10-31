@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import activity, config, db
-from .sources.bili import normalize
+from .bili_realtime_client import normalize
 
 VERSION = 1
 KINDS = {

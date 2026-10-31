@@ -8,14 +8,11 @@ import os
 import sqlite3
 import threading
 import time
-from collections import deque
 from contextlib import contextmanager
 
 from . import config
 
 _lock = threading.RLock()
-_session_metrics_lock = threading.Lock()
-_session_events = deque(maxlen=20000)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS entities (
@@ -69,6 +66,10 @@ CREATE TABLE IF NOT EXISTS revisit (
     member TEXT PRIMARY KEY, last_ts INTEGER, interval_h REAL, n INTEGER, last_v REAL,
     hist TEXT, sig TEXT, reason TEXT
 );
+CREATE TABLE IF NOT EXISTS steam_summary (
+    day TEXT, scope TEXT, item_key TEXT, name TEXT, rank INTEGER, value REAL, delta REAL, extra TEXT,
+    PRIMARY KEY (day, scope, item_key)
+);
 """
 
 
@@ -101,32 +102,13 @@ def _retry_missing(fn):
 @contextmanager
 def session():
     """用法：with db.session() as c: c.execute(...)  结束时自动保存并关闭。"""
-    queued = time.monotonic()
     with _lock:
-        acquired = time.monotonic()
+        conn = _connect()
         try:
-            conn = _connect()
-            try:
-                yield conn
-                conn.commit()
-            finally:
-                conn.close()
+            yield conn
+            conn.commit()
         finally:
-            with _session_metrics_lock:
-                _session_events.append((time.monotonic(), acquired - queued,
-                                        time.monotonic() - acquired,
-                                        threading.current_thread().name))
-
-
-def session_metrics():
-    now = time.monotonic()
-    with _session_metrics_lock:
-        events = [event for event in _session_events if event[0] >= now - 60]
-    count = len(events)
-    return {"sessions_last_minute": count,
-            "mean_wait_seconds": round(sum(e[1] for e in events) / count, 4) if count else 0,
-            "max_hold_seconds": round(max((e[2] for e in events), default=0), 4),
-            "slowest_thread": max(events, key=lambda e: e[2])[3] if events else None}
+            conn.close()
 
 
 def init():
@@ -141,6 +123,12 @@ def init():
 def upsert_entities(c, source, ts, items):
     for it in items:
         extra = it.get("extra")
+        if source in ("haoyou", "taptap", "tapmaker") and extra is not None:
+            from .mobile_details import preserve
+            old = c.execute("SELECT extra FROM entities WHERE source=? AND entity=?",
+                            (source, str(it["entity"]))).fetchone()
+            if old:
+                extra = preserve(extra, json.loads(old[0] or "{}"))
         c.execute(
             """INSERT INTO entities(source, entity, name, first_seen, last_seen, extra)
                VALUES (?, ?, ?, ?, ?, ?)

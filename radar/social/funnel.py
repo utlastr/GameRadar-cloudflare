@@ -68,10 +68,6 @@ def _places():
 
 def _age_from_series(term):
     """指数曲线：开头 30 天平均 ≥ 最近 7 天的一半 → 老（早就有热度了）；曲线太短返回 None。"""
-    return None
-
-
-def _unverified_age_from_series(term):
     with db.session() as c:
         rows = c.execute("SELECT platform, metric, day, value FROM soc_series WHERE term = ? ORDER BY day",
                          (term,)).fetchall()
@@ -142,10 +138,18 @@ def refresh(hours=36):
     """把最近的热榜词并进 soc_terms，重新分类。"""
     since = int(time.time() - hours * 3600)
     with db.session() as c:
-        rows = c.execute("SELECT rowid, platform, job, text, rank, value, ts FROM soc_hot h WHERE ts >= ? "
-                         f"AND {store.trusted_hot_sql()}",
+        rows = c.execute("SELECT rowid, platform, job, text, rank, value, ts FROM soc_hot WHERE ts >= ?",
                          (since,)).fetchall()
         old = {r["norm"]: dict(r) for r in c.execute("SELECT * FROM soc_terms")}
+    # v79：以前误收的问卷题目、菜单文字清掉（你标过的不动）
+    bad_rows = [r[0] for r in rows if extract.junk_text(r[3])]
+    bad_terms = [k for k, o in old.items() if not o.get("label") and extract.junk_text(o.get("term"))]
+    if bad_rows or bad_terms:
+        with db.session() as c:
+            c.executemany("DELETE FROM soc_hot WHERE rowid = ?", [(x,) for x in bad_rows])
+            c.executemany("DELETE FROM soc_terms WHERE norm = ?", [(x,) for x in bad_terms])
+        for k in bad_terms:
+            old.pop(k, None)
     agg = {}
     for _, p, job, text, rank, value, ts in rows:
         t = (text or "").strip().lstrip("#").strip()
@@ -173,7 +177,7 @@ def refresh(hours=36):
     for k, a in agg.items():
         o = old.get(k) or {}
         try:
-            srcs = a["sources"]
+            srcs = set(json.loads(o.get("sources") or "[]")) | a["sources"]
         except ValueError:
             srcs = a["sources"]
         try:
@@ -183,7 +187,8 @@ def refresh(hours=36):
         cls, why, age, age_why = classify(a["term"], k, o.get("label"), ai)
         out.append((k, o.get("term") or a["term"], min(o.get("first_ts") or a["first"], a["first"]),
                     max(o.get("last_ts") or 0, a["ts"]), (o.get("seen") or 0) + 1, json.dumps(sorted(srcs)),
-                    a["rank"], a["value"],
+                    min(o.get("best_rank") or 999, a["rank"]),
+                    max(o.get("best_value") or 0, a["value"] or 0) or None,
                     cls, why, age, age_why, o.get("label"), o.get("ai"), o.get("ai_ts"), now))
     if out:
         with db.session() as c:
@@ -233,10 +238,8 @@ def ai_round():
         with db.session() as c:
             rows = c.execute("SELECT norm, term FROM soc_terms WHERE label IS NULL AND ai IS NULL "
                              "AND cls IN ('unknown', 'related') AND last_ts >= ? "
-                             "ORDER BY best_rank, best_value DESC",
+                             "ORDER BY best_rank, best_value DESC LIMIT 40",
                              (int(time.time() - 3 * 86400),)).fetchall()
-        trusted = trusted_norms()
-        rows = [r for r in rows if r["norm"] in trusted][:40]
         if not rows:
             break
         total += _ai_batch(rows)
@@ -308,7 +311,7 @@ def bucket_of(r):
     if r["age"] == "old":
         return "old"
     if r["cls"] == "game":
-        return "new" if r["age"] == "new" else "related"
+        return "new"
     return r["cls"] or "unknown"
 
 
@@ -318,11 +321,8 @@ def buckets(days=3, limit=80):
         rows = [dict(r) for r in c.execute(
             "SELECT * FROM soc_terms WHERE last_ts >= ? OR label IS NOT NULL ORDER BY best_rank, best_value DESC",
             (since,))]
-    trusted = trusted_norms()
     out = {k: [] for k, _ in BUCKETS}
     for r in rows:
-        if not r.get("label") and r["norm"] not in trusted:
-            continue
         b = bucket_of(r)
         if len(out[b]) >= limit:
             continue
@@ -337,36 +337,16 @@ def buckets(days=3, limit=80):
 
 
 def queue():
-    """要去各平台查的词，按优先级：你加的 → 新游戏 → 玩法词；同一栏按上了几个榜、名次。
-
-    v79：「游戏相关（待核）」不再去查（"新赛季 我要认真了"这种只是带了"赛季"两个字的话题，查了白花额度），
-    你点成"是游戏/玩法词"或 AI 判成游戏后才查。超过 20 个字的也不查（是句子不是名字）。
-    """
-    watch = [w for w in (settings.get("SOCIAL_WATCH_TERMS") or []) if w]
-    since = int(time.time() - 3 * 86400)
-    with db.session() as c:
-        rows = [dict(r) for r in c.execute("SELECT * FROM soc_terms WHERE last_ts >= ?", (since,))]
-    pri = {"new": 0, "gameplay": 1}
-    trusted = trusted_norms()
-    cand = []
-    for r in rows:
-        if not r.get("label") and r["norm"] not in trusted:
-            continue
-        b = bucket_of(r)
-        if b not in pri or len(r["term"] or "") > 20:
-            continue
-        try:
-            n_src = len(json.loads(r.get("sources") or "[]"))
-        except ValueError:
-            n_src = 1
-        cand.append((pri[b], -n_src, r.get("best_rank") or 999, -(r.get("last_ts") or 0), r["term"]))
-    cand.sort()
-    # v81：雷达排名靠前的游戏名（analyze 写的）和漏斗里的词一个一个交替排
-    radar = [t for t in (db.kv_get("radar_social_terms", []) or []) if t]
-    fun = [c[-1] for c in cand]
-    mixed = [x for pair in zip(radar, fun) for x in pair] + radar[len(fun):] + fun[len(radar):]
+    """Return the alias-expanded query snapshot for the current top-100 batch."""
+    batch = db.kv_get("radar_social_batch", {}) or {}
+    if isinstance(batch, dict):
+        radar = [q.get("term") for q in batch.get("queries", []) if isinstance(q, dict) and q.get("term")]
+    else:
+        radar = []
+    if not radar:
+        radar = [t for t in (db.kv_get("radar_social_terms", []) or []) if t]
     seen, out = set(), []
-    for t in watch + mixed:
+    for t in radar:
         k = normalize(t)
         if k and k not in seen:
             seen.add(k)
@@ -374,10 +354,7 @@ def queue():
     return out
 
 
-def trusted_norms():
-    with db.session() as c:
-        words = c.execute("SELECT DISTINCT text FROM soc_hot h WHERE ts>=? "
-                          f"AND {store.trusted_hot_sql()}",
-                          (time.time()-3*86400,)).fetchall()
-    return {normalize(row[0]) for row in words} | {
-        normalize(t) for t in settings.get("SOCIAL_WATCH_TERMS") or []}
+def batch_progress():
+    """Expose persisted completion state for the current top-100 alias batch."""
+    from . import batch
+    return batch.progress()

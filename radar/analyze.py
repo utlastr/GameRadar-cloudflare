@@ -269,10 +269,6 @@ def _rank_scores(entities):
                 n = max(len(ranks), max(ranks.values()), 10)
                 had_prev = bool(prev.get(m))
                 for e, r in ranks.items():
-                    if s == "dymini":
-                        from .sources.dymini import candidate
-                        if not candidate(cur.get("rank_new", {}).get(e)):
-                            continue
                     r = int(r)
                     pos = 1 - math.log(r) / math.log(n + 1)          # 第 1 名 = 1，最后一名接近 0
                     hot, text = 0.0, ""
@@ -459,7 +455,8 @@ def _age_and_studio(card):
         hit = next((d for d in devs if d and match.company_match(d, config.BIG_COMPANIES)), None)
         if hit:
             big = config.BIG_FACTOR
-            flags.append({"t": f"大厂：{hit}（降权，不排除）", "c": ""})
+            if not (card.get("heat") or {}).get("big"):    # v85：大厂标签由 heat.big_reason 统一给，这里不重复
+                flags.append({"t": f"大厂：{hit}", "c": "warn", "k": "big"})
     if (label.get("stars") or 0) >= 3:
         w, big = 1.0, 1.0           # 你觉得值得跟（3 星以上）：不管多老、多大都不打折
     fw = card.setdefault("factor_why", [])
@@ -589,6 +586,8 @@ def group_info(members, entities):
         info["devs"] += (x.get("developers") or []) + (x.get("publishers") or [])
         if x.get("dev"):
             info["devs"].append(x["dev"])
+        if x.get("publisher"):
+            info["devs"].append(x["publisher"])
         if x.get("size_gb") is not None:
             info["size_gb"] = x["size_gb"]
         if x.get("price_usd") is not None:
@@ -726,36 +725,25 @@ def _new_games(groups, entities, now):
         if any(((entities.get(tuple(m.split(":", 1))) or {}).get("extra") or {}).get("generic") for m in ms):
             continue
         days, how = _game_age(ms, entities, src_first, first_run, now)
-        # The current new-game chart is launch evidence, not an exact date.
-        on_new_chart = any(
-            m.startswith("dymini:")
-            and ((entities.get(tuple(m.split(":", 1))) or {}).get("extra") or {}).get("new_candidate")
-            and now - ((entities.get(tuple(m.split(":", 1))) or {}).get("last_seen") or 0) <= 32 * 3600
-            for m in ms)
-        discovery_sources = {m.split(":", 1)[0] for m in ms
-                             if m.split(":", 1)[0] in config.DISCOVERY_SOURCES}
-        if discovery_sources == {"dymini"} and not on_new_chart:
-            continue
-        if days is None and on_new_chart:
-            days, how = 0, "new_chart"
         if days is None or days > config.NEW_MAX_DAYS:
             continue
         nm, ncn, nen = _display(ms, entities)
         if _big_game({"name": nm, "name_cn": ncn, "name_en": nen, "members": ms}):
             continue
-        out[g] = {"days": None if how == "new_chart" else round(days, 1), "how": how}
+        out[g] = {"days": round(days, 1), "how": how}
     return out
 
 
-def _plat_diag(groups, hs, elig, now_ts, revenues=None):
+def _plat_diag(groups, hs, elig, now_ts):
     """每个发现平台：32 小时内抓到几款、几款有分数、几款是大作 / 大厂、两种排名下最好第几。"""
     from .heat import rank_key
     with db.session() as c:
         seen = {r[0]: r[1] for r in c.execute(
             "SELECT source, COUNT(DISTINCT entity) FROM metrics WHERE ts >= ? GROUP BY source", (now_ts - 32 * 3600,))}
-    pos_f = {g: i + 1 for i, g in enumerate(sorted(elig, key=lambda g: rank_key(hs[g], "final")))
+    vis = [g for g in elig if not hs[g]["big"]]          # v85：名次按"大厂游戏：隐藏"（默认）算
+    pos_f = {g: i + 1 for i, g in enumerate(sorted(vis, key=lambda g: rank_key(hs[g], "final")))
              if hs[g]["final"] is not None}
-    pos_r = {g: i + 1 for i, g in enumerate(sorted(elig, key=lambda g: rank_key(hs[g], "raw")))
+    pos_r = {g: i + 1 for i, g in enumerate(sorted(vis, key=lambda g: rank_key(hs[g], "raw")))
              if hs[g]["raw"] is not None}
     out = []
     for s in sorted(config.DISCOVERY_SOURCES):
@@ -763,14 +751,56 @@ def _plat_diag(groups, hs, elig, now_ts, revenues=None):
             continue
         p = s + ":"
         mine = [g for g in elig if any(m.startswith(p) for m in groups[g])]
-        revenue_count = sum(any(r.get("source") == s and r.get("daily_cny") is not None
-                                for r in (revenues or {}).get(g, {}).get("channels", [])) for g in mine)
         out.append({"src": s, "seen": seen.get(s, 0), "scored": sum(1 for g in mine if hs[g]["raw"] is not None),
-                    "revenue_scored": revenue_count, "revenue_missing": len(mine) - revenue_count,
                     "zero": sum(1 for g in mine if hs[g]["big"]),
                     "best": min((pos_f[g] for g in mine if g in pos_f), default=None),
                     "best_raw": min((pos_r[g] for g in mine if g in pos_r), default=None)})
     return out
+
+
+def _rank_change(members, now_ts):
+    """Return the latest daily rank movement for a card; positive means up."""
+    best = None
+    with db.session() as c:
+        for member in members:
+            source, entity = member.split(":", 1)
+            rows = c.execute(
+                "SELECT ts, value FROM metrics WHERE source=? AND entity=? "
+                "AND metric LIKE 'rank_%' AND ts>=? ORDER BY ts DESC",
+                (source, entity, now_ts - 32 * 3600)).fetchall()
+            if len(rows) < 2:
+                continue
+            current_ts, current = rows[0]
+            previous = next((v for ts, v in rows[1:] if current_ts - ts >= 18 * 3600), None)
+            if previous is None:
+                continue
+            change = float(previous) - float(current)
+            if best is None or abs(change) > abs(best):
+                best = change
+    return round(best) if best is not None and best else 0
+
+
+def _save_must_summary(cards, now_ts):
+    """Persist a compact daily ranking snapshot and use it for Must Watch movement."""
+    day = time.strftime("%Y-%m-%d", time.localtime(now_ts))
+    with db.session() as c:
+        previous_day = c.execute(
+            "SELECT MAX(day) FROM steam_summary WHERE scope='must' AND day<?", (day,)).fetchone()[0]
+        previous = {}
+        if previous_day:
+            previous = {r[0]: r[1] for r in c.execute(
+                "SELECT item_key,rank FROM steam_summary WHERE scope='must' AND day=?",
+                (previous_day,))}
+        rows = []
+        for rank, card in enumerate(cards, 1):
+            key = str(card["gid"])
+            old_rank = previous.get(key)
+            card["rank_change"] = (int(old_rank) - rank) if old_rank is not None else 0
+            rows.append((day, "must", key, card["name"], rank, card.get("final"),
+                         card["rank_change"], "{}"))
+        c.executemany(
+            """INSERT OR REPLACE INTO steam_summary
+               (day,scope,item_key,name,rank,value,delta,extra) VALUES (?,?,?,?,?,?,?,?)""", rows)
 
 
 def _run(allow_network=True, send_notify=True, allow_ai=None):
@@ -840,7 +870,7 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     live_new, live_day1 = _live_new_categories(entities, sig_by_key)
     stars, star_by_cat, star_titles = _star_rooms(established)
     rank_sc = _rank_scores(entities)
-    # Use the same observed-growth definition as the platform views.
+    # v50 刚起势（浮萍）：还小、但连着几天按比例往上涨的
     try:
         from . import sprouts as _sp
         sprout_rows = _sp.compute(entities)
@@ -851,23 +881,19 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         sprout_rows = {}
     sprout_sc = {r["key"]: r for rows in sprout_rows.values() for r in rows if r["hot"] > 0}
 
-    # Monetary ranking is computed before any legacy heat shortlist.
-    from . import heat, revenue
+    # v81 评分（radar/heat.py）：异常值。先给所有档案算分，两种排名各取前 400 做卡片
+    from . import heat
     hs, heat_meta = heat.score_groups(groups, entities)
-    rs, revenue_meta = revenue.score_groups(groups, entities, now_ts)
     # v82：必看只有新游戏：上线不超过 NEW_MAX_DAYS 天；老牌大游戏、判断不了上线时间的不进
     ages = _new_games(groups, entities, now_ts)
-    elig = [g for g in ages if g in hs or rs[g]["daily_cny"] is not None
-            or any(m.startswith("dymini:") and
-                   ((entities.get(tuple(m.split(":", 1))) or {}).get("extra") or {}).get("new_candidate")
-                   for m in groups[g])]
-    for g in elig:
-        hs.setdefault(g, {"raw": None, "final": None, "videos": [], "counters": [],
-                          "down": None, "big": None, "cut": [], "scale": [],
-                          "trend": {"state": "insufficient", "ratio": None}})
-    by_r = sorted(elig, key=lambda g: heat.rank_key(hs[g], "raw"))
-    # Calculate monetary candidates independently of the legacy heat shortlist.
-    pick = set(elig)
+    elig = [g for g in ages if g in hs]
+    # v85：大厂 / 大作照常算分，单独挑（最多 150 款，页面开关打开"显示"时看）；不占普通游戏的 400 个位置
+    nb = [g for g in elig if not hs[g]["big"]]
+    bg = [g for g in elig if hs[g]["big"]]
+    by_r = sorted(nb, key=lambda g: heat.rank_key(hs[g], "raw")) + \
+        sorted(bg, key=lambda g: heat.rank_key(hs[g], "raw"))       # 搜视频时大厂排在最后，省请求
+    pick = set(by_r[:400]) | set(sorted(nb, key=lambda g: heat.rank_key(hs[g], "final"))[:400]) | \
+        set(sorted(bg, key=lambda g: heat.rank_key(hs[g], "final"))[:150])
     _social_terms(by_r, groups, entities)
     _bili_terms(by_r + [g for g in ages if g not in hs], groups, entities)
 
@@ -971,6 +997,8 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
         # 查不到上线时间时的备用判断：开始运行时就已经很大的
         olds = [established.get(m) or live_day1.get(m) for m in disc]
         old_hint = "；".join(sorted(set(o for o in olds if o)))[:60] if olds and all(olds) else None
+        if hs[gid]["big"]:
+            flags.insert(0, {"t": hs[gid]["big"], "c": "warn", "k": "big"})
         hv = scoring.heavy(info)
         if hv:
             flags.append({"t": hv, "c": ""})
@@ -1009,10 +1037,12 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
             "label": label, "hot": round(hot, 3), "market_hot": {k: round(v, 3) for k, v in mh.items()},
             "flags": flags, "factor": round(factor, 3), "factor_why": factor_why,
             "heat": hs[gid], "raw": hs[gid]["raw"], "final": hs[gid]["final"], "age": ages.get(gid),
-            "revenue": rs[gid],
+            # v85：大厂 / 大作的原因；你打了 3 星以上的不算（页面不藏）
+            "big": hs[gid]["big"] if (label.get("stars") or 0) < 3 else None,
             "launch": best_l[1] if best_l else None,
             "fast": any(s["fast"] for s in sigs),
             "first_seen": min(entities[tuple(m.split(":", 1))]["first_seen"] or 0 for m in members),
+            "rank_change": _rank_change(members, now_ts),
             "signals": [{"key": f"{s['source']}:{s['entity']}", "source": s["source"],
                          "metric": s["metric"], "value": s["value"],
                          "g24": s["g24"], "gshort": s["gshort"], "z": s["z"], "cusum": s["cusum"],
@@ -1028,25 +1058,28 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     for card in cards:
         _age_and_studio(card)
 
-    # 历史对照：起步和它差不多的 Steam 小游戏后来有多少成功了（只加说明，不改分数）
-    try:
-        from . import history
-        history.attach(cards)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        activity.say(f"历史对照出错：{type(e).__name__}：{e}")
+    if not getattr(config, "STEAM_ONLY", False):
+        try:
+            from . import history
+            history.attach(cards)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            activity.say(f"历史对照出错：{type(e).__name__}：{e}")
 
-    # AI 读评论（有密钥才用；老游戏不读），然后算"能不能跟"
-    try:
-        ai_status = ai.apply([c for c in cards if c["age_w"] > 0], entities,
-                             allow_network=allow_network if allow_ai is None else allow_ai)
-    except Exception as e:          # AI 出任何问题都不能让整次分析失败
-        import traceback
-        traceback.print_exc()
-        activity.say(f"AI 读评论出错：{type(e).__name__}：{e}")
-        ai_status = ai.status()
-        ai_status.update({"error": f"{type(e).__name__}：{e}"[:200], "err_ts": int(time.time())})
+    # Steam-only mode uses deterministic signals; do not fetch or retain AI summaries.
+    if getattr(config, "STEAM_ONLY", False):
+        ai_status = {"enabled": False, "note": "Steam-only：未启用 AI 摘要"}
+    else:
+        try:
+            ai_status = ai.apply([c for c in cards if c["age_w"] > 0], entities,
+                                 allow_network=allow_network if allow_ai is None else allow_ai)
+        except Exception as e:          # AI 出任何问题都不能让整次分析失败
+            import traceback
+            traceback.print_exc()
+            activity.say(f"AI 读评论出错：{type(e).__name__}：{e}")
+            ai_status = ai.status()
+            ai_status.update({"error": f"{type(e).__name__}：{e}"[:200], "err_ts": int(time.time())})
     for card in cards:
         card["best_market"] = max(card["market_hot"], key=card["market_hot"].get) if card["market_hot"] else None
         for k in ("_info", "_ai_member", "_reviews", "_old_hint", "_heavy"):
@@ -1055,7 +1088,7 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
     # 同类检查：只当参考写在卡片上，不进分数（按名字搜，搜到的不一定是同玩法）
     st_all = db.kv_get("source_status", {}) or {}
     tap_ok = any((st_all.get(s) or {}).get("ok_ts", 0) > time.time() - 6 * 3600 for s in ("tapmaker", "taptap"))
-    cards.sort(key=lambda c: (*revenue.rank_key(c["revenue"]), c["gid"]))
+    cards.sort(key=lambda c: heat.rank_key(c["heat"], "final"))
     checked = 0
     for i, card in enumerate(cards):
         card["markets"] = {}
@@ -1098,13 +1131,16 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
                     card["flags"].append({"t": f"{config.MARKETS[a]}火、{config.MARKETS[b]}没热度", "c": "blue"})
 
     # v76：必看 = 全部游戏按分数排名，没有分数门槛、没有分栏
-    must = sorted(cards, key=lambda c: (*revenue.rank_key(c["revenue"]), c["gid"]))
+    must = sorted(cards, key=lambda c: heat.rank_key(c["heat"], "final"))
+    _save_must_summary(must, now_ts)
     dismissed, blocked, old = [], [], []
-    cards_out = must
-    revenue_meta["eligible"] = len(cards)
-    revenue_meta["estimated"] = sum(c["revenue"]["daily_cny"] is not None for c in cards)
-    revenue_meta["missing"] = len(cards) - revenue_meta["estimated"]
-    plat_diag = _plat_diag(groups, hs, elig, now_ts, rs)
+    by_raw = sorted(cards, key=lambda c: heat.rank_key(c["heat"], "raw"))
+    # v85：普通游戏两种排名各前 400；大厂 / 大作另外带前 150（页面"大厂游戏：显示"时看）
+    must_nb = [c for c in must if not c.get("big")]
+    seen = {c["gid"] for c in must_nb[:400]}
+    cards_out = must_nb[:400] + [c for c in by_raw if not c.get("big") and c["gid"] not in seen][:400]
+    cards_out += [c for c in must if c.get("big")][:150]
+    plat_diag = _plat_diag(groups, hs, elig, now_ts)
     gid_of = {m: c["gid"] for c in cards for m in c["members"]}
     star_out = [{**{k: v for k, v in s.items() if not k.startswith("_")}, "gid": gid_of.get(s["cat_key"])}
                 for s in stars[:80]]
@@ -1149,19 +1185,33 @@ def _run(allow_network=True, send_notify=True, allow_ai=None):
                        if x["final"] is not None])
 
     if send_notify:
-        notify.process(opportunities + observe)
+        notify.process([c for c in opportunities + observe if not c.get("big")])    # v85：大厂不弹提醒
 
+    recovered = db.kv_get("dashboard_recovered")
+    use_recovered = bool(getattr(config, "STEAM_ONLY", False) and not cards_out
+                         and isinstance(recovered, dict) and recovered.get("cards"))
     dash = {
-        "updated": now, "seconds": round(time.time() - t0, 1),
+        "updated": recovered.get("updated", now) if use_recovered else now,
+        "seconds": round(time.time() - t0, 1),
         "sources": {k: v for k, v in (db.kv_get("source_status", {}) or {}).items() if config.source_on(k)},
         "index": index, "holidays": holidays,
         # 面板只放前面这些（太多页面会卡）；totals 是真实总数，页面上照实写
-        "cards": cards_out, "plat_diag": plat_diag, "dismissed": dismissed[:200], "blocked": blocked[:200], "ai": ai_status,
-        "stars": star_out, "old": old[:300],
-        "totals": {"cards": len(elig), "dismissed": 0, "blocked": 0, "old": 0},
-        "heat_meta": heat_meta,
-        "revenue_meta": revenue_meta,
-        "sprouts": sprout_rows,
+        "cards": recovered["cards"] if use_recovered else cards_out,
+        "plat_diag": recovered.get("plat_diag", plat_diag) if use_recovered else plat_diag,
+        "dismissed": recovered.get("dismissed", dismissed[:200]) if use_recovered else dismissed[:200],
+        "blocked": recovered.get("blocked", blocked[:200]) if use_recovered else blocked[:200],
+        "ai": recovered.get("ai", ai_status) if use_recovered else ai_status,
+        "stars": recovered.get("stars", star_out) if use_recovered else star_out,
+        "old": recovered.get("old", old[:300]) if use_recovered else old[:300],
+        "totals": recovered.get("totals", {"cards": len(elig), "big": len(bg), "dismissed": 0,
+                                           "blocked": 0, "old": 0}) if use_recovered else
+                  {"cards": len(elig), "big": len(bg), "dismissed": 0, "blocked": 0, "old": 0},
+        "heat_meta": recovered.get("heat_meta", heat_meta) if use_recovered else heat_meta,
+        "restored_snapshot": use_recovered,
+        "restored_snapshot_ts": recovered.get("updated") if use_recovered else None,
+        "sprouts": {s: [{k: r[k] for k in ("key", "id", "name", "url", "label", "kind", "streak", "daily", "total",
+                                           "pos", "now", "then", "gap", "days", "series", "hot")}
+                        for r in rows[:60]] for s, rows in sprout_rows.items()},
         "todo": [{"name": n, "why": w, "need": need} for n, w, need in config.PLATFORM_TODO
                  if not (n == "Twitch" and config.TWITCH_CLIENT_ID and config.TWITCH_CLIENT_SECRET)],
         "movers": movers, "keywords": keywords, "candidates": candidates[:40],

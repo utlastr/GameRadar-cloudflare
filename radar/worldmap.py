@@ -26,6 +26,11 @@ from .net import get_json, get_json_strict
 URL = "https://itunes.apple.com/{cc}/rss/{feed}/limit={n}/genre=6014/json"
 LOOKUP = "https://itunes.apple.com/lookup"
 INCOME_URL = "https://api.worldbank.org/v2/country/all/indicator/NY.GNP.PCAP.CD"
+# v100：地图改看人均居民最终消费支出 = 住户最终消费支出总额（现价美元）÷ 总人口
+SPEND_URL = "https://api.worldbank.org/v2/country/all/indicator/NE.CON.PRVT.CD"
+POP_URL = "https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL"
+# 世界银行没有台湾：2024 年民间消费约 11 兆新台币 ≈ 3,500 亿美元，÷ 2,340 万人
+SPEND_EXTRA = {"tw": [14800, "2024"]}
 FEEDS = {"g": "topgrossingapplications", "f": "topfreeapplications"}
 FEED_NAME = {"g": "畅销榜", "f": "免费榜"}
 FEED_W = {"g": 0.6, "f": 0.4}
@@ -270,6 +275,42 @@ def income(force=False):
             return data
     except Exception as e:
         _say(f"人均收入下载失败：{e}")
+    return (k or {}).get("data") or {}
+
+
+def _wb_latest(url):
+    """世界银行某个指标每个国家最近一年有值的数：{代码: [数值, 年份]}。"""
+    d = get_json(url, {"format": "json", "per_page": 20000, "mrnev": 1}, retries=1, timeout=40)
+    out = {}
+    for r in (d[1] if isinstance(d, list) and len(d) > 1 else []) or []:
+        cid = ((r.get("country") or {}).get("id") or "").lower()
+        if len(cid) == 2 and r.get("value"):
+            out[cid] = [r["value"], r.get("date")]
+    return out
+
+
+def spend(force=False):
+    """人均居民最终消费支出（v100）：世界银行"住户和为住户服务的非营利机构最终消费支出（现价美元）"÷ 总人口。
+    按市场汇率，不用购买力平价——要看的是当地人一年实际花出去多少美元。30 天更新一次。返回 {代码: [数值, 年份]}。"""
+    k = db.kv_get("world_spend")
+    if k and not force and time.time() - k.get("ts", 0) < 30 * 86400:
+        return k.get("data") or {}
+    try:
+        tot = _wb_latest(SPEND_URL)
+        pop = _wb_latest(POP_URL)
+        data = {}
+        for cid, tv in tot.items():
+            p = (pop.get(cid) or [0])[0]
+            if p and p > 0:
+                data[cid] = [round(tv[0] / p), tv[1]]
+        if data:
+            for cid, v in SPEND_EXTRA.items():
+                data.setdefault(cid, v)
+            db.kv_set("world_spend", {"ts": int(time.time()), "data": data})
+            _say(f"人均消费支出已更新（{len(data)} 个国家和地区）")
+            return data
+    except Exception as e:
+        _say(f"人均消费支出下载失败：{e}")
     return (k or {}).get("data") or {}
 
 
@@ -735,13 +776,14 @@ def compute_and_save():
 
 def payload():
     inc = (db.kv_get("world_income") or {}).get("data") or {}
+    spd = (db.kv_get("world_spend") or {}).get("data") or {}
     st = db.kv_get("world_status") or {}
     st = {k: v for k, v in st.items() if k != "fails"}
     errs = st.get("errors") or {}
     st["errors"] = dict(list(errs.items())[:40])
     st["n_errors"] = len(errs)
     from . import regions
-    return {"result": db.kv_get("world_result"), "status": st, "income": inc, "regions": regions.status(),
+    return {"result": db.kv_get("world_result"), "status": st, "income": inc, "spend": spd, "regions": regions.status(),
             "names": {k: v[0] for k, v in COUNTRIES.items()}, "subs": {k: v[1] for k, v in COUNTRIES.items()}}
 
 
@@ -750,6 +792,7 @@ def _loop():
     while True:
         try:
             if config.source_on("world"):
+                spend()  # 地图的消费数据先拿（有缓存时立刻返回），不用等抓完各国榜单
                 got = scan()
                 found = lookup_genres()
                 income()

@@ -94,7 +94,7 @@ def _parse(ch):
             "image": img.group(1) if img else ""}
 
 
-def boards(max_pages=200, progress=None):
+def boards(max_pages=4, progress=None):
     """返回 (游戏列表, 出错的榜单说明)。"""
     out, errors = {}, []
     jobs = list(BOARDS.items())
@@ -138,6 +138,4 @@ def boards(max_pages=200, progress=None):
             if rank == before or str(d.get("nextpage", 1)) == "0":
                 break             # 这一页全是重复的 / 好游快爆说没有下一页了
             time.sleep(1)
-        else:
-            errors.append(f"{label}达到 {max_pages} 页安全上限，覆盖尚未完整")
     return list(out.values()), errors

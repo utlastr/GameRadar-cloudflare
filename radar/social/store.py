@@ -6,8 +6,6 @@ import threading
 import time
 
 from .. import config, db
-from ..sources.bili import normalize
-from .validation import VERSION
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS soc_hot(platform TEXT, job TEXT, ts INTEGER, rank INTEGER, text TEXT, value REAL,
@@ -23,18 +21,19 @@ CREATE TABLE IF NOT EXISTS soc_terms(norm TEXT PRIMARY KEY, term TEXT, first_ts 
 CREATE TABLE IF NOT EXISTS soc_videos(platform TEXT, vid TEXT, term TEXT, ts INTEGER, pub_ts INTEGER, plays REAL,
   comments REAL, likes REAL, shares REAL, favs REAL, PRIMARY KEY(platform, vid, ts));
 CREATE INDEX IF NOT EXISTS idx_soc_videos ON soc_videos(platform, ts);
-CREATE TABLE IF NOT EXISTS soc_verified(
- kind TEXT,record_id INTEGER,version INTEGER,evidence TEXT,
- PRIMARY KEY(kind,record_id));
+CREATE TABLE IF NOT EXISTS soc_video_terms(platform TEXT, vid TEXT, term TEXT,
+  PRIMARY KEY(platform, vid, term));
+CREATE TABLE IF NOT EXISTS soc_video_evidence(platform TEXT, vid TEXT, term TEXT,
+  PRIMARY KEY(platform, vid, term));
+CREATE TABLE IF NOT EXISTS soc_search_matches(platform TEXT, vid TEXT, term TEXT,
+  provenance_version INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(platform, vid, term));
 """
 
 JOB_NAMES = {
+    "douyin_hot": "抖音热榜",
     "douyin_kw": "抖音搜索（网页）",
     "douyin_open": "抖音开放平台·视频搜索（官方）",
-    "douyin_index_hot": "抖音指数·热点榜",
-    "douyin_index_kw": "抖音指数·关键词",
-    "bili_index_home": "哔哩指数·首页榜单",
-    "bili_index_kw": "哔哩指数·关键词",
+    "tiktok_kw": "TikTok 视频搜索（网页）",
     "kuaishou_hot": "快手热榜",
     "kuaishou_kw": "快手搜索",
     "xiaohongshu_kw": "小红书搜索",
@@ -42,86 +41,33 @@ JOB_NAMES = {
     "tiktok_ads": "TikTok 广告库（官方，欧盟）",
 }
 
-_ready = set()
+_ready = {"done": False}
 _lock = threading.Lock()
 
 
 def ensure():
     with _lock:
-        if config.DB_PATH in _ready:
+        if _ready["done"]:
             return
         with db.session() as c:
             c.executescript(SCHEMA)
-            _remove_douyin_hot(c)
-        _ready.add(config.DB_PATH)
-
-
-def _remove_douyin_hot(c):
-    """Remove only the retired general hot-list source and its derived evidence."""
-    marker = "social:removed_douyin_hot:v1"
-    if c.execute("SELECT 1 FROM kv WHERE k=?", (marker,)).fetchone():
-        return
-    c.execute("DELETE FROM soc_verified WHERE kind='hot' AND record_id IN "
-              "(SELECT rowid FROM soc_hot WHERE job='douyin_hot')")
-    c.execute("DELETE FROM soc_hot WHERE job='douyin_hot'")
-    affected = []
-    for row in c.execute("SELECT norm,sources,label FROM soc_terms").fetchall():
-        sources = json.loads(row["sources"] or "[]")
-        if "douyin_hot" not in sources:
-            continue
-        sources = [s for s in sources if s != "douyin_hot"]
-        if not sources and not row["label"]:
-            c.execute("DELETE FROM soc_terms WHERE norm=?", (row["norm"],))
-        else:
-            affected.append(row["norm"])
-            c.execute("UPDATE soc_terms SET sources=?,best_rank=NULL,best_value=NULL WHERE norm=?",
-                      (json.dumps(sources), row["norm"]))
-    if affected:
-        metrics = {}
-        for row in c.execute(f"SELECT text,rank,value FROM soc_hot h WHERE {trusted_hot_sql()}"):
-            key = normalize((row["text"] or "").strip().lstrip("#").strip())
-            rank, value = metrics.get(key, (None, None))
-            metrics[key] = (min(rank, row["rank"]) if rank is not None else row["rank"],
-                            max(value, row["value"]) if value is not None else row["value"])
-        for key in affected:
-            rank, value = metrics.get(key, (None, None))
-            c.execute("UPDATE soc_terms SET best_rank=?,best_value=? WHERE norm=?", (rank, value, key))
-    saved = c.execute("SELECT v FROM kv WHERE k='social_status'").fetchone()
-    if saved:
-        status_data = json.loads(saved[0] or "{}")
-        status_data.pop("douyin_hot", None)
-        c.execute("UPDATE kv SET v=? WHERE k='social_status'", (json.dumps(status_data),))
-    c.execute("DELETE FROM kv WHERE k='sampling:social:douyin_hot'")
-    c.execute("INSERT OR REPLACE INTO kv VALUES(?,?)", (marker, "true"))
-
-
-def _verify(c, kind, record_id, evidence):
-    c.execute("INSERT OR REPLACE INTO soc_verified VALUES(?,?,?,?)",
-              (kind, record_id, VERSION, json.dumps(evidence, ensure_ascii=False)))
-
-
-def trusted_hot_sql(alias="h"):
-    return (f"({alias}.job!='douyin_hot' AND EXISTS(SELECT 1 FROM soc_verified e WHERE e.kind='hot' "
-            f"AND e.record_id={alias}.rowid AND e.version={VERSION} "
-            f"AND json_extract(e.evidence,'$.job')={alias}.job "
-            f"AND json_extract(e.evidence,'$.ts')={alias}.ts "
-            f"AND json_extract(e.evidence,'$.text')={alias}.text "
-            f"AND json_extract(e.evidence,'$.rank')={alias}.rank "
-            f"AND json_extract(e.evidence,'$.value')={alias}.value "
-            f"AND json_extract(e.evidence,'$.list_path')={alias}.list_path))")
+            columns = {r[1] for r in c.execute("PRAGMA table_info(soc_search_matches)")}
+            if "provenance_version" not in columns:
+                c.execute("ALTER TABLE soc_search_matches ADD COLUMN provenance_version "
+                          "INTEGER NOT NULL DEFAULT 0")
+        _ready["done"] = True
 
 
 # ---------------- 运行状态 ----------------
 
-def status(job, ok, count=0, err="", note="", url=None, validation_version=0):
+def status(job, ok, count=0, err="", note="", url=None, target_id=None):
     st = db.kv_get("social_status", {}) or {}
     s = st.get(job, {})
     now = int(time.time())
     s["name"] = JOB_NAMES.get(job, job)
     s["try_ts"] = now
-    s["last_ok"] = bool(ok)
-    s["validation_version"] = validation_version
     s["url"] = None if ok else url        # 失败时记下页面网址：要人机验证时面板上一点就打开这个页面
+    s["target_id"] = None if ok else target_id
     if ok:
         s.update({"ok_ts": now, "count": count, "error": "", "note": (note or "")[:300]})
     else:
@@ -131,7 +77,7 @@ def status(job, ok, count=0, err="", note="", url=None, validation_version=0):
 
 
 def status_all():
-    return {k: v for k, v in (db.kv_get("social_status", {}) or {}).items() if k != "douyin_hot"}
+    return db.kv_get("social_status", {}) or {}
 
 
 def last_try(job):
@@ -168,35 +114,20 @@ def main_value(nums):
 
 
 def save_hot(platform, job, lists, ts=None):
-    if job == "douyin_hot":
-        raise ValueError("Removed ranking: douyin_hot")
-    ensure()
     ts = int(ts or time.time())
     rows = []
     for L in lists:
-        if L.get("validation_version") != VERSION or not L.get("contract") or not L.get("source_url"):
-            raise ValueError("Unverified ranking rejected")
         for it in L["items"]:
-            if it.get("rank") is None or it.get("value") is None:
-                raise ValueError("Ranking omitted its official rank or metric")
-            rows.append(((platform, job, ts, it["rank"], it["text"][:200], it["value"],
+            rows.append((platform, job, ts, it["rank"], it["text"][:200], main_value(it["nums"]),
                          json.dumps(dict(list(it["nums"].items())[:24]), ensure_ascii=False), it.get("url"),
-                         (L.get("path") or "")[:200]),
-                         {k: L[k] for k in ("contract", "source_url", "name")}))
+                         (L.get("path") or "")[:200]))
     if rows:
         with db.session() as c:
-            for values, evidence in rows:
-                record = c.execute("INSERT INTO soc_hot VALUES (?,?,?,?,?,?,?,?,?)", values)
-                _verify(c, "hot", record.lastrowid, dict(
-                    evidence, job=job, ts=ts, text=values[4], rank=values[3],
-                    value=values[5], list_path=values[8]))
+            c.executemany("INSERT INTO soc_hot VALUES (?,?,?,?,?,?,?,?,?)", rows)
     return len(rows)
 
 
 def save_series(platform, term, series, ts=None):
-    ensure()
-    if any(s.get("validation_version") != VERSION or s.get("term") != term for s in series):
-        raise ValueError("Unverified keyword series rejected")
     ts = int(ts or time.time())
     rows = []
     for s in series:
@@ -208,77 +139,63 @@ def save_series(platform, term, series, ts=None):
     return len(rows)
 
 
-def save_videos(platform, term, items, ts=None):
+def save_videos(platform, term, items, ts=None, verified=False):
     """搜索结果里每条视频的数字（v81 评分用：同一条视频两次的差 = 增量；7 天内发的从发布时算）。"""
     from .extract import video_stats
-    ensure()
-    if any(it.get("validation_version") != VERSION or it.get("term") != term
-           or not it.get("vid") for it in items):
-        raise ValueError("Unverified search attribution or video identity rejected")
     ts = int(ts or time.time())
-    rows = []
+    rows, links = [], []
     for it in items:
-        vid = it["vid"]
+        vid = (it.get("url") or "").split("?")[0] or ("t:" + (it.get("text") or "")[:80])
         st = video_stats(it)
         if all(st[k] is None for k in ("plays", "comments", "likes", "shares", "favs")):
             continue
         rows.append((platform, vid, term, ts, it.get("ts"), st["plays"], st["comments"], st["likes"],
                      st["shares"], st["favs"]))
+        links.append((platform, vid, term))
     if rows:
         with db.session() as c:
-            for row in rows:
-                saved = c.execute("INSERT OR REPLACE INTO soc_videos VALUES (?,?,?,?,?,?,?,?,?,?)", row)
-                _verify(c, "video", saved.lastrowid, {"term": term, "platform": platform})
+            c.executemany("INSERT OR REPLACE INTO soc_videos VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+            c.executemany("INSERT OR IGNORE INTO soc_video_terms VALUES (?,?,?)", links)
+            if verified:
+                c.executemany(
+                    "INSERT INTO soc_search_matches(platform,vid,term,provenance_version) VALUES (?,?,?,5) "
+                    "ON CONFLICT(platform,vid,term) DO UPDATE SET provenance_version=excluded.provenance_version",
+                    links)
     return len(rows)
 
 
-def save_lookup(platform, term, ok, summary=None, note=""):
-    ensure()
-    if ok and (summary or {}).get("validation_version") != VERSION:
-        ok, summary, note = False, {}, "来源及查询词归属未验证，结果未采用"
+def lookup_states(platform, terms, since=0, required_version=0):
+    if not terms:
+        return {}
+    marks = ",".join("?" for _ in terms)
     with db.session() as c:
-        row = c.execute("INSERT INTO soc_lookup VALUES (?,?,?,?,?,?)",
-                        (platform, term, int(time.time()), 1 if ok else 0,
-                         json.dumps(summary or {}, ensure_ascii=False), (note or "")[:300]))
-        _verify(c, "lookup", row.lastrowid, {"validated_result": bool(ok)})
+        rows = c.execute(
+            f"SELECT term, MAX(ts), MAX(ok), COUNT(*), "
+            f"MAX(CASE WHEN ok=1 THEN ts ELSE 0 END) FROM soc_lookup "
+            f"WHERE platform=? AND term IN ({marks}) AND ts>=? "
+            f"AND (ok=0 OR COALESCE(json_extract(summary,'$.provenance_version'),0)>=?) GROUP BY term",
+            (platform, *terms, since, required_version)).fetchall()
+    return {r[0]: {"ts": r[1], "ok": bool(r[2]), "attempts": r[3],
+                   "ok_ts": r[4]} for r in rows}
+
+
+def save_lookup(platform, term, ok, summary=None, note=""):
+    with db.session() as c:
+        c.execute("INSERT INTO soc_lookup VALUES (?,?,?,?,?,?)",
+                  (platform, term, int(time.time()), 1 if ok else 0,
+                   json.dumps(summary or {}, ensure_ascii=False), (note or "")[:300]))
 
 
 # ---------------- 读 ----------------
 
-def latest_hot(job, limit=100000):
-    ensure()
-    if job == "douyin_hot":
-        return {"ts": None, "items": [], "validation_version": VERSION}
+def latest_hot(job, limit=60):
     with db.session() as c:
-        r = c.execute(f"SELECT MAX(ts) FROM soc_hot h WHERE job=? AND {trusted_hot_sql()}", (job,)).fetchone()
+        r = c.execute("SELECT MAX(ts) FROM soc_hot WHERE job = ?", (job,)).fetchone()
         if not r or not r[0]:
-            return {"ts": None, "items": [], "validation_version": VERSION}
-        rows = c.execute(f"""SELECT h.rank,h.text,h.value,h.url,h.list_path,e.evidence
-            FROM soc_hot h JOIN soc_verified e ON e.kind='hot' AND e.record_id=h.rowid
-            WHERE h.job=? AND h.ts=? AND e.version=? AND {trusted_hot_sql()}
-            ORDER BY h.list_path,h.rank LIMIT ?""", (job, r[0], VERSION, limit)).fetchall()
-        previous = {}
-        for text, path, value, rank, ts in c.execute(f"""
-            SELECT text,list_path,value,rank,ts FROM (
-                SELECT h.*,ROW_NUMBER() OVER(PARTITION BY text,list_path
-                    ORDER BY ABS(?-ts-86400),ts DESC) rn
-                FROM soc_hot h WHERE job=? AND ts BETWEEN ? AND ?
-                AND {trusted_hot_sql()}
-            ) WHERE rn=1""", (r[0], job, r[0] - 259200, r[0] - 3600)):
-            previous[(text, path)] = (value, rank, ts)
-        terms = {t: (age, cls) for t, age, cls in c.execute("SELECT term,age,cls FROM soc_terms")}
-    items = []
-    for a, b, v, u, p, evidence in rows:
-        prev = previous.get((b, p))
-        delta = v - prev[0] if prev else None
-        growth = delta / prev[0] if prev and prev[0] > 0 else None
-        age, cls = terms.get(b, ("", ""))
-        items.append({"rank": a, "text": b, "value": v, "url": u, "list": p,
-                      **json.loads(evidence), "delta": delta, "growth": growth,
-                      "previous_ts": prev[2] if prev else None,
-                      "old": age == "old", "classification": cls})
-    return {"ts": r[0], "validation_version": VERSION,
-            "items": items}
+            return {"ts": None, "items": []}
+        rows = c.execute("SELECT rank, text, value, url, list_path FROM soc_hot WHERE job = ? AND ts = ? "
+                         "ORDER BY list_path, rank LIMIT ?", (job, r[0], limit)).fetchall()
+    return {"ts": r[0], "items": [{"rank": a, "text": b, "value": v, "url": u, "list": p} for a, b, v, u, p in rows]}
 
 
 def lookups_today(platform):
@@ -300,9 +217,7 @@ def last_lookup(platform, term=None):
 
 def lookups_for(term, limit=30):
     with db.session() as c:
-        rows = c.execute("SELECT platform, ts, ok, summary, note FROM soc_lookup l WHERE term = ? "
-                         "AND EXISTS(SELECT 1 FROM soc_verified e WHERE e.kind='lookup' "
-                         "AND e.record_id=l.rowid AND e.version=1) "
+        rows = c.execute("SELECT platform, ts, ok, summary, note FROM soc_lookup WHERE term = ? "
                          "ORDER BY ts DESC LIMIT ?", (term, limit)).fetchall()
     out = []
     for p, ts, ok, s, note in rows:
@@ -317,9 +232,7 @@ def lookups_for(term, limit=30):
 
 def latest_lookups(limit=80):
     with db.session() as c:
-        rows = c.execute("SELECT platform, term, ts, ok, summary, note FROM soc_lookup l "
-                         "WHERE EXISTS(SELECT 1 FROM soc_verified e WHERE e.kind='lookup' "
-                         "AND e.record_id=l.rowid AND e.version=1) "
+        rows = c.execute("SELECT platform, term, ts, ok, summary, note FROM soc_lookup "
                          "ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
     out = []
     for p, t, ts, ok, s, note in rows:
@@ -334,24 +247,6 @@ def latest_lookups(limit=80):
 
 
 def series_for(term):
-    # No keyword-series adapter has passed source and query attribution checks.
-    return {}
-
-
-def legacy_counts():
-    ensure()
-    with db.session() as c:
-        counts = {kind: c.execute(
-            f"SELECT COUNT(*) FROM {table} t WHERE NOT EXISTS(SELECT 1 FROM soc_verified e "
-            "WHERE e.kind=? AND e.record_id=t.rowid AND e.version=?)", (kind, VERSION)).fetchone()[0]
-                for kind, table in (("hot", "soc_hot"), ("lookup", "soc_lookup"),
-                                    ("series", "soc_series"), ("video", "soc_videos"))}
-        counts["hot"] = c.execute(
-            f"SELECT COUNT(*) FROM soc_hot t WHERE NOT {trusted_hot_sql('t')}").fetchone()[0]
-        return counts
-
-
-def _unverified_series_for(term):
     with db.session() as c:
         rows = c.execute("SELECT platform, metric, day, value FROM soc_series WHERE term = ? ORDER BY day",
                          (term,)).fetchall()

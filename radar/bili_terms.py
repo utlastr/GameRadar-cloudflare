@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from html import unescape
 
 from . import bili_term_filter as term_filter, config, db
-from .sources.bili import normalize
+from .bili_realtime_client import normalize
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS bd_terms(

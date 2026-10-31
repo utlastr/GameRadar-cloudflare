@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from radar import bili_daily, bili_growth as growth, bili_queue, bili_latest, config, db, server
-from radar.sources import bili
+from radar import bili_realtime_client as bili
 
 
 def stamp(day):

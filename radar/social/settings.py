@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""社交平台（抖音 / 快手 / 小红书 / TikTok / 哔哩指数 / 抖音指数）的设置。
+"""社交平台（抖音 / 快手 / 小红书 / TikTok）的设置。
 
 这些设置不放进 config.py（那个文件别的功能也在改），自己从 radar_data/settings.json 读：
 文件里没有的项用这里的默认值；第一次运行会把缺的项补进 settings.json，方便你改。
@@ -19,18 +19,22 @@ DEFAULTS = {
     # 热榜多久读一次（分钟）
     "SOCIAL_HOT_MINUTES": 60,
     # 每个平台每天最多查几个关键词（查得越多越容易被风控）
-    "SOCIAL_KW_PER_DAY": 0,
+    "SOCIAL_KW_PER_DAY": 100,
     # 同一个平台两次关键词查询至少隔几分钟
     "SOCIAL_KW_GAP_MINUTES": 12,
+    "SOCIAL_KW_SCROLLS": 12,
+    # Top-100 alias batches have their own local pacing and budget.
+    "SOCIAL_BATCH_GAP_SECONDS": 60,
+    "SOCIAL_BATCH_PER_DAY": 300,
     # 不管漏斗怎么判，每天都要查的词（游戏名）
     "SOCIAL_WATCH_TERMS": [],
     # 各平台开关：false 就不读
-    "SOCIAL_PLATFORMS": {"douyin": True, "douyin_index": True, "bili_index": True,
+    "SOCIAL_PLATFORMS": {"douyin": True,
                          "kuaishou": True, "xiaohongshu": True, "tiktok": True},
     # 判不出是不是游戏的词，交给 AI（要 settings.json 里有 AI_KEY）。一天跑一次，判过的词不再问；
     # 一次最多问几批（每批 40 个词）
     "SOCIAL_AI_BATCHES": 20,
-    # 雷达专用浏览器没开时，雷达自己在后台（最小化）把它打开
+    # 只复用用户现有的 CDP 浏览器，不启动独立浏览器。
     "SOCIAL_AUTO_BROWSER": False,
     # TikTok 创意中心看哪个国家
     "SOCIAL_TIKTOK_REGION": "US",
@@ -47,13 +51,9 @@ DEFAULTS = {
 
 URLS = {
     # 抖音
+    "douyin_hot": "https://www.douyin.com/hot",
     "douyin_kw": "https://www.douyin.com/search/{kw}?type=video",
-    # 抖音指数（原巨量算数）
-    "douyin_index_hot": "https://trendinsight.oceanengine.com/arithmetic-index/hot",
-    "douyin_index_kw": "https://trendinsight.oceanengine.com/arithmetic-index/analysis?keyword={kw}&appName=aweme",
-    # 哔哩指数：关键词页的网址还不知道，留空就在首页的搜索框里输入
-    "bili_index_home": "https://trends.bilibili.com/",
-    "bili_index_kw": "",
+    "tiktok_kw": "https://www.tiktok.com/search?q={kw}",
     # 快手
     "kuaishou_hot": "https://www.kuaishou.com/?isHome=1",
     "kuaishou_kw": "https://www.kuaishou.com/search/video?searchKey={kw}",
@@ -115,8 +115,6 @@ def platform_on(p):
 
 
 def url(name, **kw):
-    if name == "douyin_hot":
-        return ""
     over = get("SOCIAL_URLS") or {}
     tpl = over.get(name) if isinstance(over, dict) and over.get(name) is not None else URLS.get(name, "")
     if not tpl:

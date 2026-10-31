@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from radar import bili_latest as latest, bili_stream as stream, config, db
-from radar.sources import bili
+from radar import bili_realtime_client as bili
 
 
 def bv(n):
@@ -352,7 +352,8 @@ class LatestTests(unittest.TestCase):
         with db.session() as c:
             c.execute("INSERT INTO bs_gaps VALUES('old-gap',?,?,?,?,0)",
                       (time.time(), first, first + 10, "missing overlap"))
-        days = latest.register_gap_days()
+        with patch.object(config, "BVIDEO_DAILY_ENABLED", True):
+            days = latest.register_gap_days()
         expected = bili.published_day(first)
         self.assertIn(expected, days)
         self.assertTrue(bili_daily.summary(expected)["partitions"])

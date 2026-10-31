@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from radar import bili_daily as daily, bili_growth as growth, bili_latest as latest
 from radar import bili_queue as queue, bili_stream as stream, bili_terms, config, db
-from radar.sources import bili
+from radar import bili_realtime_client as bili
 
 
 class UnifiedQueueTests(unittest.TestCase):
