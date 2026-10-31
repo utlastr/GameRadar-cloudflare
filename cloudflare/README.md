@@ -40,8 +40,10 @@ collector writes must tolerate replay.
 
 The free Durable Objects allowance is 5 GB across the account, with a 1 GB
 limit per SQLite-backed object. Ten shards therefore do not provide 10 GB of
-free capacity. The current local database is close to one shard's limit and
-must be partitioned and measured during import.
+free capacity. The active local `radar.db` measured 944,664,576 bytes on
+2026-10-31; importing it as one object would leave inadequate headroom for
+indexes and new writes, so the existing database must be partitioned during
+import.
 
 ## Local checks
 
