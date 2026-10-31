@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+  "name": "gameradar",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-30",
+  "assets": {
+    "directory": "../radar/web",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RADAR_SHARDS",
+        "class_name": "RadarShard"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RadarShard"]
+    }
+  ]
+}
