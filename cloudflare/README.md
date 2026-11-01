@@ -11,16 +11,21 @@ all been migrated and verified.
 - Defines ten deterministic SQLite-backed Durable Object shards. A `(source,
   entity)` pair always routes to the same shard; metric upserts are idempotent
   and capped at 90 records per request.
+- Reads the imported dashboard snapshot from `/api/state`, entity histories
+  from `/api/series`, and basic entity/label data from `/api/entity` and
+  `/api/detail`. State marks snapshot-only mode with an explicit health alert;
+  it does not claim that collectors are running.
 - Returns an explicit `503 api_not_migrated` for local API routes that do not
   exist in the Worker yet. This prevents a static-only deployment from looking
   like a functioning radar.
 
 ## Not migrated
 
-The Python collectors, their scheduling, the existing dashboard API surface,
-and historical-data import are not implemented here. The status endpoint lists
-these migration groups. Production deployment must wait until those groups are
-ported and the imported data has been verified against the local application.
+The Python collectors, their scheduling, most dashboard APIs and write APIs,
+Steam historical comparisons in detail pages, and a current full-database
+import are not implemented here. The status endpoint lists the remaining
+migration groups. Production deployment must wait until those groups and the
+imported data have all been migrated and verified against the local application.
 The dashboard also has mutating APIs; protect the site with Cloudflare Access
 before exposing it, and never put settings or provider credentials in static
 assets. The shard diagnostic/import endpoint requires the `IMPORT_TOKEN` Worker

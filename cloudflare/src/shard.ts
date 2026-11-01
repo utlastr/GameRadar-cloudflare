@@ -81,6 +81,79 @@ export class RadarShard extends DurableObject<Env> {
     if (url.pathname === "/import/status" && request.method === "GET") {
       return this.importStatus();
     }
+    if (url.pathname === "/read/kv" && request.method === "GET") {
+      const key = url.searchParams.get("key");
+      if (!key) return Response.json({ error: "key is required" }, { status: 400 });
+      const row = this.ctx.storage.sql
+        .exec("SELECT v FROM kv WHERE k = ?", key)
+        .toArray()[0] as { v?: string } | undefined;
+      return Response.json({ found: Boolean(row), value: row?.v ?? null });
+    }
+    if (url.pathname === "/read/entity" && request.method === "GET") {
+      const source = url.searchParams.get("source");
+      const entity = url.searchParams.get("entity");
+      if (!source || !entity) {
+        return Response.json({ error: "source and entity are required" }, { status: 400 });
+      }
+      const row = this.ctx.storage.sql
+        .exec(
+          `SELECT name, first_seen, last_seen, extra FROM entities
+           WHERE source = ? AND entity = ?`,
+          source,
+          entity,
+        )
+        .toArray()[0] ?? null;
+      const review = source === "steam"
+        ? this.ctx.storage.sql
+            .exec(
+              `SELECT value FROM metrics
+               WHERE source = ? AND entity = ? AND metric = 'reviews'
+               ORDER BY ts DESC LIMIT 1`,
+              source,
+              entity,
+            )
+            .toArray()[0] ?? null
+        : null;
+      return Response.json({ entity: row, review });
+    }
+    if (url.pathname === "/read/label" && request.method === "GET") {
+      const member = url.searchParams.get("member");
+      if (!member) return Response.json({ error: "member is required" }, { status: 400 });
+      const row = this.ctx.storage.sql
+        .exec("SELECT * FROM labels WHERE member = ?", member)
+        .toArray()[0] ?? null;
+      return Response.json({ label: row });
+    }
+    if (url.pathname === "/read/series" && request.method === "GET") {
+      const source = url.searchParams.get("source");
+      const entity = url.searchParams.get("entity");
+      const days = Number(url.searchParams.get("days") ?? 7);
+      if (
+        !source ||
+        !entity ||
+        !Number.isInteger(days) ||
+        days < 1 ||
+        days > 90
+      ) {
+        return Response.json({ error: "invalid series query" }, { status: 400 });
+      }
+      const since = Math.floor(Date.now() / 1000) - days * 86400;
+      const rows = this.ctx.storage.sql
+        .exec(
+          `SELECT metric, ts, value FROM metrics
+           WHERE source = ? AND entity = ? AND ts >= ?
+           ORDER BY ts LIMIT 20000`,
+          source,
+          entity,
+          since,
+        )
+        .toArray() as Array<{ metric: string; ts: number; value: number }>;
+      const series: Record<string, Array<[number, number]>> = {};
+      for (const row of rows) {
+        (series[row.metric] ??= []).push([row.ts, row.value]);
+      }
+      return Response.json(series);
+    }
     if (url.pathname !== "/metrics") {
       return Response.json({ error: "not_found" }, { status: 404 });
     }
@@ -355,12 +428,6 @@ export class RadarShard extends DurableObject<Env> {
         .toArray()[0] as { n?: number } | undefined;
       counts[table.table_name] = Number(rows?.n ?? 0);
     }
-    const pages = this.ctx.storage.sql.exec("PRAGMA page_count").toArray()[0] as
-      | { page_count?: number }
-      | undefined;
-    const pageSize = this.ctx.storage.sql.exec("PRAGMA page_size").toArray()[0] as
-      | { page_size?: number }
-      | undefined;
     return Response.json({
       ok: true,
       storageBytes: this.storageBytes(),
@@ -371,19 +438,11 @@ export class RadarShard extends DurableObject<Env> {
           .exec("SELECT count(*) AS n FROM _radar_import_batches")
           .toArray()[0]?.n ?? 0,
       ),
-      pageCount: Number(pages?.page_count ?? 0),
-      pageSize: Number(pageSize?.page_size ?? 0),
     });
   }
 
   private storageBytes(): number {
-    const pageCount = this.ctx.storage.sql
-      .exec("PRAGMA page_count")
-      .toArray()[0] as { page_count?: number } | undefined;
-    const pageSize = this.ctx.storage.sql
-      .exec("PRAGMA page_size")
-      .toArray()[0] as { page_size?: number } | undefined;
-    return Number(pageCount?.page_count ?? 0) * Number(pageSize?.page_size ?? 0);
+    return this.ctx.storage.sql.databaseSize;
   }
 
   private enforceStorageLimit(): void {
