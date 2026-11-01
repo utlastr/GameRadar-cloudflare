@@ -81,6 +81,8 @@ def _connect():
     fresh = not os.path.exists(config.DB_PATH)
     conn = sqlite3.connect(config.DB_PATH, timeout=60)
     conn.row_factory = sqlite3.Row
+    if os.environ.get("RADAR_SQLITE_JOURNAL_MODE", "").upper() == "WAL":
+        conn.execute("PRAGMA journal_mode=WAL")
     if fresh or config.DB_PATH not in _ready:
         conn.executescript(SCHEMA)       # 表不在就建上（只加不删，已有数据不动）
         _ready.add(config.DB_PATH)

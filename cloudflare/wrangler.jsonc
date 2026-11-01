@@ -3,24 +3,32 @@
   "name": "gameradar",
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-30",
-  "assets": {
-    "directory": "../radar/web",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+  "triggers": {
+    "crons": ["* * * * *"]
   },
   "durable_objects": {
     "bindings": [
       {
-        "name": "RADAR_SHARDS",
-        "class_name": "RadarShard"
+        "name": "RADAR_APP",
+        "class_name": "RadarApp"
       }
     ]
   },
+  "containers": [
+    {
+      "name": "gameradar-app",
+      "class_name": "RadarApp",
+      "image": "../Dockerfile",
+      "image_build_context": "..",
+      "max_instances": 1,
+      "instance_type": "standard-1",
+      "scheduling_policy": "default"
+    }
+  ],
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["RadarShard"]
+      "new_sqlite_classes": ["RadarApp"]
     }
   ]
 }

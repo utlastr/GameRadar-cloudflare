@@ -1,66 +1,61 @@
-# Game Radar Cloudflare migration
+# Game Radar on Cloudflare
 
-This directory is the Cloudflare runtime boundary. The local Python application
-remains the source of truth until its APIs, collectors, and existing data have
-all been migrated and verified.
+The Worker forwards the existing website and API routes to the Python
+application in one Cloudflare Container. The application and its data remain
+the local GameRadar v101 code and SQLite schema; no dashboard API is silently
+replaced with a snapshot-only response.
 
-## Current foundation
+## Runtime and storage
 
-- Serves the existing `radar/web` files as Worker static assets.
-- Exposes `/api/health` and `/api/cloudflare/status`.
-- Defines ten deterministic SQLite-backed Durable Object shards. A `(source,
-  entity)` pair always routes to the same shard; metric upserts are idempotent
-  and capped at 90 records per request.
-- Reads the imported dashboard snapshot from `/api/state`, entity histories
-  from `/api/series`, and basic entity/label data from `/api/entity` and
-  `/api/detail`. State marks snapshot-only mode with an explicit health alert;
-  it does not claim that collectors are running.
-- Returns an explicit `503 api_not_migrated` for local API routes that do not
-  exist in the Worker yet. This prevents a static-only deployment from looking
-  like a functioning radar.
+- `Dockerfile` builds the Python app and Litestream runtime.
+- The container binds the app to `0.0.0.0:8765`.
+- SQLite switches to WAL only when `RADAR_SQLITE_JOURNAL_MODE=WAL` is set.
+- Litestream replicates WAL changes to the private R2 bucket. On a new instance,
+  it restores the newest replica, then falls back to `seed/radar.db`.
+- The entrypoint also restores `seed/settings.json`. This file contains runtime
+  configuration and secrets and must never be committed or served as an asset.
+- A one-minute Worker cron requests `/api/health` to renew container activity.
+  The collector continues to use its existing schedules.
 
-## Not migrated
+## Access protection
 
-The Python collectors, their scheduling, most dashboard APIs and write APIs,
-Steam historical comparisons in detail pages, and a current full-database
-import are not implemented here. The status endpoint lists the remaining
-migration groups. Production deployment must wait until those groups and the
-imported data have all been migrated and verified against the local application.
-The dashboard also has mutating APIs; protect the site with Cloudflare Access
-before exposing it, and never put settings or provider credentials in static
-assets. The shard diagnostic/import endpoint requires the `IMPORT_TOKEN` Worker
-secret.
+Create a Cloudflare Access self-hosted application for the exact `workers.dev`
+hostname and allow only the intended account identities. Set the Worker's
+`CF_ACCESS_TEAM_DOMAIN` (the `team.cloudflareaccess.com` hostname, without a
+scheme) and `CF_ACCESS_AUD` (the Access application audience tag). The Worker
+validates the `CF-Access-Jwt-Assertion` signature, issuer, audience, and time
+claims on every public request. It rejects requests when either value is
+missing or a token is invalid; do not remove this check to make the site load.
 
-## Storage and scheduling constraints
+## Required Cloudflare setup
 
-Shard IDs use a stable hash of `(source, entity)`. Queries for one entity can
-route to one shard, while global boards and trends will need bounded fan-out
-across all shards. Do not add per-shard aggregation without checking all-shard
-results against the local SQLite implementation.
+Containers require Workers Paid. R2 must be enabled, with a private bucket and
+an R2 S3 key. Configure the following Worker secrets before starting the
+container: `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and
+`R2_SECRET_ACCESS_KEY`. `R2_SEED_KEY` and `R2_SETTINGS_KEY` default to
+`seed/radar.db` and `seed/settings.json`.
 
-Collection work must be checkpointed and idempotent. A Durable Object Alarm
-is a new invocation, not a way to extend one invocation; each step must commit
-its cursor before scheduling the next step. Alarm retries are at-least-once, so
-collector writes must tolerate replay.
+Upload a SQLite-consistent database snapshot and its matching settings file to
+those seed keys before the first request. Take the final snapshot immediately
+before cutover; the local database may continue changing while the cloud copy
+is prepared. Keep both seed objects in a private bucket and out of Git and the
+Docker build context.
 
-The free Durable Objects allowance is 5 GB across the account, with a 1 GB
-limit per SQLite-backed object. Ten shards therefore do not provide 10 GB of
-free capacity. The active local `radar.db` measured 945,127,424 bytes at 21:55
-Asia/Shanghai on 2026-10-31; importing it as one
-object would leave inadequate headroom for indexes and new writes, so the
-existing database must be partitioned during import. Its size changed during
-the work session, so take a SQLite-consistent backup/WAL snapshot for import;
-do not copy the live database file directly.
+## Collector compatibility
 
-## Local checks
+The container has no connection to the workstation's logged-in CDP browser on
+`127.0.0.1:9222`. Browser-driven social searches/hot lists and historical B站
+discovery therefore cannot be assumed to work in Cloudflare as they do locally.
+They require a separately designed cloud browser/session integration or
+source-specific API implementations. Current local settings also have no AI
+key, B站 cookie, proxy, or Twitch API credentials configured. Verify each
+source's live health after deployment; a reachable dashboard alone is not
+evidence that collection behavior is complete.
 
-From this directory:
+## Validation
 
-```powershell
-npm install
-npm run types
-npm run dev
-```
-
-Do not run `wrangler deploy` until the pending API groups and data-import
-verification are complete.
+`wrangler types` validates bindings and configuration. A Worker-only dry run
+can use `wrangler deploy --dry-run --containers-rollout=none`; a full image
+build requires a Docker-compatible engine and an account with Containers
+access. Do not deploy the snapshot-only Worker prototype as the production
+site.

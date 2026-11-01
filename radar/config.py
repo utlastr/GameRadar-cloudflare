@@ -7,8 +7,8 @@ import os
 
 # ================= 文件位置 =================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "radar_data")
-DB_PATH = os.path.join(DATA_DIR, "radar.db")
+DATA_DIR = os.environ.get("RADAR_DATA_DIR", os.path.join(BASE_DIR, "radar_data"))
+DB_PATH = os.environ.get("RADAR_DB_PATH", os.path.join(DATA_DIR, "radar.db"))
 RAW_DIR = os.path.join(DATA_DIR, "raw")          # 每次抓取的精简原始数据，按天压缩存档
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
@@ -30,8 +30,8 @@ SUPPLY_HOURS = 12        # 同一个游戏在 App Store 的供给检查多久重
 RAW_KEEP_DAYS = 30       # 30 天后的普通原始数据删除
 
 # ================= 看板 =================
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 8765
+SERVER_HOST = os.environ.get("RADAR_SERVER_HOST", "127.0.0.1")
+SERVER_PORT = int(os.environ.get("RADAR_SERVER_PORT", "8765"))
 OPEN_BROWSER = True
 
 # ================= 数据源 =================
@@ -539,3 +539,10 @@ def source_on(source):
 
 
 _load_user_settings()
+
+# Environment overrides let a container bind to its private interface while
+# leaving workstation defaults and settings.json behavior unchanged.
+if os.environ.get("RADAR_SERVER_HOST"):
+    SERVER_HOST = os.environ["RADAR_SERVER_HOST"]
+if os.environ.get("RADAR_SERVER_PORT"):
+    SERVER_PORT = int(os.environ["RADAR_SERVER_PORT"])
