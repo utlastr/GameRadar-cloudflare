@@ -20,6 +20,7 @@ COPY radar ./radar
 COPY run_radar.py ./
 COPY cloudflare/container/entrypoint.sh /usr/local/bin/gameradar-entrypoint
 COPY cloudflare/container/litestream.yml /etc/litestream.yml
+COPY cloudflare/container/seed_format.py cloudflare/container/restore_seed.py /app/cloudflare/container/
 RUN chmod 0755 /usr/local/bin/gameradar-entrypoint \
     && mkdir -p /var/lib/gameradar
 

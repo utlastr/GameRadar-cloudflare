@@ -20,15 +20,39 @@ if [ ! -s "$DB" ] || [ ! -s "$DATA_DIR/settings.json" ]; then
   if [ ! -s "$DB" ]; then
     litestream restore -config /etc/litestream.yml -if-replica-exists "$DB"
   fi
+
   if [ ! -s "$DB" ]; then
-    : "${R2_SEED_KEY:=seed/radar.db}"
-    aws s3 cp "s3://${R2_BUCKET}/${R2_SEED_KEY}" "$DB" \
-      --endpoint-url "$ENDPOINT" --region auto
-  fi
-  if [ ! -s "$DATA_DIR/settings.json" ]; then
-    : "${R2_SETTINGS_KEY:=seed/settings.json}"
-    aws s3 cp "s3://${R2_BUCKET}/${R2_SETTINGS_KEY}" "$DATA_DIR/settings.json" \
-      --endpoint-url "$ENDPOINT" --region auto
+    : "${R2_SEED_KEY:=seed/current.json}"
+    if python /app/cloudflare/container/restore_seed.py \
+      --database "$DB" \
+      --settings-download /tmp/radar-seed-settings.json \
+      --settings "$DATA_DIR/settings.json" \
+      --bucket "$R2_BUCKET" \
+      --manifest-key "$R2_SEED_KEY" \
+      --endpoint "$ENDPOINT"; then
+      :
+    elif [ ! -s "$DB" ]; then
+      echo "Chunked seed unavailable; trying the legacy single-file seed." >&2
+      aws s3 cp "s3://${R2_BUCKET}/seed/radar.db" "$DB" \
+        --endpoint-url "$ENDPOINT" --region auto
+      if [ ! -s "$DATA_DIR/settings.json" ]; then
+        : "${R2_SETTINGS_KEY:=seed/settings.json}"
+        aws s3 cp "s3://${R2_BUCKET}/${R2_SETTINGS_KEY}" "$DATA_DIR/settings.json" \
+          --endpoint-url "$ENDPOINT" --region auto
+      fi
+    else
+      echo "Could not restore runtime settings from the chunked seed." >&2
+      exit 1
+    fi
+  elif [ ! -s "$DATA_DIR/settings.json" ]; then
+    : "${R2_SEED_KEY:=seed/current.json}"
+    python /app/cloudflare/container/restore_seed.py \
+      --database "$DB" \
+      --settings "$DATA_DIR/settings.json" \
+      --bucket "$R2_BUCKET" \
+      --manifest-key "$R2_SEED_KEY" \
+      --endpoint "$ENDPOINT" \
+      --settings-only
   fi
 fi
 

@@ -12,8 +12,13 @@ replaced with a snapshot-only response.
 - SQLite switches to WAL only when `RADAR_SQLITE_JOURNAL_MODE=WAL` is set.
 - Litestream replicates WAL changes to the private R2 bucket. On a new instance,
   it restores the newest replica, then falls back to `seed/radar.db`.
-- The entrypoint also restores `seed/settings.json`. This file contains runtime
-  configuration and secrets and must never be committed or served as an asset.
+- The initial seed manifest references the matching `settings.json` object.
+  Settings contain runtime configuration and secrets and must never be
+  committed or served as an asset.
+- The initial seed is published as checksummed R2 parts plus the
+  `seed/current.json` manifest. The manifest is uploaded last so a partial
+  upload is never selected for restore. Existing `seed/radar.db` seeds remain
+  a fallback for older deployments.
 - A one-minute Worker cron requests `/api/health` to renew container activity.
   The collector continues to use its existing schedules.
 
@@ -32,8 +37,7 @@ missing or a token is invalid; do not remove this check to make the site load.
 Containers require Workers Paid. R2 must be enabled, with a private bucket and
 an R2 S3 key. Configure the following Worker secrets before starting the
 container: `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and
-`R2_SECRET_ACCESS_KEY`. `R2_SEED_KEY` and `R2_SETTINGS_KEY` default to
-`seed/radar.db` and `seed/settings.json`.
+`R2_SECRET_ACCESS_KEY`. `R2_SEED_KEY` defaults to `seed/current.json`.
 
 The current one-minute Cron and two-minute `sleepAfter` keep the container
 close to continuously active. With `standard-1` (4 GiB memory, 8 GB disk), the
@@ -42,11 +46,23 @@ US$32.10 per 30-day month before active CPU usage, R2 storage/operations, and
 other usage. This is not a Workers Free plan deployment; review the account's
 current pricing and usage before enabling billing.
 
-Upload a SQLite-consistent database snapshot and its matching settings file to
-those seed keys before the first request. Take the final snapshot immediately
-before cutover; the local database may continue changing while the cloud copy
-is prepared. Keep both seed objects in a private bucket and out of Git and the
-Docker build context.
+Publish the initial snapshot from the repository root with
+`cloudflare/scripts/upload_snapshot.py`. It uses SQLite's online backup API,
+checks `quick_check`, divides the snapshot into 250 MiB objects, and uploads
+the manifest last. Pass the current database, matching settings file, bucket,
+and a Wrangler command using a Node.js 22+ runtime, for example:
+
+```powershell
+python cloudflare/scripts/upload_snapshot.py `
+  --database "D:\path\to\radar.db" `
+  --settings "D:\path\to\settings.json" `
+  --bucket "your-private-bucket" `
+  --wrangler "D:\path\to\node.exe" "cloudflare\node_modules\wrangler\bin\wrangler.js"
+```
+
+Take the final snapshot immediately before cutover; the local database may
+continue changing while the cloud copy is prepared. Keep seed objects in a
+private bucket and out of Git and the Docker build context.
 
 ## Collector compatibility
 

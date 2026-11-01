@@ -137,7 +137,7 @@ export class RadarApp extends Container {
       R2_BUCKET: env.R2_BUCKET ?? "",
       R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID ?? "",
       R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY ?? "",
-      R2_SEED_KEY: env.R2_SEED_KEY ?? "seed/radar.db",
+      R2_SEED_KEY: env.R2_SEED_KEY ?? "seed/current.json",
       R2_SETTINGS_KEY: env.R2_SETTINGS_KEY ?? "seed/settings.json",
     };
   }
