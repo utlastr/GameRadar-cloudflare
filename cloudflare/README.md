@@ -35,6 +35,13 @@ container: `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and
 `R2_SECRET_ACCESS_KEY`. `R2_SEED_KEY` and `R2_SETTINGS_KEY` default to
 `seed/radar.db` and `seed/settings.json`.
 
+The current one-minute Cron and two-minute `sleepAfter` keep the container
+close to continuously active. With `standard-1` (4 GiB memory, 8 GB disk), the
+Workers Paid base charge plus provisioned memory/disk is approximately
+US$32.10 per 30-day month before active CPU usage, R2 storage/operations, and
+other usage. This is not a Workers Free plan deployment; review the account's
+current pricing and usage before enabling billing.
+
 Upload a SQLite-consistent database snapshot and its matching settings file to
 those seed keys before the first request. Take the final snapshot immediately
 before cutover; the local database may continue changing while the cloud copy
