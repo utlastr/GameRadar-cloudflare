@@ -3,6 +3,7 @@ import { RadarShard } from "./shard";
 export { RadarShard };
 
 const SHARD_COUNT = 10;
+const MAX_IMPORT_BODY_BYTES = 5_000_000;
 const API_MIGRATION_STATE = {
   phase: "storage-foundation",
   completed: [
@@ -26,6 +27,18 @@ interface Env {
   IMPORT_TOKEN?: string;
 }
 
+interface ImportShardBatch {
+  shard?: unknown;
+  batchId?: unknown;
+  rows?: unknown;
+}
+
+interface ImportBatchRequest {
+  table?: unknown;
+  columns?: unknown;
+  batches?: unknown;
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -34,6 +47,169 @@ function json(body: unknown, status = 200): Response {
       "cache-control": "no-store",
     },
   });
+}
+
+async function callShard(
+  env: Env,
+  shard: number,
+  path: string,
+  method: "GET" | "POST",
+  body?: unknown,
+): Promise<Response> {
+  const id = env.RADAR_SHARDS.idFromName(String(shard));
+  return env.RADAR_SHARDS.get(id).fetch(`https://shard.internal${path}`, {
+    method,
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+async function handleImport(request: Request, env: Env): Promise<Response> {
+  if (!isAuthorized(request, env.IMPORT_TOKEN)) {
+    return json({ error: "unauthorized" }, 401);
+  }
+
+  const url = new URL(request.url);
+  if (url.pathname === "/api/cloudflare/import/status" && request.method === "GET") {
+    const results = await Promise.all(
+      Array.from({ length: SHARD_COUNT }, async (_, shard) => {
+        const response = await callShard(env, shard, "/import/status", "GET");
+        return { shard, response };
+      }),
+    );
+    const failures = results.filter((item) => !item.response.ok);
+    if (failures.length) {
+      return json(
+        {
+          error: "shard_status_failed",
+          shards: failures.map(({ shard, response }) => ({ shard, status: response.status })),
+        },
+        502,
+      );
+    }
+
+    const shards = await Promise.all(
+      results.map(async ({ shard, response }) => ({
+        shard,
+        ...(await response.json() as Record<string, unknown>),
+      })),
+    );
+    const tableCounts: Record<string, number> = {};
+    for (const shard of shards) {
+      const tables = shard.tables as Record<string, number> | undefined;
+      for (const [name, count] of Object.entries(tables ?? {})) {
+        tableCounts[name] = (tableCounts[name] ?? 0) + Number(count);
+      }
+    }
+    return json({
+      ok: true,
+      shardCount: SHARD_COUNT,
+      storageBytes: shards.reduce((sum, shard) => sum + Number(shard.storageBytes ?? 0), 0),
+      importedBatchCount: shards.reduce(
+        (sum, shard) => sum + Number(shard.importedBatchCount ?? 0),
+        0,
+      ),
+      tables: tableCounts,
+      shards,
+    });
+  }
+
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_IMPORT_BODY_BYTES) {
+    return json({ error: "import_request_too_large" }, 413);
+  }
+
+  let input: unknown;
+  try {
+    input = await request.json();
+  } catch {
+    return json({ error: "invalid_json" }, 400);
+  }
+
+  if (url.pathname === "/api/cloudflare/import/schema" && request.method === "POST") {
+    const body = input as { tables?: unknown; indexes?: unknown };
+    if (
+      (body.tables !== undefined && !Array.isArray(body.tables)) ||
+      (body.indexes !== undefined && !Array.isArray(body.indexes))
+    ) {
+      return json({ error: "invalid_schema" }, 400);
+    }
+    const results = await Promise.all(
+      Array.from({ length: SHARD_COUNT }, async (_, shard) => {
+        const response = await callShard(env, shard, "/import/schema", "POST", body);
+        return { shard, response };
+      }),
+    );
+    const replies = await Promise.all(
+      results.map(async ({ shard, response }) => ({
+        shard,
+        status: response.status,
+        body: await response.json().catch(() => ({})),
+      })),
+    );
+    const failed = replies.filter((reply) => reply.status < 200 || reply.status >= 300);
+    return json(
+      { ok: failed.length === 0, shards: replies },
+      failed.length ? 502 : 200,
+    );
+  }
+
+  if (url.pathname === "/api/cloudflare/import/batch" && request.method === "POST") {
+    const body = input as ImportBatchRequest;
+    if (
+      typeof body.table !== "string" ||
+      !Array.isArray(body.columns) ||
+      !Array.isArray(body.batches) ||
+      body.batches.length < 1 ||
+      body.batches.length > SHARD_COUNT
+    ) {
+      return json({ error: "invalid_import_batch" }, 400);
+    }
+
+    const seen = new Set<number>();
+    let totalRows = 0;
+    for (const batch of body.batches as ImportShardBatch[]) {
+      if (
+        !Number.isInteger(batch.shard) ||
+        Number(batch.shard) < 0 ||
+        Number(batch.shard) >= SHARD_COUNT ||
+        seen.has(Number(batch.shard)) ||
+        typeof batch.batchId !== "string" ||
+        !Array.isArray(batch.rows)
+      ) {
+        return json({ error: "invalid_import_shard_batch" }, 400);
+      }
+      seen.add(Number(batch.shard));
+      totalRows += batch.rows.length;
+    }
+    if (totalRows > 20_000 || totalRows < 1) {
+      return json({ error: "import_row_limit_exceeded" }, 413);
+    }
+
+    const replies = await Promise.all(
+      (body.batches as ImportShardBatch[]).map(async (batch) => {
+        const shard = Number(batch.shard);
+        const response = await callShard(env, shard, "/import/batch", "POST", {
+          table: body.table,
+          columns: body.columns,
+          batchId: batch.batchId,
+          rows: batch.rows,
+        });
+        return {
+          shard,
+          status: response.status,
+          body: await response.json().catch(() => ({})),
+        };
+      }),
+    );
+    const failed = replies.filter((reply) => reply.status < 200 || reply.status >= 300);
+    return json(
+      { ok: failed.length === 0, rows: totalRows, shards: replies },
+      failed.length ? 502 : 200,
+    );
+  }
+
+  return json({ error: "not_found" }, 404);
 }
 
 function shardFor(source: string, entity: string): number {
@@ -48,6 +224,9 @@ function shardFor(source: string, entity: string): number {
 
 async function handleApi(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  if (url.pathname.startsWith("/api/cloudflare/import/")) {
+    return handleImport(request, env);
+  }
   if (url.pathname === "/api/health") {
     return json({ ok: true, runtime: "cloudflare-workers", storage: "durable-objects-sqlite" });
   }
