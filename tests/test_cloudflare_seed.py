@@ -1,10 +1,12 @@
 import hashlib
 import json
 import sqlite3
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 
+from cloudflare.scripts import upload_snapshot
 from cloudflare.container.seed_format import (
     assemble_parts,
     build_manifest,
@@ -130,3 +132,49 @@ def test_manifest_checks_sizes_and_checksums(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="sizes"):
         validate_manifest(manifest)
+
+
+def test_snapshot_publisher_uses_online_backup_and_publishes_manifest_last(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "live.db"
+    conn = sqlite3.connect(database)
+    conn.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT)")
+    conn.execute("INSERT INTO sample(value) VALUES ('snapshot')")
+    conn.commit()
+    conn.close()
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"version":101}', encoding="utf-8")
+    uploaded: list[tuple[str, str, bytes]] = []
+
+    def capture_upload(
+        wrangler: list[str],
+        bucket: str,
+        key: str,
+        path: Path,
+        content_type: str,
+    ) -> None:
+        assert bucket == "private-radar"
+        uploaded.append((key, content_type, path.read_bytes()))
+
+    monkeypatch.setattr(upload_snapshot, "upload", capture_upload)
+    result = upload_snapshot.publish(SimpleNamespace(
+        database=database,
+        settings=settings,
+        bucket="private-radar",
+        manifest_key="seed/current.json",
+        part_size=32,
+        wrangler=["wrangler"],
+    ))
+
+    assert result["parts"] > 1
+    assert uploaded[-1][0] == "seed/current.json"
+    manifest = json.loads(uploaded[-1][2])
+    assert manifest["database"]["size_bytes"] == sum(
+        len(payload) for key, _, payload in uploaded[:-2]
+    )
+    assert uploaded[-2][0] == manifest["settings"]["key"]
+    assert uploaded[-2][2] == settings.read_bytes()
+    assert [key for key, _, _ in uploaded[:-2]] == [
+        part["key"] for part in manifest["database"]["parts"]
+    ]
