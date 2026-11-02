@@ -1,5 +1,10 @@
 # GameRadar Cloudflare
 
+**Migration status:** the deployment target is JavaScript/TypeScript Workers,
+without Python or Containers. The files below still include the earlier
+container prototype; it is not a completed native Workers port and its deploy
+command is blocked. See the [native Workers assessment](docs/2026-11-02-workers-native-assessment.md).
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/utlastr/GameRadar-cloudflare)
 
 This is the independent Cloudflare deployment variant of `utlastr/GameRadar`.

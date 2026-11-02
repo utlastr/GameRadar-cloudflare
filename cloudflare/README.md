@@ -1,5 +1,11 @@
 # Game Radar on Cloudflare
 
+**Superseded prototype:** the Python/Containers design described below is no
+longer the requested deployment target. Native JavaScript/TypeScript Workers
+must replace it. The npm deploy command is blocked while the configuration
+still declares a container. See the
+[migration assessment](../docs/2026-11-02-workers-native-assessment.md).
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/utlastr/GameRadar-cloudflare)
 
 The Worker forwards the existing website and API routes to the Python

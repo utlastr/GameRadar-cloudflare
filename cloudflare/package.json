@@ -6,6 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "predeploy": "node ../scripts/check-workers-only.mjs",
     "dev": "wrangler dev --config ../wrangler.jsonc",
     "types": "wrangler types --config ../wrangler.jsonc",
     "deploy": "wrangler deploy --config ../wrangler.jsonc"

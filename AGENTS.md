@@ -11,8 +11,12 @@ locally or in a web/cloud environment.
   `utlastr/GameRadar`.
 - Preserve the original application baseline `86a9380`; cloud-specific changes
   belong only in this variant.
-- Keep the selected production branch synchronized through pull requests.
-  Verify its remote commit before reporting synchronization complete.
+- Per the user's instruction on 2026-11-02, stable iterations are developed
+  locally on `main`, then tested, committed and pushed to `main`.
+  Create another branch only when the user explicitly requests one.
+- Verify the remote commit before reporting synchronization complete.
+- The deployment target is native JavaScript/TypeScript Workers. Do not deploy
+  the earlier Python/Containers prototype.
 - Workers Builds must watch the same GitHub repository and production branch.
   A deploy badge or local commit does not establish that connection.
 
@@ -32,8 +36,8 @@ locally or in a web/cloud environment.
 1. Read this file, then inspect `git status`, the current branch, and the remotes.
 2. Fetch the intended base when network access is available. Fetching does not
    authorize merging, rebasing, resetting, or discarding local changes.
-3. Use a separate task branch, such as `fix/<task>`, `feat/<task>`, or
-   `docs/<task>`. Do not develop directly on `main` or `master`.
+3. Use `main` for stable iteration. Create a separate task branch only when
+   explicitly requested by the user.
 4. Each simultaneously active agent must have an independent checkout or Git
    worktree. Different branches in one shared working directory do not isolate
    uncommitted edits. Never switch branches in another agent's active directory.
@@ -54,18 +58,15 @@ locally or in a web/cloud environment.
   without explicit user authorization.
 - A rejected push is a signal to inspect remote changes, not permission to
   overwrite them. Preserve both histories and reconcile on the task branch.
-- Commit meaningful completed work. When publishing is requested, push the task
-  branch so work is not held only in an uncommitted local directory.
+- Commit meaningful completed work. When publishing is requested, push `main`
+  (or the branch explicitly requested by the user).
 
-## Integrate Through Pull Requests
+## Stable Main Updates
 
-- Changes to `master` or `main` must go through a pull request. Do not push
-  changes directly to either integration branch.
-- Target `main` unless the user explicitly requests another base. When the user
-  asks to finish and merge the task, complete the pull request merge if checks
-  and repository permissions allow; do not describe an open PR as integrated.
-- Before merging, fetch the latest base and compare the full diff. Reconcile
-  concurrent changes on the task branch using a normal merge when needed.
+- Test stable changes locally, commit to `main`, and push without force.
+  Pull requests and additional branches are optional only when requested.
+- Before pushing, fetch the latest base and compare the full diff. Reconcile
+  concurrent changes without discarding either side.
 - Resolve conflicts by understanding and preserving both intended behaviors.
   Never resolve an entire conflicted file using "ours" or "theirs" merely to
   make the merge succeed. Ask when the intended behaviors are incompatible.
@@ -74,8 +75,8 @@ locally or in a web/cloud environment.
 - Report the tests actually run and their results. Distinguish existing failures,
   new failures, and checks that were not run. Never claim the full suite passed
   when only a targeted subset passed.
-- If branch protection, review, or checks prevent a merge, leave the pull
-  request available and report the requirement. Do not bypass protections.
+- If branch protection, review, or checks prevent a direct update, report the
+  requirement. Do not bypass protections.
 
 ## Publication Safety
 
