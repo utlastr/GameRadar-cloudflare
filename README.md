@@ -1,3 +1,24 @@
+# GameRadar Cloudflare
+
+This is the independent Cloudflare deployment variant of `utlastr/GameRadar`.
+Changes here must not modify or push to the original repository or installed app.
+
+- Source snapshot: `3579c13466184f95749925b001e8a214988047b5`.
+- Intended GitHub repository: `utlastr/GameRadar-cloudflare`.
+- Deployment instructions: [cloudflare/README.md](cloudflare/README.md).
+- Runtime packaging: `Dockerfile`, `cloudflare/container/`.
+- Cloudflare entry point: `cloudflare/src/worker.ts`.
+- Deployment configuration: `cloudflare/wrangler.jsonc`.
+
+This variant uses a Python container with SQLite replication to R2, not a
+static-only Pages deployment. Repository isolation does not mean deployment
+is complete. Keep databases, private settings, credentials and build caches
+out of Git. Prepare the database snapshot separately before deployment.
+
+The original application's documentation follows below.
+
+---
+
 # 热度雷达（Python）
 
 在自己电脑上定时抓取各平台热度，找出"一个地方火了、另一个地方还没人做"的 Fast Follow 机会。

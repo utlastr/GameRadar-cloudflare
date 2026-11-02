@@ -5,3 +5,15 @@ _backup/
 _quarantine/
 _tools/
 docs/*.png
+tmp/
+output/
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
