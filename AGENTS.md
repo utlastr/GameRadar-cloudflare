@@ -3,6 +3,19 @@
 These instructions apply to every agent working on this repository, whether
 locally or in a web/cloud environment.
 
+## Cloudflare Variant Workflow
+
+- Make source changes in this independent local checkout, test and commit them,
+  then push to `utlastr/GameRadar-cloudflare`.
+- Do not edit the original installed application or push Cloudflare changes to
+  `utlastr/GameRadar`.
+- Preserve the original application baseline `86a9380`; cloud-specific changes
+  belong only in this variant.
+- Keep the selected production branch synchronized through pull requests.
+  Verify its remote commit before reporting synchronization complete.
+- Workers Builds must watch the same GitHub repository and production branch.
+  A deploy badge or local commit does not establish that connection.
+
 ## Authoritative Base
 
 - The current integration branch is `main`, as explicitly directed by the user

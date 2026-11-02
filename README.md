@@ -1,14 +1,30 @@
 # GameRadar Cloudflare
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/utlastr/GameRadar-cloudflare)
+
 This is the independent Cloudflare deployment variant of `utlastr/GameRadar`.
 Changes here must not modify or push to the original repository or installed app.
 
-- Source snapshot: `3579c13466184f95749925b001e8a214988047b5`.
+- Original application baseline: `86a938044099c6688cf827b764194e7c893695c4`.
+- Imported Cloudflare migration: `3579c13466184f95749925b001e8a214988047b5`.
 - Intended GitHub repository: `utlastr/GameRadar-cloudflare`.
 - Deployment instructions: [cloudflare/README.md](cloudflare/README.md).
 - Runtime packaging: `Dockerfile`, `cloudflare/container/`.
 - Cloudflare entry point: `cloudflare/src/worker.ts`.
-- Deployment configuration: `cloudflare/wrangler.jsonc`.
+- Deployment configuration: `wrangler.jsonc` in the repository root.
+
+The button starts Cloudflare's repository setup and Workers Builds flow.
+Authorize the GitHub integration and select the repository/production branch
+that you intend to keep editing; the button can create a copy of the repository.
+Workers Builds must be connected to that same repository and branch for later
+pushes to deploy automatically. Use repository root `/`, install with `npm ci`,
+and deploy with `npm run deploy` using Node.js 22 or newer.
+
+This button requires a public source repository. For a private repository,
+connect it directly through Workers Builds using the authorized GitHub account.
+It does not grant billing consent, upload the local database, or supply secrets.
+Workers Paid, R2, Access configuration and private runtime secrets remain
+required. See [deployment setup](cloudflare/README.md#git-connected-deployment).
 
 This variant uses a Python container with SQLite replication to R2, not a
 static-only Pages deployment. Repository isolation does not mean deployment

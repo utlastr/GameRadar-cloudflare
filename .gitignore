@@ -10,6 +10,12 @@ output/
 .env
 .env.*
 !.env.example
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+worker-configuration.d.ts
 *.db
 *.db-wal
 *.db-shm

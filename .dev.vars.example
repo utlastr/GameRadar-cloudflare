@@ -1,0 +1,6 @@
+CF_ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
+CF_ACCESS_AUD=replace-with-your-access-application-audience
+R2_ACCOUNT_ID=replace-with-your-cloudflare-account-id
+R2_BUCKET=replace-with-your-private-radar-bucket
+R2_ACCESS_KEY_ID=replace-with-your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=replace-with-your-r2-secret-access-key

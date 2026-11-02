@@ -1,5 +1,7 @@
 # Game Radar on Cloudflare
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/utlastr/GameRadar-cloudflare)
+
 The Worker forwards the existing website and API routes to the Python
 application in one Cloudflare Container. The application and its data remain
 the local GameRadar v101 code and SQLite schema; no dashboard API is silently
@@ -57,7 +59,7 @@ python cloudflare/scripts/upload_snapshot.py `
   --database "D:\path\to\radar.db" `
   --settings "D:\path\to\settings.json" `
   --bucket "your-private-bucket" `
-  --wrangler "D:\path\to\node.exe" "cloudflare\node_modules\wrangler\bin\wrangler.js"
+  --wrangler "D:\path\to\node.exe" "node_modules\wrangler\bin\wrangler.js"
 ```
 
 Take the final snapshot immediately before cutover; the local database may
@@ -82,3 +84,43 @@ can use `wrangler deploy --dry-run --containers-rollout=none`; a full image
 build requires a Docker-compatible engine and an account with Containers
 access. Do not deploy the snapshot-only Worker prototype as the production
 site.
+
+## Git-connected deployment
+
+The deploy button uses the repository root, not the `cloudflare/` subdirectory.
+The Python source and Dockerfile must remain in the build context. Root
+`wrangler.jsonc` is the deployment configuration; the npm workspace commands
+in `cloudflare/package.json` explicitly reference it.
+
+For the initial connection:
+
+1. Publish this variant to its own GitHub repository. The deploy button requires
+   a public source; for a private repository, connect it directly in Workers
+   Builds instead.
+2. Authorize Cloudflare's GitHub integration and confirm the repository it will
+   actually build. The button can create a copy: building that copy will not
+   deploy later changes pushed to a different repository.
+3. Select production branch `main`, repository root `/`, Node.js 22 or newer,
+   and deploy command `npm run deploy`. The build system must install the root
+   lockfile with `npm ci`. No separate frontend build is required.
+4. Supply the six Worker secrets listed in root `.dev.vars.example` through the
+   Cloudflare setup. The example contains placeholders only. Enable Workers Paid
+   and R2, configure Access, and publish a consistent private database seed as
+   described above before declaring the radar operational.
+5. Verify that Workers Builds is connected to that same repository and branch.
+   Push a local code commit to it and confirm the resulting build, deployment,
+   public Access login and backend health. A README badge alone is not proof
+   that this connection exists or that deployment succeeds.
+
+After connection, edits are made locally, committed and pushed to the selected
+production branch through the repository's PR process. Workers Builds builds
+that commit in the background. Do not configure another automatic deployer for
+the same Worker unless duplicate deployments are intentionally desired.
+
+Current repository preparation does not enable billing or configure the
+account-side integration. Those actions require the authorized account session.
+
+Official references:
+
+- https://developers.cloudflare.com/workers/platform/deploy-buttons/
+- https://developers.cloudflare.com/workers/ci-cd/builds/

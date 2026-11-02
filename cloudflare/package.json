@@ -6,9 +6,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "wrangler dev",
-    "types": "wrangler types",
-    "deploy": "wrangler deploy"
+    "dev": "wrangler dev --config ../wrangler.jsonc",
+    "types": "wrangler types --config ../wrangler.jsonc",
+    "deploy": "wrangler deploy --config ../wrangler.jsonc"
   },
   "devDependencies": {
     "wrangler": "4.156.0"

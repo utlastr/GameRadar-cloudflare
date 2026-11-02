@@ -1,0 +1,38 @@
+{
+  "name": "gameradar-cloudflare-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "cloudflare"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=gameradar-cloudflare",
+    "types": "npm run types --workspace=gameradar-cloudflare",
+    "deploy": "npm run deploy --workspace=gameradar-cloudflare"
+  },
+  "cloudflare": {
+    "bindings": {
+      "CF_ACCESS_TEAM_DOMAIN": {
+        "description": "Your Cloudflare Access team hostname, without https://."
+      },
+      "CF_ACCESS_AUD": {
+        "description": "Audience tag of the Access application protecting the radar."
+      },
+      "R2_ACCOUNT_ID": {
+        "description": "Cloudflare account ID for the private R2 bucket."
+      },
+      "R2_BUCKET": {
+        "description": "Existing private R2 bucket used for snapshots and replication."
+      },
+      "R2_ACCESS_KEY_ID": {
+        "description": "R2 S3 credential scoped to the private radar bucket."
+      },
+      "R2_SECRET_ACCESS_KEY": {
+        "description": "Secret for that R2 S3 credential. Never commit real credentials."
+      }
+    }
+  }
+}

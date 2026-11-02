@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
   "name": "gameradar",
-  "main": "src/worker.ts",
+  "main": "cloudflare/src/worker.ts",
   "compatibility_date": "2026-10-30",
   "triggers": {
     "crons": ["* * * * *"]
@@ -18,8 +18,8 @@
     {
       "name": "gameradar-app",
       "class_name": "RadarApp",
-      "image": "../Dockerfile",
-      "image_build_context": "..",
+      "image": "./Dockerfile",
+      "image_build_context": ".",
       "max_instances": 1,
       "instance_type": "standard-1",
       "scheduling_policy": "default"
